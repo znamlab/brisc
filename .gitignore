@@ -1,0 +1,7 @@
+*.egg-info
+.idea
+.DS_Store
+__pycache__
+*.out
+*.err
+
