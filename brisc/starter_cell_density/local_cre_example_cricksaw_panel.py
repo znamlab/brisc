@@ -17,7 +17,7 @@ import bg_atlasapi as bga
 import flexiznam as flz
 from flexiznam.schema import Dataset
 from cricksaw_analysis import atlas_utils
-from brisco.starter_cell_density import coronal_view_utils as cvu
+from brisc.starter_cell_density import coronal_view_utils as cvu
 import cricksaw_analysis.io
 from iss_preprocess import vis
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
