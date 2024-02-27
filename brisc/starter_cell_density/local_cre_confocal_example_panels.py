@@ -10,6 +10,7 @@ import flexiznam as flz
 from iss_preprocess import vis
 from matplotlib.patches import ConnectionPatch
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+
 # %% Define parameters
 PROJECT = "rabies_barcoding"
 MOUSE = "BRYC64.2h"
@@ -37,6 +38,7 @@ with CziFile(confocal_data / IMAGE_FILE) as czi:
 scale = metadata["ImageDocument"]["Metadata"]["Scaling"]["Items"]["Distance"]
 scale = {s["Id"]: s["Value"] * 1e6 for s in scale}
 
+
 # %% Define helper functions
 def rotate(image, angle, center=None, scale=1.0, flip=True):
     # grab the dimensions of the image
@@ -55,6 +57,7 @@ def rotate(image, angle, center=None, scale=1.0, flip=True):
     if flip:
         rotated = cv2.flip(rotated, 1)
     return rotated
+
 
 # %% Do the plot
 
