@@ -256,6 +256,7 @@ def get_raw_data(data_path, roi, mcherry_channel=2):
     ops = iss.io.load.load_ops(data_path)
     reg_folder = iss.io.load.get_processed_path(data_path) / "reg"
     tform = np.load(reg_folder / f"mCherry_1_roi{roi}_tform_to_ref.npz")
+    print("Stitching the mCherry channel")
     stitched_reg = iss.pipeline.stitch_tiles(
         data_path,
         "mCherry_1",
@@ -264,6 +265,7 @@ def get_raw_data(data_path, roi, mcherry_channel=2):
         ich=mcherry_channel,
         correct_illumination=True,
     )
+    print("Transforming the mCherry channel")
     stitched_reg = iss.reg.util.transform_image(
         stitched_reg, scale=tform["scale"], angle=tform["angle"], shift=tform["shift"]
     )
@@ -271,6 +273,7 @@ def get_raw_data(data_path, roi, mcherry_channel=2):
     stitched_reg *= (2**16 - 1) / stitched_reg.max()
     stitched_reg = stitched_reg.astype("uint16")
 
+    print("Stitching the reference channel")
     stitched_stack_reference = iss.pipeline.stitch.stitch_registered(
         data_path,
         prefix="genes_round_4_1",
@@ -284,6 +287,7 @@ def get_raw_data(data_path, roi, mcherry_channel=2):
     stitched_stack_reference *= (2**16 - 1) / stitched_stack_reference.max()
     stitched_stack_reference = stitched_stack_reference.astype("uint16")
 
+    print("Stitching the rabies channel")
     stitched_stack_rabies = iss.pipeline.stitch.stitch_registered(
         data_path,
         prefix="barcode_round_1_1",
@@ -297,6 +301,8 @@ def get_raw_data(data_path, roi, mcherry_channel=2):
     stitched_stack_rabies -= stitched_stack_rabies.min()
     stitched_stack_rabies *= (2**16 - 1) / stitched_stack_rabies.max()
     stitched_stack_rabies = stitched_stack_rabies.astype("uint16")
+
+    print("Cropping to the smallest size")
     # crop to the smallest size
     shapes = [
         stitched_reg.shape,
@@ -312,6 +318,8 @@ def get_raw_data(data_path, roi, mcherry_channel=2):
     stack = np.stack(
         [stitched_reg, stitched_stack_rabies, stitched_stack_reference], axis=2
     )
+
+    print("Loading the mask")
     mask = np.load(iss.io.get_processed_path(data_path) / f"masks_{roi}.npy")
     mask = mask[: smallest[0], : smallest[1]]
     return stack, mask
