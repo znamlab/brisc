@@ -151,7 +151,9 @@ BAD_LAYERS = (
 )
 
 
-def plot_gene_image(ax, genes_spots, layers=LAYERS, ok=PATTERN, **kwargs):
+def plot_gene_image(
+    ax, genes_spots, layers=LAYERS, ok=PATTERN, layers_cmap="terrain", **kwargs
+):
     """Plot the genes in the genes_spots dataframe on the ax.
 
     The genes are colored by layer, and the genes in the ok list are plotted smaller.
@@ -169,7 +171,7 @@ def plot_gene_image(ax, genes_spots, layers=LAYERS, ok=PATTERN, **kwargs):
     """
     default_kwargs = dict(s=1, marker="o", alpha=0.2)
     default_kwargs.update(kwargs)
-    cm = mpl.colormaps["terrain"]
+    cm = mpl.colormaps[layers_cmap]
     for il, gene_name in enumerate(layers):
         spots = genes_spots[genes_spots.gene == gene_name]
         ax.scatter(
