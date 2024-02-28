@@ -154,7 +154,13 @@ BAD_LAYERS = (
 
 
 def plot_gene_image(
-    ax, genes_spots, layers=LAYERS, ok=PATTERN, layers_cmap="terrain", **kwargs
+    ax,
+    genes_spots,
+    layers=LAYERS,
+    ok=PATTERN,
+    layers_cmap="terrain",
+    decimate=None,
+    **kwargs,
 ):
     """Plot the genes in the genes_spots dataframe on the ax.
 
@@ -165,6 +171,8 @@ def plot_gene_image(
         genes_spots: a dataframe with columns x, y, gene, layer
         layers: ordered list of genes
         ok: other genes to plot
+        layers_cmap: the colormap to use for layers
+        decimate: if not None, decimate the spots by this factor
         **kwargs: additional keyword arguments to pass to ax.scatter
 
     Returns:
@@ -176,6 +184,8 @@ def plot_gene_image(
     cm = mpl.colormaps[layers_cmap]
     for il, gene_name in enumerate(layers):
         spots = genes_spots[genes_spots.gene == gene_name]
+        if decimate is not None:
+            spots = spots.iloc[::decimate]
         ax.scatter(
             spots.x,
             spots.y,
@@ -204,6 +214,8 @@ def plot_gene_image(
     default_kwargs["s"] /= 2
     for gene_name in ok:
         spots = genes_spots[genes_spots.gene == gene_name]
+        if decimate is not None:
+            spots = spots.iloc[::decimate]
         ax.scatter(
             spots.x, spots.y, color=next(colors), label=gene_name, **default_kwargs
         )
@@ -393,9 +405,61 @@ def select_spots(spots, xlim, ylim):
     ]
 
 
-def plot_presynaptic_cells(presynaptic_df, data_path, starter_name, main_seq, min_window=None):
-    pad = 100 # how many pixels to pad around cells
-    rois_with_cells = np.unique(presynaptic_df['roi'])
+def plot_presynaptic_cells(
+    presynaptic_df,
+    data_path,
+    starter_name,
+    main_seq,
+    min_window=None,
+    plot_masks=False,
+    plot_genes=True,
+    genes_img_kwargs=None,
+    masks_img_kwargs=None,
+    starter_coords=None,
+    starter_kwargs=None,
+    **kwargs,
+):
+    """
+    Plots the presynaptic cells for a given dataset.
+
+    Args:
+        presynaptic_df (pandas.DataFrame): DataFrame containing the presynaptic cell
+            data.
+        data_path (str): Path to the data.
+        starter_name (str): Name of the starter.
+        main_seq (str): Main sequence.
+        min_window (int, optional): Minimum window size. Defaults to None.
+        plot_masks (bool, optional): Whether to plot the masks. Defaults to False.
+        plot_genes (bool, optional): Whether to plot the genes. Defaults to True.
+        genes_img_kwargs (dict, optional): Additional keyword arguments for plotting gene
+            images. Defaults to None.
+        masks_img_kwargs (dict, optional): Additional keyword arguments for plotting mask
+            images. Defaults to None.
+        starter_coords (tuple, optional): ROI, X, Y coordinates of the starter. Defaults to None.
+        starter_kwargs (dict, optional): Additional keyword arguments for plotting the
+            starter. Defaults to None.
+        **kwargs: Additional keyword arguments for plotting the presynaptic cells.
+
+    Returns:
+        matplotlib.figure.Figure: The generated figure.
+    """
+    if genes_img_kwargs is None:
+        genes_img_kwargs = {}
+    if masks_img_kwargs is None:
+        masks_img_kwargs = {}
+    if starter_kwargs is None:
+        starter_kwargs = {}
+    st_kw = dict(s=500, fc="yellow", marker="*", ec="k")
+    st_kw.update(starter_kwargs)
+    masks_kw = dict(cmap="prism", alpha=0.3)
+    masks_kw.update(masks_img_kwargs)
+    sc_kwargs = dict(s=20, ec="k", fc="indianred", alpha=0.5)
+    sc_kwargs.update(kwargs)
+
+    pad = 100  # how many pixels to pad around cells
+    mask_expansion = 2
+
+    rois_with_cells = np.unique(presynaptic_df["roi"])
 
     # Calculate the number of rows and columns for the grid
     num_axes = len(rois_with_cells)
@@ -411,33 +475,55 @@ def plot_presynaptic_cells(presynaptic_df, data_path, starter_name, main_seq, mi
 
     # Iterate over the unique ROIs and plot the data
     for i, roi in enumerate(rois_with_cells):
-        # get genes spots 
-        genes_spots = pd.read_pickle(iss.io.get_processed_path(data_path) / f'genes_round_spots_{roi}.pkl')
         ax = axes[i]
-        plot_gene_image(ax, genes_spots)
-        # Plot the data for the current ROI
-        # (Replace this with your actual plotting code)
-        p_roi = presynaptic_df[presynaptic_df['roi'] == roi]
-        ax.scatter(p_roi['x'], 
-                p_roi['y'], 
-                s=20, ec='k', fc='indianred', alpha=0.5)
+        p_roi = presynaptic_df[presynaptic_df["roi"] == roi]
         if min_window is not None:
             xl = np.array([p_roi.x.min(), p_roi.x.max()])
             yl = np.array([p_roi.y.min(), p_roi.y.max()])
-            xl += np.array([-1,1]) * pad
-            yl += np.array([-1,1]) * pad
+            xl += np.array([-1, 1]) * pad
+            yl += np.array([-1, 1]) * pad
             if np.diff(xl) < min_window:
-                xl += np.array([-1,1]) * (min_window - np.diff(xl)) / 2
+                xl += np.array([-1, 1]) * (min_window - np.diff(xl)) / 2
             if np.diff(yl) < min_window:
-                yl += np.array([-1,1]) * (min_window - np.diff(yl)) / 2
-            ax.set_xlim(xl)
-            ax.set_ylim(yl)
-            
-        ax.set_title(f'ROI {roi}')
-        ax.set_aspect('equal')
+                yl += np.array([-1, 1]) * (min_window - np.diff(yl)) / 2
+            yl = yl.astype(int)
+            xl = xl.astype(int)
+        else:
+            xl = None
+            yl = None
+        if plot_genes:
+            # get genes spots
+            genes_spots = pd.read_pickle(
+                iss.io.get_processed_path(data_path) / f"genes_round_spots_{roi}.pkl"
+            )
+            if min_window is not None:
+                genes_spots = select_spots(genes_spots, xl, yl)
+            plot_gene_image(ax, genes_spots, **genes_img_kwargs)
+        if plot_masks:
+            masks = _get_big_masks(
+                data_path, roi, masks=None, mask_expansion=mask_expansion
+            )
+            if min_window is not None:
+                masks = masks[yl[0] : yl[1], xl[0] : xl[1]]
+                extent = [xl[0], xl[1], yl[1], yl[0]]
+            else:
+                extent = None
+            masks = masks.astype(float)
+            masks[masks == 0] = np.nan
+            ax.imshow(masks, extent=extent, **masks_kw)
+
+        ax.scatter(p_roi["x"], p_roi["y"], **sc_kwargs)
+
+        if starter_coords is not None and starter_coords[0] == roi:
+            ax.scatter(starter_coords[1], starter_coords[2], **st_kw)
+        ax.set_xlim(xl)
+        ax.set_ylim(yl)
+
+        ax.set_title(f"ROI {roi}")
+        ax.set_aspect("equal")
         ax.set_xticks([])
         ax.set_yticks([])
-        ax.set_facecolor('k')
+        ax.set_facecolor("k")
         ax.invert_yaxis()
 
     # Remove any extra empty axes
@@ -446,6 +532,6 @@ def plot_presynaptic_cells(presynaptic_df, data_path, starter_name, main_seq, mi
             fig.delaxes(axes[j])
 
     # Adjust the spacing between subplots
-    fig.suptitle(f'Presynaptic cells of {starter_name} with sequence {main_seq}')
+    fig.suptitle(f"Presynaptic cells of {starter_name} with sequence {main_seq}")
     fig.tight_layout()
     return fig
