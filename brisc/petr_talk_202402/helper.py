@@ -4,6 +4,8 @@ import numpy as np
 from sklearn.mixture import GaussianMixture
 from itertools import cycle
 import matplotlib as mpl
+import math
+import matplotlib.pyplot as plt
 from xml.etree import ElementTree
 import iss_preprocess as iss
 
@@ -389,3 +391,61 @@ def select_spots(spots, xlim, ylim):
         & (spots.y > ylim[0])
         & (spots.y < ylim[1])
     ]
+
+
+def plot_presynaptic_cells(presynaptic_df, data_path, starter_name, main_seq, min_window=None):
+    pad = 100 # how many pixels to pad around cells
+    rois_with_cells = np.unique(presynaptic_df['roi'])
+
+    # Calculate the number of rows and columns for the grid
+    num_axes = len(rois_with_cells)
+    num_cols = math.ceil(math.sqrt(num_axes))
+    num_rows = math.ceil(num_axes / num_cols)
+
+    # Create the figure and axes
+    fig, axes = plt.subplots(num_rows, num_cols, figsize=(10, 10))
+
+    # Flatten the axes array if it's more than 1D
+    if num_rows > 1:
+        axes = axes.flatten()
+
+    # Iterate over the unique ROIs and plot the data
+    for i, roi in enumerate(rois_with_cells):
+        # get genes spots 
+        genes_spots = pd.read_pickle(iss.io.get_processed_path(data_path) / f'genes_round_spots_{roi}.pkl')
+        ax = axes[i]
+        plot_gene_image(ax, genes_spots)
+        # Plot the data for the current ROI
+        # (Replace this with your actual plotting code)
+        p_roi = presynaptic_df[presynaptic_df['roi'] == roi]
+        ax.scatter(p_roi['x'], 
+                p_roi['y'], 
+                s=20, ec='k', fc='indianred', alpha=0.5)
+        if min_window is not None:
+            xl = np.array([p_roi.x.min(), p_roi.x.max()])
+            yl = np.array([p_roi.y.min(), p_roi.y.max()])
+            xl += np.array([-1,1]) * pad
+            yl += np.array([-1,1]) * pad
+            if np.diff(xl) < min_window:
+                xl += np.array([-1,1]) * (min_window - np.diff(xl)) / 2
+            if np.diff(yl) < min_window:
+                yl += np.array([-1,1]) * (min_window - np.diff(yl)) / 2
+            ax.set_xlim(xl)
+            ax.set_ylim(yl)
+            
+        ax.set_title(f'ROI {roi}')
+        ax.set_aspect('equal')
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_facecolor('k')
+        ax.invert_yaxis()
+
+    # Remove any extra empty axes
+    if num_axes < len(axes):
+        for j in range(num_axes, len(axes)):
+            fig.delaxes(axes[j])
+
+    # Adjust the spacing between subplots
+    fig.suptitle(f'Presynaptic cells of {starter_name} with sequence {main_seq}')
+    fig.tight_layout()
+    return fig
