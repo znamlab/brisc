@@ -173,7 +173,11 @@ def plot_gene_image(ax, genes_spots, layers=LAYERS, ok=PATTERN, **kwargs):
     for il, gene_name in enumerate(layers):
         spots = genes_spots[genes_spots.gene == gene_name]
         ax.scatter(
-            spots.x, spots.y, color=cm(il/len(layers)), label=gene_name, **default_kwargs
+            spots.x,
+            spots.y,
+            color=cm(il / len(layers)),
+            label=gene_name,
+            **default_kwargs,
         )
     colors = cycle(
         [
