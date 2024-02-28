@@ -44,11 +44,20 @@ barcode_spots, gmm, all_barcode_spots = helper.get_barcodes(
 barcode_spots = iss.call.correct_barcode_sequences(barcode_spots, 2)
 barcode_spots.shape
 # %%
-from iss_preprocess.pipeline.segment import _get_big_masks, spot_mask_value, count_spots
+from iss_preprocess.pipeline.segment import (
+    _get_big_masks,
+    spot_mask_value,
+    count_spots,
+    make_cell_dataframe,
+)
 
 mask_expansion = 2
 
 for roi in ops["use_rois"]:
+    print(f"Making cells df for roi {roi}", flush=True)
+    make_cell_dataframe(
+        data_path, roi, masks=None, mask_expansion=mask_expansion, atlas_size=None
+    )
     print(f"Counting spots in cells for roi {roi}", flush=True)
     # get mask and add value to spots df
     genes_spots, roi_barcode_spots = helper.get_spots(data_path, roi, barcode_spots)

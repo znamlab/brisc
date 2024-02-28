@@ -51,7 +51,7 @@ def get_barcodes(
     skip = len(all_barcode_spots) // 10000
     data = all_barcode_spots[metrics].values[::skip]
 
-    # Perform GMM with two clusters
+    # Perform GMM with two clusters, 0 low values, 1 high values
     means_init = np.nanpercentile(data, [1, 99], axis=0)
     gmm = GaussianMixture(n_components=2, means_init=means_init)
     gmm.fit(data)
