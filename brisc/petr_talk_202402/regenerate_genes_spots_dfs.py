@@ -73,18 +73,34 @@ for roi in ops["use_rois"]:
     nearest_neighbours = find_nearest_neighbours(points, ids, 10)
     points2keep = nearest_neighbours == ids
     all_genes = all_genes[points2keep].copy()
-    all_genes.to_pickle(processed_path / f"genes_round_spots_{roi}.pkl")  
+    all_genes.to_pickle(processed_path / f"genes_round_spots_{roi}.pkl")
 
 # %%
 # plot one example for the last ROI to show what I did
 print(points.shape)
 skip = 10
 fig, axes = plt.subplots(1, 3, figsize=(15, 6))
-axes[0].scatter(points[::skip, 0], points[::skip, 1], c=ids[::skip], cmap="prism", s=0.5, alpha=0.5)
+axes[0].scatter(
+    points[::skip, 0], points[::skip, 1], c=ids[::skip], cmap="prism", s=0.5, alpha=0.5
+)
 axes[0].set_title("ROI of original points")
-axes[1].scatter(points[::skip, 0], points[::skip, 1], c=nearest_neighbours[::skip], cmap="prism", s=0.5, alpha=0.5)
+axes[1].scatter(
+    points[::skip, 0],
+    points[::skip, 1],
+    c=nearest_neighbours[::skip],
+    cmap="prism",
+    s=0.5,
+    alpha=0.5,
+)
 axes[1].set_title("Filter by neighbours")
-axes[2].scatter(points[::skip, 0], points[::skip, 1], c=points2keep[::skip], cmap="Pastel1", s=1, alpha=0.5)
+axes[2].scatter(
+    points[::skip, 0],
+    points[::skip, 1],
+    c=points2keep[::skip],
+    cmap="Pastel1",
+    s=1,
+    alpha=0.5,
+)
 axes[2].set_title("Points to keep")
 
 for x in axes:
