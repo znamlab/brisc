@@ -8,6 +8,7 @@ import math
 import matplotlib.pyplot as plt
 from xml.etree import ElementTree
 import iss_preprocess as iss
+from iss_preprocess.pipeline.segment import _get_big_masks
 
 
 def get_barcodes(
