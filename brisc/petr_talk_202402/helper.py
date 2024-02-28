@@ -169,12 +169,11 @@ def plot_gene_image(ax, genes_spots, layers=LAYERS, ok=PATTERN, **kwargs):
     """
     default_kwargs = dict(s=1, marker="o", alpha=0.2)
     default_kwargs.update(kwargs)
-
-    colors = mpl.cm.get_cmap("terrain", len(layers))
+    cm = mpl.colormaps["terrain"]
     for il, gene_name in enumerate(layers):
         spots = genes_spots[genes_spots.gene == gene_name]
         ax.scatter(
-            spots.x, spots.y, color=colors(il), label=gene_name, **default_kwargs
+            spots.x, spots.y, color=cm(il/len(layers)), label=gene_name, **default_kwargs
         )
     colors = cycle(
         [
