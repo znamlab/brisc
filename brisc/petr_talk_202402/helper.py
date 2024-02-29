@@ -222,7 +222,7 @@ def plot_gene_image(
         )
 
 
-def get_mcherry_cells(data_path, roi):
+def get_mcherry_cells(data_path, roi, verbose=True):
     """
     Retrieves the coordinates of manually clicked mCherry cells from an XML file.
 
@@ -245,7 +245,6 @@ def get_mcherry_cells(data_path, roi):
     root = tree.getroot()
     marker_data = root[1]
     marker_1 = marker_data[1]
-    print(marker_1.tag)
     mcherry_cells = []
     for marker in marker_1:
         if marker.tag != "Marker":
@@ -254,7 +253,8 @@ def get_mcherry_cells(data_path, roi):
         assert marker[1].tag == "MarkerY"
         mcherry_cells.append([int(marker[0].text), int(marker[1].text)])
     mcherry_cells = np.array(mcherry_cells)
-    print(f"Found {mcherry_cells.shape[0]} manually clicked cells")
+    if verbose:
+        print(f"Found {mcherry_cells.shape[0]} manually clicked cells")
     return mcherry_cells
 
 
