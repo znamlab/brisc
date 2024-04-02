@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../../cricksaw-analysis"
+		},
+		{
+			"path": "../../iss-preprocess"
 		}
 	],
 	"settings": {}
