@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from xml.etree import ElementTree
 import iss_preprocess as iss
 from iss_preprocess.pipeline.segment import _get_big_masks
+import image_tools
 
 
 def get_barcodes(
@@ -286,7 +287,7 @@ def get_raw_data(data_path, roi, mcherry_channel=2):
         correct_illumination=True,
     )
     print("Transforming the mCherry channel")
-    stitched_reg = iss.reg.util.transform_image(
+    stitched_reg = image_tools.similarity_transform.transform_image(
         stitched_reg, scale=tform["scale"], angle=tform["angle"], shift=tform["shift"]
     )
     stitched_reg -= stitched_reg.min()
