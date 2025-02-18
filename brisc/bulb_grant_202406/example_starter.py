@@ -18,7 +18,7 @@ from skimage.transform import downscale_local_mean
 project = "becalia_rabies_barseq"
 mouse = "BRAC8498.3e"
 
-error_correction_ds_name = "BRAC8498.3e_error_corrected_barcodes_16"
+error_correction_ds_name = "BRAC8498.3e_error_corrected_barcodes_10"
 # %% reload rabies
 
 (

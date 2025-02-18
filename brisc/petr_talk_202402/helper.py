@@ -275,7 +275,7 @@ def get_raw_data(data_path, roi, mcherry_channel=2):
     """
 
     ops = iss.io.load.load_ops(data_path)
-    reg_folder = iss.io.load.get_processed_path(data_path) / "reg"
+    reg_folder = iss.io.load.get_processed_path(data_path) / "reg" / "mCherry_1"
     tform = np.load(reg_folder / f"mCherry_1_roi{roi}_tform_to_ref.npz")
     print("Stitching the mCherry channel")
     stitched_reg = iss.pipeline.stitch_tiles(
