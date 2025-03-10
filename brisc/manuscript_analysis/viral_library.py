@@ -126,12 +126,9 @@ def load_library_data(data_path, library, edit_distance, collapse):
 
 def plot_barcode_counts_and_percentage(
     libraries,
-    labels,
-    ax=None,
+    ax,
     label_fontsize=8,
-    label_pad=20,
     tick_fontsize=6,
-    tick_pad=10,
     line_alpha=0.6,
     line_width=2,
     colors=("dodgerblue", "turquoise", "gold", "darkorange", "green"),
@@ -156,22 +153,22 @@ def plot_barcode_counts_and_percentage(
     Returns:
         matplotlib.axes.Axes: Axes containing the plot.
     """
-    for library, color, label in zip(libraries, colors, labels):
+    for library_label, color in zip(libraries.keys(), colors):
         ax.plot(
-            library[:, 0],
-            library[:, 1],
+            libraries[library_label][:, 0],
+            libraries[library_label][:, 1],
             drawstyle="steps-pre",
             alpha=line_alpha,
             linewidth=line_width,
             color=color,
-            label=label,
+            label=library_label,
         )
 
     # Format ax_left
     ax.set_xscale("log")
     ax.set_xlim(1, 1e8)
     ax.xaxis.set_major_locator(mticker.FixedLocator(locs=np.logspace(0, 8, 9)))
-    ax.set_xlabel("Barcode index", fontsize=label_fontsize, labelpad=label_pad)
+    ax.set_xlabel("Barcode index", fontsize=label_fontsize)
 
     # Optionally hide every other tick label
     for lbl in ax.xaxis.get_ticklabels()[1::2]:
@@ -183,34 +180,38 @@ def plot_barcode_counts_and_percentage(
     for lbl in ax.yaxis.get_ticklabels()[1::2]:
         lbl.set_visible(False)
 
-    ax.set_ylabel("Barcode abundance", fontsize=label_fontsize, labelpad=label_pad)
+    ax.set_ylabel("Barcode abundance", fontsize=label_fontsize)
     ax.tick_params(
         axis="both",
         which="major",
         labelsize=tick_fontsize,
-        pad=tick_pad,
     )
 
     # Legend (based on ax_left handles/labels)
-    ax.legend(fontsize=tick_fontsize, loc="best", frameon=False)
+    ax.legend(
+        fontsize=tick_fontsize,
+        loc="upper right",
+        frameon=False,
+        handlelength=1,
+        bbox_to_anchor=(1.0, 1.0),
+        borderpad=0.0,
+    )
     despine(ax)
 
 
 def plot_unique_label_fraction(
     libraries,
-    labels,
     log_scale=False,
     ax=None,
     stride=50,
     max_cells=2000,
     min_max_percent_unique_range=(0.5, 1.0),
     label_fontsize=20,
-    label_pad=20,
     tick_fontsize=20,
-    tick_pad=10,
     line_alpha=0.6,
     line_width=2,
     colors=("dodgerblue", "turquoise", "gold", "darkorange", "green"),
+    show_legend=True,
 ):
     """
     Plot fraction of uniquely labeled cells vs. number of infections,
@@ -245,8 +246,8 @@ def plot_unique_label_fraction(
     else:
         evaluation_points = np.logspace(0, np.log10(max_cells), dtype=int)
     # Plot plasmid data
-    for library, color, label in zip(libraries, colors, labels):
-        barcode_probability = probability_distribution(library)
+    for library_label, color in zip(libraries.keys(), colors):
+        barcode_probability = probability_distribution(libraries[library_label])
 
         fractions = [
             fraction_unique(barcode_probability, num) for num in evaluation_points
@@ -258,7 +259,7 @@ def plot_unique_label_fraction(
                 alpha=line_alpha,
                 linewidth=line_width,
                 color=color,
-                label=label,
+                label=library_label,
             )
             ax.set_xlim(0, max_cells)
         else:
@@ -268,29 +269,26 @@ def plot_unique_label_fraction(
                 alpha=line_alpha,
                 linewidth=line_width,
                 color=color,
-                label=label,
+                label=library_label,
             )
             ax.set_xlim(1, max_cells)
 
     # Formatting
-    ax.set_xlabel("Number of infections", fontsize=label_fontsize, labelpad=label_pad)
+    ax.set_xlabel("Number of infections", fontsize=label_fontsize)
     ax.set_ylabel(
         "Proportion of uniquely\n labeled cells",
         fontsize=label_fontsize,
-        labelpad=label_pad,
     )
     yticks = np.linspace(
         min_max_percent_unique_range[0], min_max_percent_unique_range[1], 3
     )
     ax.set_yticks(yticks)
-    # Convert fractions to integer percents
     ax.set_ylim(min_max_percent_unique_range[0], min_max_percent_unique_range[1])
     ax.tick_params(
         axis="both",
         which="major",
         labelsize=tick_fontsize,
-        pad=tick_pad,
     )
-
-    ax.legend(loc="best", fontsize=tick_fontsize, frameon=False)
+    if show_legend:
+        ax.legend(loc="best", fontsize=tick_fontsize, frameon=False)
     despine(ax)
