@@ -110,19 +110,27 @@ def despine(ax):
     ax.spines["top"].set_visible(False)
 
 
+def load_library_data(data_path, library, edit_distance, collapse):
+    # Prepare file paths
+    fname = data_path / library / f"{library}_{collapse}_ed{edit_distance}.txt"
+    with open(fname, "r", encoding="utf-8-sig") as encoded_path:
+        sequencing_counts = np.genfromtxt(
+            encoded_path, delimiter="\t", dtype=int, usecols=(0)
+        )
+
+    array = np.zeros((len(sequencing_counts), 2))
+    array[:, 0] = np.arange(1, len(sequencing_counts) + 1)
+    array[:, 1] = sequencing_counts
+    return array
+
+
 def plot_barcode_counts_and_percentage(
-    data_path,
-    virus_to_plot,
-    virus_ed,
-    virus_collapse,
-    plasmid_to_plot,
-    plasmid_ed,
-    plasmid_collapse,
+    libraries,
+    labels,
     ax=None,
-    verbose=False,
-    label_fontsize=20,
+    label_fontsize=8,
     label_pad=20,
-    tick_fontsize=20,
+    tick_fontsize=6,
     tick_pad=10,
     line_alpha=0.6,
     line_width=2,
@@ -134,13 +142,7 @@ def plot_barcode_counts_and_percentage(
     vs. barcode index (log scale on x-axis).
 
     Args:
-        data_path (str): Path to the data directory.
-        virus_to_plot (list): List of virus names to plot.
-        virus_ed (int): Edit distance for virus data.
-        virus_collapse (str): Collapse method for virus data.
-        plasmid_to_plot (list): List of plasmid names to plot.
-        plasmid_ed (int): Edit distance for plasmid data.
-        plasmid_collapse (str): Collapse method for plasmid data.
+        libraries (list): List of libraries to plot.
         ax (matplotlib.axes.Axes): Axes to plot on.
         verbose (bool): Print verbose output.
         label_fontsize (int): Font size for axis labels.
@@ -154,50 +156,10 @@ def plot_barcode_counts_and_percentage(
     Returns:
         matplotlib.axes.Axes: Axes containing the plot.
     """
-
-    data_path = Path(data_path)
-    # Prepare file paths
-    virus_seq_data = [
-        data_path / virus / f"{virus}_{virus_collapse}_ed{virus_ed}.txt"
-        for virus in virus_to_plot
-    ]
-    plasmid_seq_data = [
-        data_path / plasmid / f"{plasmid}_{plasmid_collapse}_ed{plasmid_ed}.txt"
-        for plasmid in plasmid_to_plot
-    ]
-
-    # Color mapping
-    all_samples = virus_to_plot + plasmid_to_plot
-    color_dict = {sample: color for sample, color in zip(all_samples, colors)}
-
-    ax_left = ax
-
-    # Plot: Barcode abundance on ax_left (log y-axis)
-    for i, plasmid_file in enumerate(plasmid_seq_data):
-        if verbose:
-            print(f"Preparing log barcode counts for plasmid: {plasmid_file}")
-        data = plasmid_sequencing_data(plasmid_file)
-        label = plasmid_to_plot[i]
-        color = color_dict[label]
-        ax_left.plot(
-            data[:, 0],
-            data[:, 1],
-            drawstyle="steps-pre",
-            alpha=line_alpha,
-            linewidth=line_width,
-            color=color,
-            label=label,
-        )
-
-    for i, virus_file in enumerate(virus_seq_data):
-        if verbose:
-            print(f"Preparing log barcode counts for virus: {virus_file}")
-        data = virus_sequencing_data(virus_file)
-        label = virus_to_plot[i]
-        color = color_dict[label]
-        ax_left.plot(
-            data[:, 0],
-            data[:, 1],
+    for library, color, label in zip(libraries, colors, labels):
+        ax.plot(
+            library[:, 0],
+            library[:, 1],
             drawstyle="steps-pre",
             alpha=line_alpha,
             linewidth=line_width,
@@ -206,70 +168,36 @@ def plot_barcode_counts_and_percentage(
         )
 
     # Format ax_left
-    ax_left.set_xscale("log")
-    ax_left.set_xlim(1, 1e8)
-    ax_left.xaxis.set_major_locator(mticker.FixedLocator(locs=np.logspace(0, 8, 9)))
-    ax_left.xaxis.set_minor_locator(mticker.LogLocator(numticks=999, subs="auto"))
-    ax_left.set_xlabel("Barcode index", fontsize=label_fontsize, labelpad=label_pad)
+    ax.set_xscale("log")
+    ax.set_xlim(1, 1e8)
+    ax.xaxis.set_major_locator(mticker.FixedLocator(locs=np.logspace(0, 8, 9)))
+    ax.set_xlabel("Barcode index", fontsize=label_fontsize, labelpad=label_pad)
 
     # Optionally hide every other tick label
-    for lbl in ax_left.xaxis.get_ticklabels()[1::2]:
+    for lbl in ax.xaxis.get_ticklabels()[1::2]:
         lbl.set_visible(False)
 
-    ax_left.set_yscale("log")
-    ax_left.set_ylim(1, 1e6)
-    ax_left.yaxis.set_major_locator(mticker.FixedLocator(locs=np.logspace(0, 6, 7)))
-    ax_left.yaxis.set_minor_locator(mticker.LogLocator(numticks=999, subs="auto"))
-    for lbl in ax_left.yaxis.get_ticklabels()[1::2]:
+    ax.set_yscale("log")
+    ax.set_ylim(1, 1e6)
+    ax.yaxis.set_major_locator(mticker.FixedLocator(locs=np.logspace(0, 6, 7)))
+    for lbl in ax.yaxis.get_ticklabels()[1::2]:
         lbl.set_visible(False)
 
-    ax_left.set_ylabel("Barcode abundance", fontsize=label_fontsize, labelpad=label_pad)
-    ax_left.tick_params(
+    ax.set_ylabel("Barcode abundance", fontsize=label_fontsize, labelpad=label_pad)
+    ax.tick_params(
         axis="both",
         which="major",
         labelsize=tick_fontsize,
         pad=tick_pad,
     )
-
-    # Create secondary y-axis on the same x-axis
-    ax_right = ax_left.twinx()
-    ax_right.set_xscale("log")
-    ax_right.set_xlim(1, 1e8)
-    ax_right.xaxis.set_major_locator(mticker.FixedLocator(locs=np.logspace(0, 8, 9)))
-    ax_right.xaxis.set_minor_locator(mticker.LogLocator(numticks=999, subs="auto"))
-    # Make the right y-axis also log
-    ax_right.set_yscale("log")
-    ax_right.set_ylabel(
-        "Percentage of total UMI counts (%)",
-        fontsize=label_fontsize,
-        labelpad=label_pad,
-    )
-    ax_right.tick_params(
-        axis="both",
-        which="major",
-        labelsize=tick_fontsize,
-        pad=tick_pad,
-    )
-    total_umis = 0
-    for plasmid_file in plasmid_seq_data:
-        d = plasmid_sequencing_data(plasmid_file)
-        total_umis += d[:, 1].sum()
-    for virus_file in virus_seq_data:
-        d = virus_sequencing_data(virus_file)
-        total_umis += d[:, 1].sum()
-
-    ymin, ymax = ax_left.get_ylim()
-    ax_right.set_ylim(ymin / total_umis * 100, ymax / total_umis * 100)
-
-    ax_right.yaxis.set_major_locator(mticker.LogLocator(base=10, numticks=8))
-    ax_right.yaxis.set_major_formatter(mticker.LogFormatterMathtext(base=10))
-    ax_right.yaxis.set_minor_formatter(mticker.NullFormatter())
 
     # Legend (based on ax_left handles/labels)
-    handles, labels = ax_left.get_legend_handles_labels()
-    ax_left.legend(handles, labels, fontsize=tick_fontsize, loc="best")
-
-    return ax_left, ax_right
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles, labels, fontsize=tick_fontsize, loc="best")
+    # remove legend border
+    ax.get_legend().get_frame().set_linewidth(0.0)
+    despine(ax)
+    return ax
 
 
 def plot_unique_label_fraction(
