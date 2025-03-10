@@ -8,13 +8,13 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import matplotlib
 
-matplotlib.rcParams["pdf.fonttype"] = (
-    42  # Use Type 3 fonts (TrueType) for selectable text
-)
+matplotlib.rcParams[
+    "pdf.fonttype"
+] = 42  # Use Type 3 fonts (TrueType) for selectable text
 matplotlib.rcParams["ps.fonttype"] = 42  # For EPS, if relevant
 
 
-def load_data():
+def load_data(redo=False):
     processed_path = Path(
         "/nemo/project/proj-znamenp-barseq/processed/becalia_rabies_barseq/BRAC8498.3e/"
     )
@@ -45,8 +45,6 @@ def load_data():
         lib_bc_sequence = rv35_library.loc[min_edit_distance_idx, "10bp_seq"]
         lib_bc_count = rv35_library.loc[min_edit_distance_idx, "counts"]
         return min_edit_distance, lib_bc_sequence, lib_bc_count
-
-    redo = False
 
     lib_10bp_seq = np.array(rv35_library["10bp_seq"])
     if redo:
@@ -171,9 +169,10 @@ def plot_matches_to_library(
     label_fontsize=12,
     tick_fontsize=12,
     line_width=0.9,
+    num_bins=80,
 ):
     # Define bin edges for consistent binning
-    bin_edges = np.logspace(0, 6, num=80)
+    bin_edges = np.logspace(0, 6, num=num_bins)
 
     # Extract histogram data
     data0 = in_situ_perfect_match["ham_lib_bc_counts"].values
