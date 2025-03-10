@@ -1,60 +1,52 @@
 import iss_preprocess as issp
-import matplotlib.pyplot as plt
+
 import numpy as np
 import pandas as pd
 from skimage.segmentation import expand_labels
-from skimage import measure
 from tqdm import tqdm
 
 
-def load_data():
-    project = "becalia_rabies_barseq"
-    mouse = "BRAC8780.3f"
-    chamber = "chamber_08"
-    prefix = "hybridisation_round_1_1"
+def load_data(
+    project="becalia_rabies_barseq",
+    mouse="BRAC8780.3f",
+    chamber="chamber_08",
+    prefix="hybridisation_round_1_1",
+    rab_genes_channel=1,
+    padlock_channel=3,
+    th=20,
+    r1=9,
+    r2=37,
+    footprint=10,
+    mask_expansion_um=5,
+    spot_size=2,
+    threshold=100,
+):
     data_path = f"{project}/{mouse}/{chamber}"
-    rab_genes_channel = 1
-    padlock_channel = 3
-    chans = [rab_genes_channel, padlock_channel]
-
     ops = issp.io.load_ops(data_path)
     roi_dims = issp.io.load.get_roi_dimensions(data_path, prefix=prefix)
-
-    example_tile, bad_px = issp.pipeline.load_and_register_tile(
-        data_path,
-        prefix=prefix,
-        tile_coors=(10, 0, 0),
-        projection="max-median",
-        correct_illumination=False,
-        filter_r=False,
-    )
-    # keep only round 1
-    example_tile = example_tile[..., 0]
-
-    th = 20
-    r1 = 9
-    r2 = 37
-    footprint = 10
-    threshold = 100
+    chans = [rab_genes_channel, padlock_channel]
+    pixel_size = issp.io.get_pixel_size(data_path, prefix)
 
     def detect_rab_cells(
         stack,
         rab_genes_channel=1,
         padlock_channel=3,
         r1=9,
-        r2=41,
+        r2=37,
         threshold=100,
         footprint=10,
+        mask_expansion_um=5,
     ):
         rab_genes = stack[..., rab_genes_channel]
-        chans = [rab_genes_channel, padlock_channel]
         binary = issp.pipeline.segment._filter_mcherry_masks(
             rab_genes, r1, r2, threshold, footprint=footprint
         )
-        labeled_image = measure.label(binary)
-        labeled_image = expand_labels(labeled_image, distance=footprint)
+        chans = [rab_genes_channel, padlock_channel]
         labeled_image, props_df = issp.segment.cells.label_image(
-            binary, example_tile[..., chans]
+            binary, stack[..., chans]
+        )
+        labeled_image = expand_labels(
+            labeled_image, int(mask_expansion_um / pixel_size)
         )
         return labeled_image, props_df
 
@@ -62,8 +54,7 @@ def load_data():
     rabies_stack = None
     labeled_images = None
     for roi in tqdm(roi_dims[:, 0], total=len(roi_dims)):
-        print(f"Processing roi {roi}")
-        stack, bad_px = issp.pipeline.load_and_register_tile(
+        stack, _ = issp.pipeline.load_and_register_tile(
             data_path,
             prefix=prefix,
             tile_coors=(roi, 0, 0),
@@ -80,11 +71,11 @@ def load_data():
             r2=r2,
             threshold=threshold,
             footprint=footprint,
+            mask_expansion_um=mask_expansion_um,
         )
-        labeled_image = expand_labels(labeled_image, int(5 / 0.23))
         padlock = stack[..., padlock_channel]
-        filtered = issp.image.filter_stack(padlock, r1=2, r2=4)
-        spots = issp.segment.detect_spots(filtered, threshold=th, spot_size=2)
+        filtered = issp.image.filter_stack(padlock)
+        spots = issp.segment.detect_spots(filtered, threshold=th, spot_size=spot_size)
         spots["mask_id"] = labeled_image[spots.y, spots.x]
         spots["roi"] = roi
         props_df["roi"] = roi
@@ -125,8 +116,11 @@ def plot_histogram_bc_per_cell(
     ax=None,
     label_fontsize=12,
     tick_fontsize=12,
+    hist_bins=40,
 ):
-    bars = ax.hist(good_cells["spot_count"], bins=np.arange(40) - 0.5, color="grey")
+    bars = ax.hist(
+        good_cells["spot_count"], bins=np.arange(hist_bins) - 0.5, color="grey"
+    )
 
     # Change the color of the first three bars to red
     for bar in bars[2][:3]:
@@ -151,8 +145,3 @@ def plot_histogram_bc_per_cell(
         which="major",
         labelsize=tick_fontsize,
     )
-
-    # axes[1].set_xlabel("Barcode spots per cell")
-    # axes[1].set_ylabel("Cumulative fraction")
-    # axes[1].set_xlim(0, 20)
-    # axes[1].set_ylim(0, 1)
