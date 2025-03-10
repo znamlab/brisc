@@ -192,27 +192,18 @@ def plot_barcode_counts_and_percentage(
     )
 
     # Legend (based on ax_left handles/labels)
-    handles, labels = ax.get_legend_handles_labels()
-    ax.legend(handles, labels, fontsize=tick_fontsize, loc="best")
-    # remove legend border
-    ax.get_legend().get_frame().set_linewidth(0.0)
+    ax.legend(fontsize=tick_fontsize, loc="best", frameon=False)
     despine(ax)
-    return ax
 
 
 def plot_unique_label_fraction(
-    data_path,
-    virus_to_plot,
-    virus_ed,
-    virus_collapse,
-    plasmid_to_plot,
-    plasmid_ed,
-    plasmid_collapse,
+    libraries,
+    labels,
+    log_scale=False,
     ax=None,
     stride=50,
     max_cells=2000,
     min_max_percent_unique_range=(0.5, 1.0),
-    verbose=False,
     label_fontsize=20,
     label_pad=20,
     tick_fontsize=20,
@@ -249,93 +240,57 @@ def plot_unique_label_fraction(
     Returns:
         matplotlib.axes.Axes: Axes containing the plot.
     """
-
-    data_path = Path(data_path)
-    virus_seq_data = [
-        data_path / virus / f"{virus}_{virus_collapse}_ed{virus_ed}.txt"
-        for virus in virus_to_plot
-    ]
-    plasmid_seq_data = [
-        data_path / plasmid / f"{plasmid}_{plasmid_collapse}_ed{plasmid_ed}.txt"
-        for plasmid in plasmid_to_plot
-    ]
-
-    # Color mapping
-    all_samples = virus_to_plot + plasmid_to_plot
-    color_dict = {sample: color for sample, color in zip(all_samples, colors)}
-
-    evaluation_points = np.linspace(1, max_cells, stride, dtype=int)
-    ax_ = ax
+    if not log_scale:
+        evaluation_points = np.linspace(1, max_cells, stride, dtype=int)
+    else:
+        evaluation_points = np.logspace(0, np.log10(max_cells), dtype=int)
     # Plot plasmid data
-    for i, plasmid_file in enumerate(plasmid_seq_data):
-        if verbose:
-            print(f"Preparing uniquely labeled plot for plasmid: {plasmid_file}")
-        barcode_distribution = plasmid_sequencing_data(plasmid_file)
-        barcode_probability = probability_distribution(barcode_distribution)
+    for library, color, label in zip(libraries, colors, labels):
+        barcode_probability = probability_distribution(library)
 
-        fractions = []
-        for num in evaluation_points:
-            frac = fraction_unique(barcode_probability, num)
-            fractions.append(frac)
-
-        ax_.plot(
-            evaluation_points,
-            fractions,
-            alpha=line_alpha,
-            linewidth=line_width,
-            color=color_dict[plasmid_to_plot[i]],
-            label=plasmid_to_plot[i],
-        )
-
-    # Plot virus data
-    for i, virus_file in enumerate(virus_seq_data):
-        if verbose:
-            print(f"Preparing uniquely labeled plot for virus: {virus_file}")
-        barcode_distribution = virus_sequencing_data(virus_file)
-        barcode_probability = probability_distribution(barcode_distribution)
-
-        fractions = []
-        for num in evaluation_points:
-            frac = fraction_unique(barcode_probability, num)
-            fractions.append(frac)
-
-        ax_.plot(
-            evaluation_points,
-            fractions,
-            alpha=line_alpha,
-            linewidth=line_width,
-            color=color_dict[virus_to_plot[i]],
-            label=virus_to_plot[i],
-        )
+        fractions = [
+            fraction_unique(barcode_probability, num) for num in evaluation_points
+        ]
+        if not log_scale:
+            ax.plot(
+                evaluation_points,
+                fractions,
+                alpha=line_alpha,
+                linewidth=line_width,
+                color=color,
+                label=label,
+            )
+            ax.set_xlim(0, max_cells)
+        else:
+            ax.semilogx(
+                evaluation_points,
+                fractions,
+                alpha=line_alpha,
+                linewidth=line_width,
+                color=color,
+                label=label,
+            )
+            ax.set_xlim(1, max_cells)
 
     # Formatting
-    ax_.set_xlabel(
-        "No. of independent infections", fontsize=label_fontsize, labelpad=label_pad
+    ax.set_xlabel("Number of infections", fontsize=label_fontsize, labelpad=label_pad)
+    ax.set_ylabel(
+        "Proportion of uniquely\n labeled cells",
+        fontsize=label_fontsize,
+        labelpad=label_pad,
     )
-    ax_.set_ylabel(
-        "Uniquely labeled cells (%)", fontsize=label_fontsize, labelpad=label_pad
-    )
-    ax_.set_xlim(0, max_cells)
-    xticks = np.linspace(0, max_cells, 5, dtype=int)
-    ax_.set_xticks(xticks)
     yticks = np.linspace(
-        min_max_percent_unique_range[0], min_max_percent_unique_range[1], 5
+        min_max_percent_unique_range[0], min_max_percent_unique_range[1], 3
     )
-    ax_.set_yticks(yticks)
+    ax.set_yticks(yticks)
     # Convert fractions to integer percents
-    ax_.set_yticklabels((yticks * 100).astype(str))
-    ax_.set_ylim(min_max_percent_unique_range[0], min_max_percent_unique_range[1])
-    ax_.tick_params(
+    ax.set_ylim(min_max_percent_unique_range[0], min_max_percent_unique_range[1])
+    ax.tick_params(
         axis="both",
         which="major",
         labelsize=tick_fontsize,
         pad=tick_pad,
     )
 
-    handles, labels = ax_.get_legend_handles_labels()
-    unique_legend = dict(zip(labels, handles))
-    ax_.legend(
-        unique_legend.values(), unique_legend.keys(), loc="best", fontsize=tick_fontsize
-    )
-
-    return ax_
+    ax.legend(loc="best", fontsize=tick_fontsize, frameon=False)
+    despine(ax)
