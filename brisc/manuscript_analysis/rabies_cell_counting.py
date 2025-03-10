@@ -129,17 +129,16 @@ def plot_rv_coronal_slice(
     ax.set_aspect("equal")
     ax.axis("off")
 
-    # Add scale bar to the second subplot
     scalebar2 = plt.Line2D(
-        [rgb2.shape[1] - 110, rgb2.shape[1] - 10],
-        [rgb2.shape[0] - 20, rgb2.shape[0] - 20],
+        [rgb2.shape[1] - 160, rgb2.shape[1] - 60],
+        [rgb2.shape[0] - 70, rgb2.shape[0] - 70],
         color="white",
         linewidth=4,
     )
     ax.add_line(scalebar2)
     ax.text(
-        rgb2.shape[1] - 60,
-        rgb2.shape[0] - 30,
+        rgb2.shape[1] - 110,
+        rgb2.shape[0] - 80,
         "1 mm",
         color="white",
         ha="center",
@@ -217,5 +216,156 @@ def plot_rabies_density(
         which="major",
         labelsize=tick_fontsize,
     )
+
+    return ax
+
+
+def mask_rounded_points(points, mask):
+    """
+    Return only those points (Nx3) whose integer voxel coordinates fall in mask > 0.
+    Here, `mask` should be the same shape as the volume from which `points` were extracted.
+    """
+    # Round coords to nearest integer, ensure inside volume bounds
+    rounded = np.round(points).astype(int)
+    Z, Y, X = mask.shape
+    in_bounds = (
+        (0 <= rounded[:, 0])
+        & (rounded[:, 0] < Z)
+        & (0 <= rounded[:, 1])
+        & (rounded[:, 1] < Y)
+        & (0 <= rounded[:, 2])
+        & (rounded[:, 2] < X)
+    )
+    valid_points = rounded[in_bounds]
+    # Now keep only those where mask>0
+    keep_idx = mask[valid_points[:, 0], valid_points[:, 1], valid_points[:, 2]] > 0
+    # Return the *original floating coordinates* that correspond to valid mask
+    return points[in_bounds][keep_idx]
+
+
+def plot_rabies_density(
+    inj_center=np.array([673, 205, 890]),
+    project="rabies_barcoding",
+    mouse="BRYC64.2i",
+    processed=Path("/nemo/lab/znamenskiyp/home/shared/projects/"),
+    ax=None,
+    label_fontsize=12,
+    tick_fontsize=12,
+    max_radius_mm=2.0,
+    n_points=200,
+):
+    """
+    Plots the cumulative density of labeled cells in isocortex as a function
+    of distance from the injection site. Distances and volumes are computed
+    strictly within the isocortex mask.
+
+    Parameters
+    ----------
+    inj_center : np.ndarray
+        Injection center in voxel coordinates (Z, Y, X).
+    project : str
+        Project folder name.
+    mouse : str
+        Mouse folder name.
+    processed : Path
+        Base path to data.
+    ax : matplotlib.axes._axes.Axes or None
+        Axes on which to plot.
+    label_fontsize : int
+        Fontsize for the x/y labels.
+    tick_fontsize : int
+        Fontsize for the tick labels.
+    max_radius_mm : float
+        Maximum radius (in mm) to plot.
+    n_points : int
+        Number of radius increments.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(5, 4))
+
+    # -------------------------------------------------------------------------
+    # Load points and atlas
+    points_file = (
+        processed / project / mouse / "cellfinder_results_010/points/downsampled.points"
+    )
+    pts = pd.read_hdf(points_file).values  # Nx3
+    reg_folder = processed / project / mouse / "cellfinder_results_010/registration"
+    atlas = tf.imread(reg_folder / "registered_atlas.tiff")
+
+    # -------------------------------------------------------------------------
+    # BrainGlobe atlas and mask for isocortex
+    atlas_obj = BrainGlobeAtlas("allen_mouse_10um")
+    isocortex_regions = atlas_obj.get_structure_descendants("Isocortex")
+    isocortex_ids = [
+        atlas_obj.structures[acronym]["id"] for acronym in isocortex_regions
+    ]
+
+    # Create isocortex mask (same shape as atlas)
+    mask = np.isin(atlas, isocortex_ids).astype(np.uint8)
+
+    # -------------------------------------------------------------------------
+    # Get voxel coordinates in isocortex
+    # mask.shape = (Z, Y, X)
+    # voxel_coords: N_voxels x 3 (Z, Y, X)
+    voxel_coords = np.argwhere(mask > 0)
+
+    # Convert injection center to mm (1 voxel = 0.01 mm)
+    inj_center_mm = inj_center * 0.01
+
+    # Distances of each isocortex voxel to the injection center
+    voxel_coords_mm = voxel_coords * 0.01
+    voxel_distances = np.sqrt(np.sum((voxel_coords_mm - inj_center_mm) ** 2, axis=1))
+    voxel_distances_sorted = np.sort(voxel_distances)
+
+    # -------------------------------------------------------------------------
+    # Get only isocortex cells
+    cells_masked = mask_rounded_points(pts, mask)
+    # Distances of each isocortex cell to injection center
+    cells_masked_mm = cells_masked * 0.01
+    cell_distances = np.sqrt(np.sum((cells_masked_mm - inj_center_mm) ** 2, axis=1))
+    cell_distances_sorted = np.sort(cell_distances)
+
+    # -------------------------------------------------------------------------
+    # Compute cumulative density in isocortex
+    # For radius r, #voxels inside r = index in voxel_distances_sorted
+    # Volume = (#voxels) * (0.01 mm)^3
+    # #cells inside r similarly from cell_distances_sorted
+    # density(r) = #cells(r) / volume(r)
+
+    radii = np.linspace(0, max_radius_mm, n_points)
+    densities = []
+    voxel_volume = 0.01**3  # mm^3 per voxel
+
+    for r in radii:
+        # How many voxels are within r?
+        # np.searchsorted gives index where r would be inserted to keep sorted order
+        # side="right" => we get the count of elements <= r
+        idx_vox = np.searchsorted(voxel_distances_sorted, r, side="right")
+        # Number of isocortex cells within r
+        idx_cells = np.searchsorted(cell_distances_sorted, r, side="right")
+
+        if idx_vox == 0:
+            densities.append(0.0)
+            continue
+
+        volume_r = idx_vox * voxel_volume  # mm^3 in isocortex
+        cell_count = idx_cells
+        density_r = cell_count / volume_r
+        densities.append(density_r)
+
+    # -------------------------------------------------------------------------
+    # Plot
+    ax.plot(
+        radii,
+        densities,
+        linewidth=2,
+        color="red",
+        label="Cumulative isocortex density",
+    )
+    ax.set_xlabel("Distance to injection center (mm)", fontsize=label_fontsize)
+    ax.set_ylabel("Cell density (cells / mm$^3$)", fontsize=label_fontsize)
+    ax.set_xlim(0, max_radius_mm)
+    # ax.legend(fontsize=tick_fontsize)
+    ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
 
     return ax
