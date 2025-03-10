@@ -182,13 +182,15 @@ def plot_background(
 
 def plot_spots(cor_ax, flat_ax, df, **kwargs):
     midline = get_midline()
+
     cor_coors = np.vstack(
         [
             df["ara_z"].values * 1000 / ATLAS_SIZE - midline,
             df["ara_y"].values * 1000 / ATLAS_SIZE,
         ]
     )
-    cor_ax.scatter(*cor_coors, **kwargs)
+    if cor_ax is not None:
+        cor_ax.scatter(*cor_coors, **kwargs)
     flat_coords = df[["ara_x", "ara_y", "ara_z"]].values
     bad = np.any(flat_coords < 0, axis=1)
     # also remove NaN
