@@ -193,7 +193,7 @@ def plot_barcode_counts_and_percentage(
         loc="upper right",
         frameon=False,
         handlelength=1,
-        bbox_to_anchor=(1.0, 1.0),
+        bbox_to_anchor=(1.2, 1.0),
         borderpad=0.0,
     )
     despine(ax)
