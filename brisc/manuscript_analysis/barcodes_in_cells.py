@@ -1,19 +1,18 @@
-from pathlib import Path
 import numpy as np
 import pandas as pd
-import tifffile as tf
 from matplotlib import pyplot as plt
 import matplotlib
 import iss_preprocess as iss
+from iss_preprocess.io import get_processed_path
 
-matplotlib.rcParams["pdf.fonttype"] = (
-    42  # Use Type 3 fonts (TrueType) for selectable text
-)
+matplotlib.rcParams[
+    "pdf.fonttype"
+] = 42  # Use Type 3 fonts (TrueType) for selectable text
 matplotlib.rcParams["ps.fonttype"] = 42  # For EPS, if relevant
 
 
 data_path = "becalia_rabies_barseq/BRAC8498.3e/chamber_07"
-processed_path = iss.io.get_processed_path(data_path)
+processed_path = get_processed_path(data_path)
 
 ara_is_starters = pd.read_pickle(
     processed_path.parent / "analysis" / "merged_cell_df_curated_mcherry.pkl"
@@ -81,11 +80,40 @@ def load_data(data_path="becalia_rabies_barseq/BRAC8498.3e/chamber_07"):
     counts_with_starter = non_starter_with_starter.groupby("all_barcodes").size()
     counts_without_starter = non_starter_without_starter.groupby("all_barcodes").size()
 
+    # Cells per barcode
+    unfiltered_non_is_starter_barcodes = (
+        ara_is_starters[ara_is_starters["is_starter"] == False]["all_barcodes"]
+        .explode()
+        .unique()
+    )
+    # include barcodes with no presynaptic cells
+    unfiltered_is_starter_barcodes = (
+        ara_is_starters[ara_is_starters["is_starter"] == True]["all_barcodes"]
+        .explode()
+        .unique()
+    )
+    unfiltered_barcodes_not_in_is_starters = unfiltered_non_is_starter_barcodes[
+        ~np.isin(unfiltered_non_is_starter_barcodes, unfiltered_is_starter_barcodes)
+    ].shape[0]
+    unfiltered_is_starter_cells_per_barcode = (
+        ara_is_starters[ara_is_starters["is_starter"] == True]["all_barcodes"]
+        .explode()
+        .value_counts()
+        .values
+    )
+    starters_per_barcode = np.concatenate(
+        [
+            np.zeros(unfiltered_barcodes_not_in_is_starters),
+            unfiltered_is_starter_cells_per_barcode,
+        ]
+    )
+
     return (
         unfiltered_bar_per_presynaptic_cell,
         unfiltered_bar_per_is_starter_cell,
         counts_with_starter,
         counts_without_starter,
+        starters_per_barcode,
     )
 
 
@@ -116,7 +144,6 @@ def plot_bc_per_cell_presyn(
     for i, (val_filtered, val_unfiltered) in enumerate(
         zip(hist_values, unfiltered_values)
     ):
-
         # Annotate unfiltered data with padding if heights are similar
         y_offset = (
             val_filtered + padding
@@ -175,7 +202,6 @@ def plot_bc_per_cell_starter(
     for i, (val_filtered, val_unfiltered) in enumerate(
         zip(hist_values, unfiltered_values)
     ):
-
         # Annotate unfiltered data with padding if heights are similar
         y_offset = (
             val_filtered + padding
@@ -219,7 +245,6 @@ def plot_presyn_per_orphan(
     tick_fontsize=12,
     line_width=0.9,
 ):
-
     # Regular histogram (left subplot)
     # Non-starters *with* starter
     ax.hist(
@@ -267,3 +292,51 @@ def plot_presyn_per_orphan(
     plt.tight_layout()
 
     return ax
+
+
+def plot_starters_per_barcode(
+    starters_per_barcode,
+    ax=None,
+    label_fontsize=12,
+    tick_fontsize=12,
+    padding=200,
+):
+    ax.hist(
+        starters_per_barcode,
+        bins=np.arange(0, starters_per_barcode.max() + 2, 1) - 0.5,
+        histtype="stepfilled",
+        edgecolor="black",
+        color="lightblue",
+        alpha=0.8,
+    )
+
+    bin_edges = np.arange(0, starters_per_barcode.max() + 2, 1) - 0.5
+    unfiltered_values, _ = np.histogram(starters_per_barcode, bins=bin_edges)
+
+    for i, val_unfiltered in enumerate(unfiltered_values):
+        y_offset = val_unfiltered + padding
+        ax.text(
+            i,
+            y_offset + 1,
+            str(val_unfiltered),
+            ha="center",
+            fontsize=label_fontsize,
+            color="black",
+            alpha=0.8,
+        )
+
+    ax.set_ylabel(
+        "Number of barcodes",
+        fontsize=label_fontsize,
+    )
+    ax.set_xlabel(
+        "Starter cells per barcode",
+        fontsize=label_fontsize,
+    )
+    ax.set_xlim(-0.5, 11.5)
+    ax.set_xticks(np.arange(0, 12, 1))
+    ax.tick_params(
+        axis="both",
+        which="major",
+        labelsize=tick_fontsize,
+    )
