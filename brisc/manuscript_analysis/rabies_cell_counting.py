@@ -41,12 +41,12 @@ def mask_points(pts, mask):
 
 
 def plot_rv_coronal_slice(
+    ax,
     project="rabies_barcoding",
     mouse="BRYC64.2i",
-    processed=Path("/nemo/lab/znamenskiyp/home/shared/projects/"),
+    data_root=Path("/nemo/lab/znamenskiyp"),
     inj_center=np.array([673, 205, 890]),
     label_fontsize=12,
-    ax=None,
 ):
     """
 
@@ -54,6 +54,7 @@ def plot_rv_coronal_slice(
         matplotlib.axes.Axes: Axes object with the plot.
         matplotlib.axes.Axes: Axes object with the secondary x-axis.
     """
+    processed = data_root / "home/shared/projects/"
 
     mcherry_file = (
         processed
@@ -77,9 +78,7 @@ def plot_rv_coronal_slice(
     background = tf.imread(background_file)
 
     # Load the Allen Brain Atlas
-    atlas_obj = BrainGlobeAtlas(
-        "allen_mouse_10um"
-    )  # Use the appropriate atlas for your data
+    atlas_obj = BrainGlobeAtlas("allen_mouse_10um")
 
     # Get all areas in the isocortex
     isocortex_regions = atlas_obj.get_structure_descendants("Isocortex")
@@ -146,14 +145,12 @@ def plot_rv_coronal_slice(
         fontsize=label_fontsize,
     )
 
-    return ax
-
 
 def plot_rabies_density(
     inj_center=np.array([673, 205, 890]),
     project="rabies_barcoding",
     mouse="BRYC64.2i",
-    processed=Path("/nemo/lab/znamenskiyp/home/shared/projects/"),
+    processed=Path("/nemo/lab/znamenskiyp/"),
     ax=None,
     label_fontsize=12,
     tick_fontsize=12,

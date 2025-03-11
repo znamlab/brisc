@@ -10,7 +10,6 @@ from cricksaw_analysis.atlas_utils import cell_density_by_areas
 from iss_preprocess import vis
 
 import cv2
-from matplotlib.patches import ConnectionPatch
 from czifile import CziFile
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 import matplotlib.font_manager as fm
@@ -18,6 +17,7 @@ import matplotlib.font_manager as fm
 
 def plot_starter_dilution_densities(
     ax=None,
+    processed=Path("/nemo/lab/znamenskiyp/home/shared/projects/"),
     label_fontsize=12,
     tick_fontsize=12,
 ):
@@ -30,7 +30,6 @@ def plot_starter_dilution_densities(
     bg_atlas = bga.bg_atlas.BrainGlobeAtlas("allen_mouse_%dum" % atlas_size)
     cdf = atlas_utils.create_ctx_table(bg_atlas)
     # Combine v1 and vis_all_density with a new column to differentiate between the datasets
-    processed = Path("/nemo/lab/znamenskiyp/home/shared/projects/")
     project = "rabies_barcoding"
     mouse_csv = processed / project / "mice_list.csv"
     mice_df = pd.read_csv(mouse_csv, skipinitialspace=True)
@@ -409,9 +408,7 @@ def plot_starter_dilution_densities(
 
 
 def plot_starter_confocal(
-    ax,
-    label_fontsize=12,
-    tick_fontsize=10,
+    ax, label_fontsize=12, processed=Path("/nemo/lab/znamenskiyp/home/shared/projects/")
 ):
     """
     Plot the two inset images inside the given axis, one above the other.
@@ -436,7 +433,7 @@ def plot_starter_confocal(
     INSET[-1] = int(INSET[1] + (INSET[2] - INSET[0]) / aspect_ratio * 2)
 
     # Load data
-    root_folder = Path("/nemo/lab/znamenskiyp/home/shared/projects/") / PROJECT
+    root_folder = processed / PROJECT
     confocal_data = root_folder / MOUSE / "zeiss_confocal"
 
     with CziFile(confocal_data / IMAGE_FILE) as czi:
