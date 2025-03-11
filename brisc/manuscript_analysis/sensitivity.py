@@ -6,6 +6,27 @@ from skimage.segmentation import expand_labels
 from tqdm import tqdm
 
 
+def detect_rab_cells(
+    stack,
+    rab_genes_channel=1,
+    padlock_channel=3,
+    r1=9,
+    r2=37,
+    threshold=100,
+    footprint=10,
+    mask_expansion_um=5,
+    pixel_size=0.23,
+):
+    rab_genes = stack[..., rab_genes_channel]
+    binary = issp.pipeline.segment._filter_mcherry_masks(
+        rab_genes, r1, r2, threshold, footprint=footprint
+    )
+    chans = [rab_genes_channel, padlock_channel]
+    labeled_image, props_df = issp.segment.cells.label_image(binary, stack[..., chans])
+    labeled_image = expand_labels(labeled_image, int(mask_expansion_um / pixel_size))
+    return labeled_image, props_df
+
+
 def load_data(
     project="becalia_rabies_barseq",
     mouse="BRAC8780.3f",
@@ -27,34 +48,11 @@ def load_data(
     chans = [rab_genes_channel, padlock_channel]
     pixel_size = issp.io.get_pixel_size(data_path, prefix)
 
-    def detect_rab_cells(
-        stack,
-        rab_genes_channel=1,
-        padlock_channel=3,
-        r1=9,
-        r2=37,
-        threshold=100,
-        footprint=10,
-        mask_expansion_um=5,
-    ):
-        rab_genes = stack[..., rab_genes_channel]
-        binary = issp.pipeline.segment._filter_mcherry_masks(
-            rab_genes, r1, r2, threshold, footprint=footprint
-        )
-        chans = [rab_genes_channel, padlock_channel]
-        labeled_image, props_df = issp.segment.cells.label_image(
-            binary, stack[..., chans]
-        )
-        labeled_image = expand_labels(
-            labeled_image, int(mask_expansion_um / pixel_size)
-        )
-        return labeled_image, props_df
-
     rab_cells, spots_dfs = [], []
     rabies_stack = None
     labeled_images = None
     for roi in tqdm(roi_dims[:, 0], total=len(roi_dims)):
-        stack, _ = issp.pipeline.load_and_register_tile(
+        stack, _ = issp.pipeline.register.load_and_register_tile(
             data_path,
             prefix=prefix,
             tile_coors=(roi, 0, 0),
@@ -72,6 +70,7 @@ def load_data(
             threshold=threshold,
             footprint=footprint,
             mask_expansion_um=mask_expansion_um,
+            pixel_size=pixel_size,
         )
         padlock = stack[..., padlock_channel]
         filtered = issp.image.filter_stack(padlock)
@@ -108,7 +107,7 @@ def load_data(
     for cell_uid, count in spots_df["cell_uid"].value_counts().items():
         good_cells.loc[good_cells["cell_uid"] == cell_uid, "spot_count"] = count
 
-    return good_cells
+    return good_cells, labeled_images, rabies_stack, spots_df
 
 
 def plot_histogram_bc_per_cell(
@@ -145,3 +144,69 @@ def plot_histogram_bc_per_cell(
         which="major",
         labelsize=tick_fontsize,
     )
+
+
+def plot_cells_spots(
+    good_cells,
+    rabies_stack,
+    labeled_images,
+    ax=None,
+    roi_of_interest=5,
+    min_y=450,
+    max_y=1100,
+    min_x=400,
+    max_x=1000,
+    colors=[(1, 0, 0), (0, 1, 1)],
+    vmaxs=[800, 200],
+    linewidth=0.9,
+):
+    """Plot the cells and spots for the fixed bounding box of the ROI of interest.
+
+    Args:
+        good_cells (pd.DataFrame): DataFrame with the cell properties.
+        rabies_stack (np.ndarray): 4D array with the rabies stack.
+        labeled_images (np.ndarray): 3D array with the labeled images.
+        roi_of_interest (int): ROI to plot.
+        min_y (int): Minimum y coordinate.
+        max_y (int): Maximum y coordinate.
+        min_x (int): Minimum x coordinate.
+        max_x (int): Maximum x coordinate.
+        colors (list): List with the colors for the channels.
+        vmaxs (list): List with the vmax values for the channels.
+    """
+    # Filter cells for ROI 5
+    no_spot = good_cells[good_cells["spot_count"] <= 2]
+    roi_5_no_spot_cells = no_spot[no_spot["roi"] == roi_of_interest]
+
+    # Extract the data and label slices for the fixed bounding box
+    data = issp.vis.utils.get_stack_part(
+        rabies_stack[..., roi_of_interest - 1],
+        [min_x, max_x],
+        [min_y, max_y],
+    )
+    labels = issp.vis.utils.get_stack_part(
+        labeled_images[..., roi_of_interest - 1],
+        [min_x, max_x],
+        [min_y, max_y],
+    )
+
+    # Convert to RGB for display
+    rgb = issp.vis.to_rgb(data, colors=colors, vmin=[0, 0], vmax=vmaxs)
+
+    # Plot
+    ax.imshow(rgb)
+
+    # (a) Outline all cells in black
+    ax.contour(
+        labels, levels=np.arange(labels.max()) + 0.5, colors="k", linewidths=linewidth
+    )
+
+    # (b) Highlight the no_spot cells in white
+    if not roi_5_no_spot_cells.empty:
+        no_spot_label_ids = roi_5_no_spot_cells["label"].unique()
+        for lbl_id in no_spot_label_ids:
+            ax.contour(
+                labels == lbl_id, levels=[0.5], colors="white", linewidths=linewidth
+            )
+    ax.set_xticks([])
+    ax.set_yticks([])
