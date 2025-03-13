@@ -433,6 +433,8 @@ def plot_double_barcode_barstack(
     ax_violin=None,
     label_fontsize=12,
     tick_fontsize=12,
+    barcode_proportion=True,
+    swarmplot_dotsize=2,
 ):
     """
     Plot a barstack and violin plot of the number of presynaptic cells with each barcode
@@ -485,22 +487,22 @@ def plot_double_barcode_barstack(
     b2_only = result_df_sorted["b2_only"]
     both = result_df_sorted["both"]
 
+    # If barcode_proportion is True, convert counts to proportions
+    if barcode_proportion:
+        b1_only = b1_only / result_df_sorted["total_presyn"]
+        b2_only = b2_only / result_df_sorted["total_presyn"]
+        both = both / result_df_sorted["total_presyn"]
+
     b_most = np.maximum(b1_only, b2_only)
     b_least = np.minimum(b1_only, b2_only)
 
     x = range(len(result_df_sorted))
 
     # Bottom segment: most abundant
-    ax_stack.bar(x, b_most, label="Most Abundant Barcode", color="#a6cee3")
+    ax_stack.bar(x, b_most, label="Most Abundant Barcode", color="lightskyblue")
 
     # Middle: both
-    ax_stack.bar(
-        x,
-        both,
-        bottom=b_most,
-        label="Both",
-        color="#1f78b4",
-    )
+    ax_stack.bar(x, both, bottom=b_most, label="Both", color="red")
 
     # Top: least abundant
     ax_stack.bar(
@@ -508,12 +510,12 @@ def plot_double_barcode_barstack(
         b_least,
         bottom=b_most + both,
         label="Least Abundant Barcode",
-        color="#b2df8a",
+        color="lightgrey",  # "#b2df8a",
     )
 
-    ax_stack.set_xticks([])
+    # ax_stack.set_xticks([])
     ax_stack.set_ylabel(
-        "Number of Presynaptic Cells",
+        "Fraction of Presynaptic Cells",
         fontsize=label_fontsize,
     )
     ax_stack.set_xlabel(
@@ -522,6 +524,7 @@ def plot_double_barcode_barstack(
     )
     ax_stack.legend(
         fontsize=tick_fontsize,
+        bbox_to_anchor=(0.8, -0.2),
     )
     ax_stack.tick_params(
         axis="both",
@@ -546,7 +549,9 @@ def plot_double_barcode_barstack(
 
     # Swarm plot with small jitter
     x_jitter = np.random.uniform(-0.05, 0.05, size=len(vals))
-    ax_violin.scatter(x_jitter, vals, marker="o", alpha=0.8, edgecolors="black")
+    ax_violin.scatter(
+        x_jitter, vals, marker="o", alpha=0.8, edgecolors="black", s=swarmplot_dotsize
+    )
 
     ax_violin.set_xticks([0])
     ax_violin.set_xticklabels([""])
