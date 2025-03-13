@@ -340,3 +340,224 @@ def plot_starters_per_barcode(
         which="major",
         labelsize=tick_fontsize,
     )
+
+
+def load_double_barcode_data(
+    data_path,
+):
+    """
+    Load data for double barcodes analysis
+
+    Args:
+        data_path (str): Path to the data folder
+
+    Returns:
+        result_df (pd.DataFrame): DataFrame with columns:
+        - starter_cell_id (str): ID of the starter cell
+        - barcode1 (str): First barcode
+        - barcode2 (str): Second barcode
+        - n_presyn_with_barcode1 (int): Number of presynaptic cells with barcode1
+        - n_presyn_with_barcode2 (int): Number of presynaptic cells with barcode2
+        - n_presyn_with_both (int): Number of presynaptic cells with both barcodes
+    """
+    cells = pd.read_pickle(f"{data_path}/cell_barcode_df.pkl")
+    # Only keep rows that actually have barcodes
+    cells = cells.dropna(subset=["all_barcodes"])
+
+    def shorten_barcodes(barcode_list):
+        return [bc[:10] for bc in barcode_list]
+
+    cells["all_barcodes"] = cells["all_barcodes"].apply(shorten_barcodes)
+    starter_cells = cells[cells.is_starter == True]
+    presyn_cells = cells[cells.is_starter == False]
+
+    # Identify 'singleton' barcodes among starters
+    # i.e. barcodes that appear exactly once across all starter cells
+    all_starter_barcodes = []
+    for bc_list in starter_cells["all_barcodes"]:
+        all_starter_barcodes.extend(bc_list)
+
+    barcode_counts = pd.Series(all_starter_barcodes).value_counts()
+    singletons = set(barcode_counts.index[barcode_counts == 1])
+
+    # For each cell, define 'unique_barcodes' = intersection of its barcodes with singletons
+    cells["unique_barcodes"] = cells["all_barcodes"].apply(
+        lambda x: singletons.intersection(x)
+    )
+
+    # Among starter cells, pick out those whose unique_barcodes has length == 2
+    double_barcoded_starters = cells[
+        (cells["is_starter"] == True) & (cells["unique_barcodes"].apply(len) == 2)
+    ].copy()
+
+    double_barcoded_starters["all_barcodes"] = double_barcoded_starters[
+        "unique_barcodes"
+    ].apply(list)
+    presyn_exploded = presyn_cells[["cell_id", "all_barcodes"]].explode("all_barcodes")
+
+    # For each double-barcoded starter, count how many presyn cells have bc1, bc2, or both
+    results = []
+    for i, row in double_barcoded_starters.iterrows():
+        starter_id = row["cell_id"]
+        barcodes = row["all_barcodes"]
+        b1, b2 = barcodes[0], barcodes[1]
+
+        presyn_with_b1 = set(
+            presyn_exploded.loc[presyn_exploded["all_barcodes"] == b1, "cell_id"]
+        )
+        presyn_with_b2 = set(
+            presyn_exploded.loc[presyn_exploded["all_barcodes"] == b2, "cell_id"]
+        )
+
+        n_presyn_b1 = len(presyn_with_b1)
+        n_presyn_b2 = len(presyn_with_b2)
+        n_presyn_both = len(presyn_with_b1.intersection(presyn_with_b2))
+        results.append(
+            {
+                "starter_cell_id": starter_id,
+                "barcode1": b1,
+                "barcode2": b2,
+                "n_presyn_with_barcode1": n_presyn_b1,
+                "n_presyn_with_barcode2": n_presyn_b2,
+                "n_presyn_with_both": n_presyn_both,
+            }
+        )
+    result_df = pd.DataFrame(results)
+
+    return result_df
+
+
+def plot_double_barcode_barstack(
+    result_df,
+    ax_stack=None,
+    ax_violin=None,
+    label_fontsize=12,
+    tick_fontsize=12,
+):
+    """
+    Plot a barstack and violin plot of the number of presynaptic cells with each barcode
+
+    Args:
+        ax_stack (matplotlib.axes.Axes): Axes for the barstack plot
+        ax_violin (matplotlib.axes.Axes): Axes for the violin plot
+        result_df (pd.DataFrame): DataFrame with columns:
+            - starter_cell_id (str): ID of the starter cell
+            - barcode1 (str): First barcode
+            - barcode2 (str): Second barcode
+            - n_presyn_with_barcode1 (int): Number of presynaptic cells with barcode1
+            - n_presyn_with_barcode2 (int): Number of presynaptic cells with barcode2
+            - n_presyn_with_both (int): Number of presynaptic cells with both barcodes
+    """
+
+    # Create columns for "barcode1 only", "both", "barcode2 only"
+    result_df["b1_only"] = (
+        result_df["n_presyn_with_barcode1"] - result_df["n_presyn_with_both"]
+    )
+    result_df["b2_only"] = (
+        result_df["n_presyn_with_barcode2"] - result_df["n_presyn_with_both"]
+    )
+    result_df["both"] = result_df["n_presyn_with_both"]
+
+    # Compute total presynaptic cells and sort
+    result_df["total_presyn"] = (
+        result_df["b1_only"] + result_df["both"] + result_df["b2_only"]
+    )
+    result_df_sorted = result_df.sort_values(
+        by="total_presyn", ascending=False
+    ).reset_index(drop=True)
+
+    # Compute fraction of the dominant barcode
+    union_count = (
+        result_df_sorted["n_presyn_with_barcode1"]
+        + result_df_sorted["n_presyn_with_barcode2"]
+        - result_df_sorted["n_presyn_with_both"]
+    ).replace(0, np.nan)
+    dominant_count = np.maximum(
+        result_df_sorted["n_presyn_with_barcode1"],
+        result_df_sorted["n_presyn_with_barcode2"],
+    )
+
+    result_df_sorted["frac_dominant"] = (dominant_count / union_count).replace(
+        [np.inf, -np.inf], np.nan
+    )
+
+    b1_only = result_df_sorted["b1_only"]
+    b2_only = result_df_sorted["b2_only"]
+    both = result_df_sorted["both"]
+
+    b_most = np.maximum(b1_only, b2_only)
+    b_least = np.minimum(b1_only, b2_only)
+
+    x = range(len(result_df_sorted))
+
+    # Bottom segment: most abundant
+    ax_stack.bar(x, b_most, label="Most Abundant Barcode", color="#a6cee3")
+
+    # Middle: both
+    ax_stack.bar(
+        x,
+        both,
+        bottom=b_most,
+        label="Both",
+        color="#1f78b4",
+    )
+
+    # Top: least abundant
+    ax_stack.bar(
+        x,
+        b_least,
+        bottom=b_most + both,
+        label="Least Abundant Barcode",
+        color="#b2df8a",
+    )
+
+    ax_stack.set_xticks([])
+    ax_stack.set_ylabel(
+        "Number of Presynaptic Cells",
+        fontsize=label_fontsize,
+    )
+    ax_stack.set_xlabel(
+        "Starter Cell",
+        fontsize=label_fontsize,
+    )
+    ax_stack.legend(
+        fontsize=tick_fontsize,
+    )
+    ax_stack.tick_params(
+        axis="both",
+        which="major",
+        labelsize=tick_fontsize,
+    )
+
+    vals = result_df_sorted["frac_dominant"].dropna()
+    parts = ax_violin.violinplot(
+        [vals],
+        positions=[0],
+        widths=0.6,
+        showmeans=False,
+        showextrema=False,
+        showmedians=False,
+    )
+
+    # Adjust alpha on the violin body
+    for pc in parts["bodies"]:
+        pc.set_alpha(0.3)
+        pc.set_facecolor("gray")
+
+    # Swarm plot with small jitter
+    x_jitter = np.random.uniform(-0.05, 0.05, size=len(vals))
+    ax_violin.scatter(x_jitter, vals, marker="o", alpha=0.8, edgecolors="black")
+
+    ax_violin.set_xticks([0])
+    ax_violin.set_xticklabels([""])
+    ax_violin.set_xlim(-0.5, 0.5)
+    ax_violin.set_ylim(0.5, 1.05)
+    ax_violin.set_ylabel(
+        "Fraction of presyn cells\nwith the most abundant barcode",
+        fontsize=label_fontsize,
+    )
+    ax_violin.tick_params(
+        axis="both",
+        which="major",
+        labelsize=tick_fontsize,
+    )
