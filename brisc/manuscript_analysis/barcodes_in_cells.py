@@ -483,6 +483,16 @@ def plot_double_barcode_barstack(
         [np.inf, -np.inf], np.nan
     )
 
+    # Compute the proportion of presynaptic cells that have both barcodes
+    result_df_sorted["both_prop"] = (
+        result_df_sorted["both"] / result_df_sorted["total_presyn"]
+    )
+
+    # Sort first by largest "both_prop", then by largest "frac_dominant"
+    result_df_sorted = result_df_sorted.sort_values(
+        by=["both_prop", "frac_dominant"], ascending=False
+    ).reset_index(drop=True)
+
     b1_only = result_df_sorted["b1_only"]
     b2_only = result_df_sorted["b2_only"]
     both = result_df_sorted["both"]
