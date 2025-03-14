@@ -8,15 +8,14 @@ from cricksaw_analysis import atlas_utils
 from cricksaw_analysis.io import load_cellfinder_results
 from cricksaw_analysis.atlas_utils import cell_density_by_areas
 from iss_preprocess import vis
+from brisc.manuscript_analysis.utils import despine
 
 import cv2
 from czifile import CziFile
-from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
-import matplotlib.font_manager as fm
 
 
 def plot_starter_dilution_densities(
-    ax=None,
+    ax,
     label_fontsize=12,
     tick_fontsize=12,
     processed=Path("/nemo/lab/znamenskiyp/home/shared/projects/"),
@@ -24,7 +23,6 @@ def plot_starter_dilution_densities(
     """
     Plot the densities of the starter cells for the different dilutions of PHP.eb (only for V1)
     """
-
     atlas_size = 25
     cortical_areas = "ALL"
     bg_atlas = bga.bg_atlas.BrainGlobeAtlas("allen_mouse_%dum" % atlas_size)
@@ -70,7 +68,7 @@ def plot_starter_dilution_densities(
 
         if need_data:
             try:
-                cells, downsampled_stacks, atlas = load_cellfinder_results(
+                cells, _, atlas = load_cellfinder_results(
                     mouse_cellfinder_folder
                 )
             except IOError or FileNotFoundError as err:
@@ -124,7 +122,10 @@ def plot_starter_dilution_densities(
         dodge=True,
         jitter=True,
         ax=ax,
-        color="k",
+        color="lightgray",
+        edgecolor="black",
+        linewidth=0.5,
+        size=3,
     )
 
     # Calculate positions for the boxplots
@@ -158,18 +159,17 @@ def plot_starter_dilution_densities(
     ax.set_xticklabels(
         ["1/100", "1/330", "1/1000", "1/3300"],
         fontsize=tick_fontsize,
+        rotation=45,
     )
     plt.xlabel(
-        "PHP.eb Dilution",
+        "AAV hSyn-Cre dilution",
         fontsize=label_fontsize,
     )
     plt.ylabel(
-        "Density of cells (mm$^3$)",
+        "tdTomato+ cell\ndensity (mm$^{-3}$)",
         fontsize=label_fontsize,
     )
-
-    return ax
-
+    despine(ax)
 
 def load_confocal_image(image_fname):
     with CziFile(image_fname) as czi:

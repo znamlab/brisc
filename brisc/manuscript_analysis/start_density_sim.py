@@ -6,7 +6,7 @@ def plot_starter_spread_sim(
     density=np.logspace(-4, 0, num=50),
     ns=[10, 20, 40],
     starter_spread_probability=0.05,
-    v1_cell_density=150000,
+    v1_cell_density=150e3,
     x_range=(1e-4, 1),
     ax=None,
     label_fontsize=12,
@@ -58,6 +58,8 @@ def plot_starter_spread_sim(
         "Probability of spread\n between starter neurons",
         fontsize=label_fontsize,
     )
+    ax.set_xticks([1e-4, 1e-3, 1e-2, 1e-1, 1])
+
     ax.tick_params(
         axis="both",
         which="major",
@@ -77,26 +79,27 @@ def plot_starter_spread_sim(
     despine(ax)
     # Define forward and inverse transforms:
     # fraction -> absolute density, and absolute density -> fraction
-    # def fraction_to_density(x):
-    #     return x * v1_cell_density
+    def fraction_to_density(x):
+        return x * v1_cell_density
 
-    # def density_to_fraction(x):
-    #     return x / v1_cell_density
+    def density_to_fraction(x):
+        return x / v1_cell_density
 
     # Create a secondary x-axis at the top that shows absolute density
-    # ax2 = ax.secondary_xaxis(
-    #     "top", functions=(fraction_to_density, density_to_fraction)
-    # )
-    # ax2.set_xscale("log")
-    # ax2.set_xlabel(
-    #     "Density of starter neurons (mm$^{-3}$)",
-    #     fontsize=label_fontsize,
-    # )
+    ax2 = ax.secondary_xaxis(
+        "top", functions=(fraction_to_density, density_to_fraction)
+    )
+    ax2.set_xscale("log")
+    ax2.set_xlabel(
+        "Density of starter\nneurons (mm$^{-3}$)",
+        fontsize=label_fontsize,
+    )
 
-    # # Optionally set the secondary axis' x-limits to match the transformed primary limits
-    # ax2.set_xlim(fraction_to_density(x_range[0]), fraction_to_density(x_range[1]))
-    # ax2.tick_params(
-    #     axis="both",
-    #     which="major",
-    #     labelsize=tick_fontsize,
-    # )
+    # Optionally set the secondary axis' x-limits to match the transformed primary limits
+    ax2.set_xlim(fraction_to_density(x_range[0]), fraction_to_density(x_range[1]))
+    ax2.set_xticks([1e2, 1e3, 1e4, 1e5])
+    ax2.tick_params(
+        axis="both",
+        which="major",
+        labelsize=tick_fontsize,
+    )
