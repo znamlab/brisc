@@ -1,4 +1,5 @@
 import numpy as np
+from brisc.manuscript_analysis.utils import despine
 
 
 def plot_starter_spread_sim(
@@ -10,6 +11,8 @@ def plot_starter_spread_sim(
     ax=None,
     label_fontsize=12,
     tick_fontsize=10,
+    line_width=0.5,
+    colors=("lightsalmon", "tomato", "red")
 ):
     """Plot the probability of starter-to-starter spread on a single figure,
     using fraction on the bottom x-axis and absolute density (mm^{-3}) on a
@@ -30,9 +33,9 @@ def plot_starter_spread_sim(
         matplotlib.axes.Axes: Axes object with the secondary x-axis.
     """
 
-    for n in ns:
+    for n, color in zip(ns, colors):
         p = 1 - (1 - density) ** n
-        ax.loglog(density, p, label=str(n))
+        ax.loglog(density, p, label=str(n), lw=line_width, c=color)
 
     # Horizontal dashed line at starter_spread_probability
     ax.hlines(
@@ -41,17 +44,18 @@ def plot_starter_spread_sim(
         x_range[1],
         linestyles="dashed",
         colors="black",
+        lw=line_width
     )
 
     ax.set_xlim(x_range[0], x_range[1])
     ax.set_xscale("log")
     ax.set_xlabel(
-        "Density of starter neurons (fraction of all cells)",
+        "Proportion of starter neurons",
         fontsize=label_fontsize,
     )
 
     ax.set_ylabel(
-        "Probability of spread between starter neurons",
+        "Probability of spread\n between starter neurons",
         fontsize=label_fontsize,
     )
     ax.tick_params(
@@ -61,35 +65,38 @@ def plot_starter_spread_sim(
     )
 
     ax.legend(
-        title="Presynaptic cells per starter",
+        title="Presynaptic cells\nper starter",
         fontsize=tick_fontsize,
         title_fontsize=tick_fontsize,
+        frameon=False,
+        loc="upper left",
+        bbox_to_anchor=(1.0, 1.0),
+        handlelength=1,
+        alignment="left"
     )
-
+    despine(ax)
     # Define forward and inverse transforms:
     # fraction -> absolute density, and absolute density -> fraction
-    def fraction_to_density(x):
-        return x * v1_cell_density
+    # def fraction_to_density(x):
+    #     return x * v1_cell_density
 
-    def density_to_fraction(x):
-        return x / v1_cell_density
+    # def density_to_fraction(x):
+    #     return x / v1_cell_density
 
     # Create a secondary x-axis at the top that shows absolute density
-    ax2 = ax.secondary_xaxis(
-        "top", functions=(fraction_to_density, density_to_fraction)
-    )
-    ax2.set_xscale("log")
-    ax2.set_xlabel(
-        "Density of starter neurons (mm$^{-3}$)",
-        fontsize=label_fontsize,
-    )
+    # ax2 = ax.secondary_xaxis(
+    #     "top", functions=(fraction_to_density, density_to_fraction)
+    # )
+    # ax2.set_xscale("log")
+    # ax2.set_xlabel(
+    #     "Density of starter neurons (mm$^{-3}$)",
+    #     fontsize=label_fontsize,
+    # )
 
-    # Optionally set the secondary axis' x-limits to match the transformed primary limits
-    ax2.set_xlim(fraction_to_density(x_range[0]), fraction_to_density(x_range[1]))
-    ax2.tick_params(
-        axis="both",
-        which="major",
-        labelsize=tick_fontsize,
-    )
-
-    return ax, ax2
+    # # Optionally set the secondary axis' x-limits to match the transformed primary limits
+    # ax2.set_xlim(fraction_to_density(x_range[0]), fraction_to_density(x_range[1]))
+    # ax2.tick_params(
+    #     axis="both",
+    #     which="major",
+    #     labelsize=tick_fontsize,
+    # )

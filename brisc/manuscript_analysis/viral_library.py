@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.ticker as mticker
-from pathlib import Path
-
+from brisc.manuscript_analysis.utils import despine
 
 def plasmid_sequencing_data(seq_path):
     """Create array holding the frequency of each barcode in the sequenced library.
@@ -97,17 +96,6 @@ def cum_probability_array(probability_distribution, i):
     cum_array[:, 1] = np.cumsum(prob)
 
     return cum_array
-
-
-def despine(ax):
-    """
-    Remove right and top spines from a matplotlib axis.
-
-    Args:
-        ax (matplotlib.axes.Axes): Axes to despine.
-    """
-    ax.spines["right"].set_visible(False)
-    ax.spines["top"].set_visible(False)
 
 
 def load_library_data(data_path, library, edit_distance, collapse):

@@ -6,6 +6,7 @@ from brainglobe_atlasapi import BrainGlobeAtlas
 from scipy.ndimage import map_coordinates
 from matplotlib import pyplot as plt
 import matplotlib
+from brisc.manuscript_analysis.utils import despine
 
 matplotlib.rcParams["pdf.fonttype"] = (
     42  # Use Type 3 fonts (TrueType) for selectable text
@@ -41,12 +42,7 @@ def mask_points(pts, mask):
 
 
 def plot_rv_coronal_slice(
-    ax,
-    project="rabies_barcoding",
-    mouse="BRYC64.2i",
-    data_root=Path("/nemo/lab/znamenskiyp"),
-    inj_center=np.array([673, 205, 890]),
-    label_fontsize=12,
+    ax, mcherry, background
 ):
     """
 
@@ -54,44 +50,21 @@ def plot_rv_coronal_slice(
         matplotlib.axes.Axes: Axes object with the plot.
         matplotlib.axes.Axes: Axes object with the secondary x-axis.
     """
-    processed = data_root / "home/shared/projects/"
-
-    mcherry_file = (
-        processed
-        / project
-        / mouse
-        / "cellfinder_results_010/registration/downsampled_channel_0.tiff"
-    )
-    background_file = (
-        processed
-        / project
-        / mouse
-        / "cellfinder_results_010/registration/downsampled.tiff"
-    )
-    reg_folder = processed / project / mouse / "cellfinder_results_010/registration"
-    points_file = (
-        processed / project / mouse / "cellfinder_results_010/points/downsampled.points"
-    )
-    atlas = tf.imread(reg_folder / "registered_atlas.tiff")
-    pts = pd.read_hdf(points_file)
-    mcherry = tf.imread(mcherry_file)
-    background = tf.imread(background_file)
-
     # Load the Allen Brain Atlas
-    atlas_obj = BrainGlobeAtlas("allen_mouse_10um")
+    # atlas_obj = BrainGlobeAtlas("allen_mouse_10um")
 
     # Get all areas in the isocortex
-    isocortex_regions = atlas_obj.get_structure_descendants("Isocortex")
+    # isocortex_regions = atlas_obj.get_structure_descendants("Isocortex")
 
     # Convert acronyms to IDs
-    isocortex_ids = [
-        atlas_obj.structures[acronym]["id"] for acronym in isocortex_regions
-    ]
+    # isocortex_ids = [
+    #     atlas_obj.structures[acronym]["id"] for acronym in isocortex_regions
+    # ]
 
     # Create a binary mask
-    mask = np.isin(atlas, isocortex_ids).astype(np.uint8)
+    # mask = np.isin(atlas, isocortex_ids).astype(np.uint8)
 
-    masked_points = mask_points(pts, mask)
+    # masked_points = mask_points(pts, mask)
 
     # Normalize and create RGB for the second subplot
     cropped_mcherry = mcherry[620:750, :, :]
@@ -104,117 +77,53 @@ def plot_rv_coronal_slice(
         axis=0
     )  # Green channel for background
     rgb2[..., 2] = cropped_background_channel.max(axis=0)  # Blue channel for background
-
-    ax.imshow(rgb2)
-    plot_cells = False
-    if plot_cells:
-        ax.scatter(
-            masked_points.iloc[:, 2],
-            masked_points.iloc[:, 1],
-            s=0.1,
-            alpha=0.3,
-            color="white",
-        )
-    ax.scatter(inj_center[2], inj_center[1], s=5, color="white")
-    circle2 = plt.Circle(
-        (inj_center[2], inj_center[1]),
-        50,
-        color="lightblue",
-        linewidth=1,
-        fill=False,
-        alpha=0.6,
-    )
-    ax.add_artist(circle2)
-    ax.set_aspect("equal")
-    ax.axis("off")
+    ax_zoom, ax_overview = ax
+    ax_overview.imshow(rgb2)
+    ax_overview.set_aspect("equal")
+    ax_overview.set_xticks([])   
+    ax_overview.set_yticks([])
+    for spine in ax_overview.spines.values():
+        spine.set_edgecolor('white')
+    rgb2 = rgb2[75:600, 500:-50, :]
+    ax_zoom.imshow(rgb2)
+    # plot_cells = False
+    # if plot_cells:
+    #     ax.scatter(
+    #         masked_points.iloc[:, 2],
+    #         masked_points.iloc[:, 1],
+    #         s=0.1,
+    #         alpha=0.3,
+    #         color="white",
+    #     )
+    # ax.scatter(inj_center[2], inj_center[1], s=5, color="white")
+    # circle2 = plt.Circle(
+    #     (inj_center[2], inj_center[1]),
+    #     50,
+    #     color="lightblue",
+    #     linewidth=1,
+    #     fill=False,
+    #     alpha=0.6,
+    # )
+    # ax.add_artist(circle2)
+    ax_zoom.set_aspect("equal")
+    ax_zoom.axis("off")
 
     scalebar2 = plt.Line2D(
-        [rgb2.shape[1] - 160, rgb2.shape[1] - 60],
-        [rgb2.shape[0] - 70, rgb2.shape[0] - 70],
+        [rgb2.shape[1] - 140, rgb2.shape[1] - 40],
+        [rgb2.shape[0] - 50, rgb2.shape[0] - 50],
         color="white",
         linewidth=4,
     )
-    ax.add_line(scalebar2)
-    ax.text(
-        rgb2.shape[1] - 110,
-        rgb2.shape[0] - 80,
-        "1 mm",
-        color="white",
-        ha="center",
-        va="bottom",
-        fontsize=label_fontsize,
-    )
-
-
-def plot_rabies_density(
-    inj_center=np.array([673, 205, 890]),
-    project="rabies_barcoding",
-    mouse="BRYC64.2i",
-    processed=Path("/nemo/lab/znamenskiyp/"),
-    ax=None,
-    label_fontsize=12,
-    tick_fontsize=12,
-):
-    """_summary_"""
-    points_file = (
-        processed / project / mouse / "cellfinder_results_010/points/downsampled.points"
-    )
-    pts = pd.read_hdf(points_file)
-    reg_folder = processed / project / mouse / "cellfinder_results_010/registration"
-    atlas = tf.imread(reg_folder / "registered_atlas.tiff")
-    # Load the Allen Brain Atlas
-    atlas_obj = BrainGlobeAtlas(
-        "allen_mouse_10um"
-    )  # Use the appropriate atlas for your data
-
-    # Get all areas in the isocortex
-    isocortex_regions = atlas_obj.get_structure_descendants("Isocortex")
-    # Convert acronyms to IDs
-    isocortex_ids = [
-        atlas_obj.structures[acronym]["id"] for acronym in isocortex_regions
-    ]
-    mask = np.isin(atlas, isocortex_ids).astype(np.uint8)
-    dst_to_center_pts = np.sqrt(np.sum((pts - inj_center) ** 2, axis=1))
-    dst_to_center_pts = np.sort(dst_to_center_pts) / 100
-    masked_points = mask_points(pts, mask)
-    cells_masked = masked_points.copy()
-    dst_to_center_masked = np.sqrt(np.sum((cells_masked - inj_center) ** 2, axis=1))
-    dst_to_center_masked = np.sort(dst_to_center_masked) / 100
-
-    bins = np.arange(0, 10, 0.1)
-    volumes = 4 / 3 * np.pi * (bins[1:] ** 3 - bins[:-1] ** 3)
-    hist_masked, _ = np.histogram(dst_to_center_masked, bins=bins)
-    hist_pts, _ = np.histogram(dst_to_center_pts, bins=bins)
-    density_masked = hist_masked / volumes
-    density_pts = hist_pts / volumes
-    ax.plot(
-        bins[:-1],
-        density_masked,
-        color="k",
-        alpha=0.7,
-        label="masked_points",
-        linewidth=2,
-    )
-    ax.plot(bins[:-1], density_pts, color="r", alpha=0.7, label="pts", linewidth=2)
-    ax.set_xlabel(
-        "Distance to injection (mm)",
-        fontsize=label_fontsize,
-    )
-    ax.set_ylabel(
-        "Cell density (cells/mm$^3$)",
-        fontsize=label_fontsize,
-    )
-    ax.set_xlim(0, 2)
-    ax.legend(
-        fontsize=tick_fontsize,
-    )
-    ax.tick_params(
-        axis="both",
-        which="major",
-        labelsize=tick_fontsize,
-    )
-
-    return ax
+    ax_zoom.add_line(scalebar2)
+    # ax_zoom.text(
+    #     rgb2.shape[1] - 90,
+    #     rgb2.shape[0] - 60,
+    #     "1 mm",
+    #     color="white",
+    #     ha="center",
+    #     va="bottom",
+    #     fontsize=label_fontsize,
+    # )
 
 
 def mask_rounded_points(points, mask):
@@ -250,6 +159,7 @@ def plot_rabies_density(
     tick_fontsize=12,
     max_radius_mm=2.0,
     n_points=200,
+    linewidth=0.5,
 ):
     """
     Plots the cumulative density of labeled cells in isocortex as a function
@@ -355,14 +265,13 @@ def plot_rabies_density(
     ax.plot(
         radii,
         densities,
-        linewidth=2,
-        color="red",
+        linewidth=linewidth,
+        color="black",
         label="Cumulative isocortex density",
     )
-    ax.set_xlabel("Distance to injection center (mm)", fontsize=label_fontsize)
-    ax.set_ylabel("Cell density (cells / mm$^3$)", fontsize=label_fontsize)
+    ax.set_xlabel("Distance to\ninjection site (mm)", fontsize=label_fontsize)
+    ax.set_ylabel("Cell density\n(cells / mm$^3$)", fontsize=label_fontsize)
     ax.set_xlim(0, max_radius_mm)
     # ax.legend(fontsize=tick_fontsize)
     ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
-
-    return ax
+    despine(ax)

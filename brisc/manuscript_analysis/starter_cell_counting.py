@@ -3,7 +3,7 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from pathlib import Path
-import bg_atlasapi as bga
+import brainglobe_atlasapi as bga
 from cricksaw_analysis import atlas_utils
 from cricksaw_analysis.io import load_cellfinder_results
 from cricksaw_analysis.atlas_utils import cell_density_by_areas
@@ -171,8 +171,15 @@ def plot_starter_dilution_densities(
     return ax
 
 
+def load_confocal_image(image_fname):
+    with CziFile(image_fname) as czi:
+        metadata = czi.metadata(raw=False)
+        img = np.squeeze(czi.asarray())
+    return metadata, img
+
+
 def plot_starter_confocal(
-    ax, label_fontsize=12, processed=Path("/nemo/lab/znamenskiyp/home/shared/projects/")
+    ax, img, metadata
 ):
     """
     Plot the two inset images inside the given axis, one above the other.
@@ -183,9 +190,6 @@ def plot_starter_confocal(
         tick_fontsize (int, optional): Font size for ticks. Defaults to 10.
     """
     # Define parameters
-    PROJECT = "rabies_barcoding"
-    MOUSE = "BRYC64.2h"
-    IMAGE_FILE = "Slide_3_section_1.czi"
     ROTATION = 103  # rotation in degrees to put pia at the top of the image
     INSET = [
         2580,
@@ -195,14 +199,6 @@ def plot_starter_confocal(
     ]
     aspect_ratio = 1.5  # Approximate aspect ratio adjustment
     INSET[-1] = int(INSET[1] + (INSET[2] - INSET[0]) / aspect_ratio * 2)
-
-    # Load data
-    root_folder = processed / PROJECT
-    confocal_data = root_folder / MOUSE / "zeiss_confocal"
-
-    with CziFile(confocal_data / IMAGE_FILE) as czi:
-        metadata = czi.metadata(raw=False)
-        img = np.squeeze(czi.asarray())
 
     scale = metadata["ImageDocument"]["Metadata"]["Scaling"]["Items"]["Distance"]
     scale = {s["Id"]: s["Value"] * 1e6 for s in scale}
@@ -216,64 +212,71 @@ def plot_starter_confocal(
         return cv2.flip(rotated, 1) if flip else rotated
 
     # Create two sub-axes within the given ax
-    inset_axes = [ax.inset_axes([0, 0.5, 1, 0.5]), ax.inset_axes([0, 0, 1, 0.5])]
-    zplanes = [3, 5]
+    # inset_axes = [ax.inset_axes([0, 0.5, 1, 0.5]), ax.inset_axes([0, 0, 1, 0.5])]
+    zplanes = [3, 4, 5]
+    
+    img = np.mean(img[:, zplanes, :, :], axis=1)
 
-    for sub_ax, z in zip(inset_axes, zplanes):
-        lim = np.array(INSET)
-        stack = np.dstack(
-            [
-                rotate(np.nanmean(i, axis=0), ROTATION)[
-                    lim[0] : lim[2], lim[1] : lim[3]
-                ]
-                for i in [
-                    img[1, z : z + 1, :, :],
-                    img[1, z : z + 1, :, :],
-                    img[0, z : z + 1, :, :],
-                ]
+    # for sub_ax, z in zip(inset_axes, zplanes):
+    lim = np.array(INSET)
+    stack = np.dstack(
+        [
+            rotate(i, ROTATION)[
+                lim[0] : lim[2], lim[1] : lim[3]
             ]
+            for i in [
+                img[1, :, :],
+                img[1, :, :],
+                img[0, :, :],
+            ]
+        ]
+    )
+    colors = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    rgb = vis.to_rgb(stack, colors, vmax=[1000, 10000, 5000], vmin=None)
+    ax.imshow(rgb, vmin=0, vmax=5000)
+
+    # Add scalebar
+    bar_length = 20  # Scale bar in micrometers
+    scalebar2 = plt.Line2D(
+        [rgb.shape[1] - 140, rgb.shape[1] + bar_length / scale["X"] - 140],
+        [rgb.shape[0] - 50, rgb.shape[0] - 50],
+        color="white",
+        linewidth=4,
+    )
+    # fontprops = fm.FontProperties(size=label_fontsize)
+    # scalebar = AnchoredSizeBar(
+    #     ax.transData,
+    #     bar_length / scale["X"],
+    #     loc="lower right",
+    #     label_top=True,
+    #     color="white",
+    #     frameon=False,
+    #     size_vertical=5,
+    #     prop=fontprops,
+    # )
+    # ax.add_artist(scalebar)
+
+    # Add starter cell arrows
+    # starters = [np.array([390, 200]), np.array([650, 480])]
+    starters = [np.array([220, 130]), np.array([460, 430])]
+    for starter in starters:
+        ax.annotate(
+            "",
+            xy=starter,
+            xytext=starter + np.array([-75, -75]),
+            arrowprops=dict(
+                facecolor="white",
+                shrink=0.05,
+                edgecolor="none",
+                width=1,
+                headwidth=6,
+            ),
         )
-        colors = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
-        rgb = vis.to_rgb(stack, colors, vmax=[1000, 10000, 5000], vmin=None)
-        sub_ax.imshow(rgb, vmin=0, vmax=5000)
 
-        # Add scalebar
-        bar_length = 20  # Scale bar in micrometers
-        fontprops = fm.FontProperties(size=label_fontsize)
-        scalebar = AnchoredSizeBar(
-            sub_ax.transData,
-            bar_length / scale["X"],
-            label=f"{bar_length} µm",
-            loc="lower right",
-            label_top=True,
-            color="white",
-            frameon=False,
-            size_vertical=5,
-            prop=fontprops,
-        )
-        sub_ax.add_artist(scalebar)
-
-        # Add starter cell arrows
-        # starters = [np.array([390, 200]), np.array([650, 480])]
-        starters = [np.array([220, 130]), np.array([460, 430])]
-        for starter in starters:
-            sub_ax.annotate(
-                "",
-                xy=starter,
-                xytext=starter + np.array([-75, -75]),
-                arrowprops=dict(
-                    facecolor="white",
-                    shrink=0.05,
-                    edgecolor="none",
-                    width=1,
-                    headwidth=6,
-                ),
-            )
-
-        sub_ax.set_xticks([])
-        sub_ax.set_yticks([])
+    # sub_ax.set_xticks([])
+    # sub_ax.set_yticks([])
 
     # Adjust layout
-    ax.figure.subplots_adjust(top=1, bottom=0, left=0, right=1, wspace=0, hspace=0)
+    # ax.figure.subplots_adjust(top=1, bottom=0, left=0, right=1, wspace=0, hspace=0)
     ax.axis("off")
     return ax

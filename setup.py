@@ -17,6 +17,6 @@ setup(
         "cricksaw_analysis @ git+ssh://git@github.com/znamlab/cricksaw-analysis.git",
         "flexiznam @ git+ssh://git@github.com/znamlab/flexiznam.git",
         "scanpy",
-        "pytables",
+        "tables",
     ],
 )
