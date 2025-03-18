@@ -12,10 +12,12 @@ def run_plot_overview(
     roi=3,
     chamber=10,
     prefix="barcode_round_1_1",
+    downsample_factor=25,
     ch=[0, 1, 2, 3],
     channel_colors=([0, 1, 1], [1, 0, 1], [1, 0, 0], [0, 1, 0]),
     vmin=[63, 30, 63, 72],
     vmax=[1738, 722, 1284, 1077],
+    filter_r=(2, 4),
 ):
     filter_r = True
     if filter_r:
@@ -29,7 +31,7 @@ def run_plot_overview(
         nx=None,
         ny=None,
         plot_grid=False,
-        downsample_factor=25,
+        downsample_factor=downsample_factor,
         save_raw=True,
         correct_illumination=True,
         filter_r=filter_r,
