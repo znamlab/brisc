@@ -21,7 +21,7 @@ def load_data(redo=False):
     ara_is_starters = pd.read_pickle(
         processed_path / "analysis" / "merged_cell_df_curated_mcherry.pkl"
     )
-    ara_is_starters = ara_is_starters[ara_is_starters["main_barcode"].notna()]
+    ara_is_starters = ara_is_starters[ara_is_starters["all_barcodes"].notna()]
     in_situ_barcodes = ara_is_starters["all_barcodes"].explode().unique()
     in_situ_barcodes = pd.DataFrame(in_situ_barcodes, columns=["sequence"])
 
@@ -117,11 +117,8 @@ def load_data(redo=False):
     ara_is_starters["all_barcodes"] = ara_is_starters["all_barcodes"].apply(
         shorten_barcodes
     )
-    ara_is_starters["main_barcode"] = ara_is_starters["main_barcode"].apply(
-        lambda x: x[:10]
-    )
 
-    barcoded_cells = ara_is_starters[ara_is_starters["main_barcode"].notna()]
+    barcoded_cells = ara_is_starters[ara_is_starters["all_barcodes"].notna()]
 
     # Exploding all_barcodes to allow searching in individual barcodes
     exploded_data = ara_is_starters.explode("all_barcodes")

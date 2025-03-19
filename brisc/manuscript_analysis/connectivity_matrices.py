@@ -44,7 +44,7 @@ def load_cell_barcode_data(
     ara_starters = pd.read_pickle(
         processed_path.parent / "analysis" / "merged_cell_df_curated_mcherry.pkl"
     )
-    ara_starters = ara_starters[ara_starters["main_barcode"].notna()]
+    ara_starters = ara_starters[ara_starters["all_barcodes"].notna()]
     print("Before filtering:")
     print(f"Number of barcoded cells: {ara_starters.shape[0]}")
     print(f"Number of barcodes: {ara_starters['main_barcode'].nunique()}")
@@ -59,7 +59,7 @@ def load_cell_barcode_data(
     ara_is_starters = pd.read_pickle(
         processed_path.parent / "analysis" / "merged_cell_df_curated_mcherry.pkl"
     )
-    ara_is_starters = ara_is_starters[ara_is_starters["main_barcode"].notna()]
+    ara_is_starters = ara_is_starters[ara_is_starters["all_barcodes"].notna()]
 
     # Assuming ara_is_starters is your dataframe
     def shorten_barcodes(barcodes):

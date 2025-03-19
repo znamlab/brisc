@@ -17,7 +17,7 @@ processed_path = get_processed_path(data_path)
 ara_is_starters = pd.read_pickle(
     processed_path.parent / "analysis" / "merged_cell_df_curated_mcherry.pkl"
 )
-ara_is_starters = ara_is_starters[ara_is_starters["main_barcode"].notna()]
+ara_is_starters = ara_is_starters[ara_is_starters["all_barcodes"].notna()]
 
 
 def shorten_barcodes(barcode_list):
@@ -27,9 +27,6 @@ def shorten_barcodes(barcode_list):
 ara_is_starters["all_barcodes"] = ara_is_starters["all_barcodes"].apply(
     shorten_barcodes
 )
-ara_is_starters["main_barcode"] = ara_is_starters["main_barcode"].apply(
-    lambda x: x[:10]
-)
 
 
 def load_data(data_path="becalia_rabies_barseq/BRAC8498.3e/chamber_07"):
@@ -37,7 +34,7 @@ def load_data(data_path="becalia_rabies_barseq/BRAC8498.3e/chamber_07"):
     ara_is_starters = pd.read_pickle(
         processed_path.parent / "analysis" / "merged_cell_df_curated_mcherry.pkl"
     )
-    ara_is_starters = ara_is_starters[ara_is_starters["main_barcode"].notna()]
+    ara_is_starters = ara_is_starters[ara_is_starters["all_barcodes"].notna()]
 
     # Assuming ara_is_starters is your dataframe
     def shorten_barcodes(barcodes):
@@ -45,9 +42,6 @@ def load_data(data_path="becalia_rabies_barseq/BRAC8498.3e/chamber_07"):
 
     ara_is_starters["all_barcodes"] = ara_is_starters["all_barcodes"].apply(
         shorten_barcodes
-    )
-    ara_is_starters["main_barcode"] = ara_is_starters["main_barcode"].apply(
-        lambda x: x[:10]
     )
 
     # Barcodes per cell

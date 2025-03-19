@@ -27,7 +27,7 @@ def plot_flat_ml_rv_cells(
         presyn_alpha (float): Transparency of the presynaptic cell markers.
     """
     # Prep data
-    cells = cells[cells["main_barcode"].notna()]
+    cells = cells[cells["all_barcodes"].notna()]
     cells["cortical_area"] = cells["cortical_area"].astype("category")
     cells["cortical_layer"] = cells["cortical_layer"].astype("category")
     starter_cells = cells[cells["is_starter"]]
@@ -117,7 +117,7 @@ def plot_rabies_cells(
     x_all = all_cell_properties["flatmap_dorsal_x"]
     y_all = all_cell_properties["normalised_layers"]
 
-    cells = all_cell_properties[all_cell_properties["main_barcode"].notna()]
+    cells = all_cell_properties[all_cell_properties["all_barcodes"].notna()]
     cells["cortical_area"] = cells["cortical_area"].astype("category")
     cells["cortical_layer"] = cells["cortical_layer"].astype("category")
     starter_cells = cells[cells["is_starter"]]

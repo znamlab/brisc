@@ -18,7 +18,7 @@ def load_mcherry_data(
         project, mouse, verbose=True, which="curated", prefix="mCherry_1"
     )
     print(f"Loaded {len(full_df)} cells")
-    barcoded_cells = full_df.query("main_barcode.notna()")
+    barcoded_cells = full_df.query("all_barcodes.notna()")
     print(f"Found {len(barcoded_cells)} barcoded cells")
     starter_cells_df = barcoded_cells.query("is_starter == True")
     starter_barcode = {}

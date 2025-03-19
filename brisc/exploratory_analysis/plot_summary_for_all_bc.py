@@ -374,7 +374,7 @@ def plot_barcode(bc, save_folder=None, fig=None, verbose=True, plot_raw_data=Tru
         save_folder = Path(save_folder)
     df_file = flz.get_processed_path(f"{project}/{mouse}/analysis/cell_barcode_df.pkl")
     full_df = pd.read_pickle(df_file)
-    barcoded_cells = full_df.query("main_barcode.notna()")
+    barcoded_cells = full_df.query("all_barcodes.notna()")
 
     exploded = barcoded_cells.all_barcodes.explode()
     cell_id_with_bc = exploded[exploded == bc].copy()

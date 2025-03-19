@@ -43,7 +43,7 @@ def pairwise_barcode_distances_with_nearest_diff(
         processed_path.parent / "analysis" / "merged_cell_df_curated_mcherry.pkl"
     )
     rabies_cell_properties = rabies_cell_properties[
-        rabies_cell_properties["main_barcode"].notnull()
+        rabies_cell_properties["all_barcodes"].notnull()
     ]
     # rename is_starter column to starter
     rabies_cell_properties.rename(columns={"is_starter": "starter"}, inplace=True)
@@ -322,7 +322,7 @@ def load_presynaptic_distances(
     ara_is_starters = pd.read_pickle(
         processed_path / "analysis" / "cell_barcode_df.pkl"
     )
-    ara_is_starters = ara_is_starters[ara_is_starters["main_barcode"].notna()]
+    ara_is_starters = ara_is_starters[ara_is_starters["all_barcodes"].notna()]
 
     def shorten_barcodes(barcodes):
         return [barcode[:10] for barcode in barcodes]
