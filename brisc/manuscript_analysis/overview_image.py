@@ -4,7 +4,6 @@ from iss_preprocess.vis import add_bases_legend
 from iss_preprocess.vis.utils import get_stack_part
 from iss_preprocess.pipeline.sequencing import basecall_tile
 
-import matplotlib.image as mpimg
 import numpy as np
 
 
@@ -44,7 +43,7 @@ def run_plot_overview(
 
 
 def plot_rabies_raw(
-    ax, image_path, crop_top=50, crop_bottom=350, crop_left=50, crop_right=50
+    ax, img, crop_top=50, crop_bottom=350, crop_left=50, crop_right=50
 ):
     """
     Load a .png file from image_path, rotate it 90 degrees left,
@@ -71,11 +70,9 @@ def plot_rabies_raw(
     ax : matplotlib.axes.Axes
         The same axis with the image displayed.
     """
-
-    img = mpimg.imread(image_path)
     img_rotated = np.rot90(img)
     img_cropped = img_rotated[crop_top:-crop_bottom, crop_left:-crop_right]
-    ax.imshow(img_cropped)
+    ax.imshow(img_cropped[300:1500])
     ax.set_xticks([])
     ax.set_yticks([])
     ax.axis("off")
@@ -121,9 +118,10 @@ def load_rv_bc_rounds(
 def plot_selected_rounds(
     axes,
     stack_part,
-    window=200,
     selected_rounds=[1, 6, 10],
     fontsize=14,
+    vmin=None,
+    vmax=None,
 ):
     """
     Here `axes` is an array/list of Axes, one for each round you want to plot.
@@ -131,7 +129,12 @@ def plot_selected_rounds(
     channel_colors = ([1, 0, 0], [0, 1, 0], [1, 0, 1], [0, 1, 1])
     for ax, iround in zip(axes, selected_rounds):
         rgb_stack = round_to_rgb(
-            stack_part, iround - 1, extent=None, channel_colors=channel_colors
+            stack_part, 
+            iround - 1, 
+            extent=None, 
+            channel_colors=channel_colors,
+            vmin=vmin,
+            vmax=vmax,
         )
         ax.imshow(rgb_stack)
         ax.set_title(f"Round {iround}", fontsize=fontsize)
@@ -139,8 +142,6 @@ def plot_selected_rounds(
             add_bases_legend(channel_colors, ax.transAxes, fontsize=fontsize)
 
         ax.set_aspect("equal")
-        ax.set_xlim(0, 2 * window)
         ax.set_facecolor("black")
-        ax.set_ylim(2 * window, 0)
         ax.set_xticks([])
         ax.set_yticks([])

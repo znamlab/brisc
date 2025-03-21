@@ -7,6 +7,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import matplotlib
+from brisc.manuscript_analysis.utils import despine
 
 matplotlib.rcParams[
     "pdf.fonttype"
@@ -14,10 +15,12 @@ matplotlib.rcParams[
 matplotlib.rcParams["ps.fonttype"] = 42  # For EPS, if relevant
 
 
-def load_data(redo=False):
-    processed_path = Path(
-        "/nemo/project/proj-znamenp-barseq/processed/becalia_rabies_barseq/BRAC8498.3e/"
-    )
+def load_data(
+        redo=False, 
+        barseq_path=Path("/nemo/project/proj-znamenp-barseq"), 
+        main_path=Path("/nemo/lab/znamenskiyp")
+):
+    processed_path = barseq_path / "processed/becalia_rabies_barseq/BRAC8498.3e/"
     ara_is_starters = pd.read_pickle(
         processed_path / "analysis" / "merged_cell_df_curated_mcherry.pkl"
     )
@@ -25,9 +28,7 @@ def load_data(redo=False):
     in_situ_barcodes = ara_is_starters["all_barcodes"].explode().unique()
     in_situ_barcodes = pd.DataFrame(in_situ_barcodes, columns=["sequence"])
 
-    barcode_library_sequence_path = Path(
-        "/nemo/lab/znamenskiyp/home/shared/projects/barcode_diversity_analysis/collapsed_barcodes/RV35/RV35_bowtie_ed2.txt"
-    )
+    barcode_library_sequence_path = main_path / "home/shared/projects/barcode_diversity_analysis/collapsed_barcodes/RV35/RV35_bowtie_ed2.txt"
     rv35_library = pd.read_csv(barcode_library_sequence_path, sep="\t", header=None)
     rv35_library["10bp_seq"] = rv35_library[1].str.slice(0, 10)
     rv35_library.rename(columns={0: "counts", 1: "sequence"}, inplace=True)
@@ -105,86 +106,44 @@ def load_data(redo=False):
 
     else:
         in_situ_barcodes = pd.read_pickle(
-            "/nemo/lab/znamenskiyp/home/users/becalia/code/brisc/brisc/cells_and_barcodes/in_situ_barcodes.pkl"
+            main_path / "home/users/becalia/code/brisc/brisc/cells_and_barcodes/in_situ_barcodes.pkl"
         )
         random_df = pd.read_pickle(
-            "/nemo/lab/znamenskiyp/home/users/becalia/data/BRYC65.1d/random_2252_barcodes.pkl"
+            main_path / "home/users/becalia/data/BRYC65.1d/random_2252_barcodes.pkl"
         )
 
-    def shorten_barcodes(barcode_list):
-        return [bc[:10] for bc in barcode_list]
-
-    ara_is_starters["all_barcodes"] = ara_is_starters["all_barcodes"].apply(
-        shorten_barcodes
-    )
-
-    barcoded_cells = ara_is_starters[ara_is_starters["all_barcodes"].notna()]
-
-    # Exploding all_barcodes to allow searching in individual barcodes
-    exploded_data = ara_is_starters.explode("all_barcodes")
-    # Filtering cells with valid barcodes in all_barcodes
-    barcoded_cells = exploded_data[exploded_data["all_barcodes"].notna()]
-    # Filtering cells where is_starter is False
-    non_starter_cells = barcoded_cells[barcoded_cells["is_starter"] == False]
-    # Finding all barcodes where is_starter is True
-    starter_barcodes = barcoded_cells[barcoded_cells["is_starter"] == True][
-        "all_barcodes"
-    ].unique()
-
-    # Non-starters without corresponding starters
-    non_starter_without_starter = non_starter_cells[
-        ~non_starter_cells["all_barcodes"].isin(starter_barcodes)
-    ]
-
-    # Group and filter for non_starter_without_starter
-    grouped_barcodes_without = non_starter_without_starter.groupby("all_barcodes")
-    groups_of_size_1_without = grouped_barcodes_without.filter(lambda x: len(x) == 1)
-
-    unique_single_pre_no_starter = groups_of_size_1_without.all_barcodes.unique()
-
-    unique_single_pre_no_starter = pd.DataFrame(
-        unique_single_pre_no_starter, columns=["sequence"]
-    )
-
-    in_situ_perfect_match = in_situ_barcodes[
-        in_situ_barcodes["ham_min_edit_distance"] == 0
-    ]
-    random_perfect_match = random_df[random_df["min_edit_distance"] == 0]
-
     return (
-        in_situ_perfect_match,
-        random_perfect_match,
+        in_situ_barcodes,
+        random_df,
         rv35_library,
     )
 
 
 def plot_matches_to_library(
-    in_situ_perfect_match,
-    random_perfect_match,
+    in_situ_barcode_matches,
+    random_barcode_matches,
     rv35_library,
     ax=None,
     label_fontsize=12,
     tick_fontsize=12,
-    line_width=0.9,
-    num_bins=80,
+    line_width=0.5,
+    num_bins=20,
 ):
     # Define bin edges for consistent binning
     bin_edges = np.logspace(0, 6, num=num_bins)
-
-    # Extract histogram data
-    data0 = in_situ_perfect_match["ham_lib_bc_counts"].values
-    # data1 = unique_single_pre_no_starter["ham_lib_bc_counts"].values
-    data2 = random_perfect_match["lib_bc_counts"].values
+    bin_edges = np.insert(bin_edges, 0, 0)
+    in_situ_barcode_matches.loc[in_situ_barcode_matches["ham_min_edit_distance"] > 0, "ham_lib_bc_counts"] = 0
+    random_barcode_matches.loc[random_barcode_matches["min_edit_distance"] > 0, "lib_bc_counts"] = 0
 
     # Compute histograms
-    hist0, _ = np.histogram(data0, bins=bin_edges)
+    in_situ_hist, _ = np.histogram(in_situ_barcode_matches["ham_lib_bc_counts"].values, bins=bin_edges)
     # hist1, _ = np.histogram(data1, bins=bin_edges)
-    hist2, _ = np.histogram(data2, bins=bin_edges)
+    random_hist, _ = np.histogram(random_barcode_matches["lib_bc_counts"].values, bins=bin_edges)
 
     # Normalize histograms (scale max to 1)
-    hist0 = hist0 / np.max(hist0)
+    in_situ_hist = in_situ_hist / np.sum(in_situ_hist)
     # hist1 = hist1 / np.max(hist1)
-    hist2 = hist2 / np.max(hist2)
+    random_hist = random_hist /  np.sum(random_hist)
 
     # Extract and normalize library sequence data
     sequences = np.flip(rv35_library["counts"])
@@ -195,81 +154,87 @@ def plot_matches_to_library(
         parts = edge_positions[i : i + 2]
         counts[i] = sequences[parts[0] : parts[1]].sum()
 
-    counts = counts / np.max(counts)  # Normalize to max 1
+    counts = counts / np.sum(counts)  # Normalize to max 1
 
     # Plot normalized histograms as step-line plots
-    ax.step(
-        bin_edges[:-1],
-        hist0,
-        where="post",
-        color="#2ca02c",
-        linestyle="-",
-        linewidth=line_width,
-        label="All barcode sequences",
-    )
+    for this_ax in ax:
+        plt.sca(this_ax)
+        plt.stairs(
+            in_situ_hist[1:],
+            bin_edges[1:],
+            color="dodgerblue",
+            linestyle="-",
+            linewidth=line_width,
+            label="In situ barcodes",
+        )
+        plt.stairs(
+            [in_situ_hist[0],],
+            [0.03, 0.1],
+            color="dodgerblue",
+            linestyle="-",
+            linewidth=line_width,
+        )
+        plt.stairs(
+            random_hist[1:],
+            bin_edges[1:],
+            color="darkorange",
+            linestyle="-",
+            linewidth=line_width,
+            label="Random barcodes",
+        )
+        plt.stairs(
+            [random_hist[0],],
+            [0.03, 0.1],
+            color="darkorange",
+            linestyle="-",
+            linewidth=line_width,
+        )    
 
-    ax.step(
-        bin_edges[:-1],
-        hist2,
-        where="post",
-        color="#1f77b4",
-        linestyle="-",
-        linewidth=line_width,
-        label="Randomly generated",
-    )
+        # Plot normalized library sequence data as a dashed black line
+        plt.stairs(
+            counts[1:],
+            bin_edges[1:],
+            color="black",
+            linestyle="--",
+            linewidth=line_width,
+            label="Viral library barcodes",
+        )
 
-    # Plot normalized library sequence data as a dashed black line
-    ax.step(
-        bin_edges[:-1],
-        counts,
-        where="post",
-        color="black",
-        linestyle="--",
-        linewidth=line_width,
-        label="Library sequences",
-    )
+        # X-axis log scale
+        this_ax.set_xscale("log")
+        despine(this_ax)
+        this_ax.tick_params(
+            axis="both",
+            which="major",
+            labelsize=tick_fontsize,
+        )
 
-    # X-axis log scale
-    ax.set_xscale("log")
 
     # X-axis formatting
-    ax.set_xlabel(
+    ax[0].set_xlabel(
         "Library barcode abundance",
         fontsize=label_fontsize,
     )
-    ax.xaxis.set_major_locator(mticker.FixedLocator(locs=np.logspace(0, 6, 5)))
-    ax.xaxis.set_minor_locator(mticker.LogLocator(numticks=999, subs="auto"))
+    # ax[0].xaxis.set_major_locator(mticker.FixedLocator(locs=np.logspace(0, 6, 5)))
+    # ax[0].xaxis.set_minor_locator(mticker.LogLocator(numticks=999, subs="auto"))
+    ax[0].set_xticks([np.sqrt(0.03*0.1), 1, 1e3, 1e6], labels=["$0$", "$10^0$", "$10^3$", "$10^6$"])
 
     # Y-axis label
-    ax.set_ylabel(
-        "Normalized Frequency",
+    ax[0].set_ylabel(
+        "             Proportion of barcodes",
         fontsize=label_fontsize,
     )
-
+    ax[0].set_ylim(0, 0.2)
+    ax[1].set_ylim(0.6, 0.65)
     # Y-axis scale (0 to 1 since everything is normalized)
-    ax.set_xlim(1, 1e6)
-    ax.set_ylim(0, 1.05)
-
-    ax.legend(
+    # ax.set_xlim(1, 1e6)
+    # ax.set_ylim(0, 1.05)
+    ax[1].spines.bottom.set_visible(False)
+    ax[1].set_xticks([])
+    ax[1].legend(
         loc="upper right",
         fontsize=tick_fontsize,
-        bbox_to_anchor=(
-            1.2,
-            1,
-        ),
+        frameon=False
     )
 
-    # Despine function
-    def despine(ax):
-        ax.spines["right"].set_visible(False)
-        ax.spines["top"].set_visible(False)
 
-    despine(ax)
-
-    ax.tick_params(
-        axis="both",
-        which="major",
-        labelsize=tick_fontsize,
-    )
-
-    return ax

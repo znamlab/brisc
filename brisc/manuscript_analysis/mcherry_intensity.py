@@ -3,7 +3,7 @@ import iss_analysis as issa
 import numpy as np
 import pandas as pd
 import flexiznam as flz
-
+import seaborn as sns
 
 def load_mcherry_data(
     project="becalia_rabies_barseq",
@@ -60,25 +60,37 @@ def plot_mcherry_intensity_presyn(
     ax=None,
     label_fontsize=12,
     tick_fontsize=12,
-    spot_size=10,
+    marker_size=10,
 ):
-    ax.set(xscale="log", yscale="log")
-    ax.scatter(
-        valid["intensity_mean-0"],
-        valid["n_presynaptic"],
-        alpha=0.5,
-        s=spot_size,
+    # ax.set(xscale="log", yscale="log")
+    sns.regplot(
+        x=np.log(valid["intensity_mean-0"]), 
+        y=np.log(valid["n_presynaptic"]),
+        scatter_kws={"s": marker_size, "color": "darkslategray", "edgecolor": "black", "alpha": 0.5},
+        line_kws={"color": "darkslategray"},
+        robust=True,
     )
+    
+    # ax.scatter(
+        
+    #     valid["n_presynaptic"],
+    #     alpha=0.5,
+    #     s=spot_size,
+    # )
     ax.set_xlabel(
-        "Mean mCherry intensity (AU)",
+        "Starter mCherry\nfluorescence (AU)",
         fontsize=label_fontsize,
     )
     ax.set_ylabel(
-        "Number of presynaptic cells + 1 (starter)",
+        "Number of labelled cellss",
         fontsize=label_fontsize,
     )
+    ax.set_yticks(np.log([1, 10, 100]), labels=[1, 10, 100])
+    ax.set_xticks(np.log([100, 1000]), labels=[100, 1000])
+   
     ax.tick_params(
         axis="both",
         which="major",
         labelsize=tick_fontsize,
     )
+    sns.despine(ax=ax)

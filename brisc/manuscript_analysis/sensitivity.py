@@ -1,9 +1,9 @@
 import iss_preprocess as issp
-
 import numpy as np
 import pandas as pd
 from skimage.segmentation import expand_labels
 from tqdm import tqdm
+from brisc.manuscript_analysis.utils import despine
 
 
 def detect_rab_cells(
@@ -136,7 +136,7 @@ def plot_histogram_bc_per_cell(
     )
     ax.set_xlim(-0.5, 40)
     ax.set_ylabel(
-        "Number of Cells",
+        "Number of cells",
         fontsize=label_fontsize,
     )
     ax.tick_params(
@@ -144,6 +144,7 @@ def plot_histogram_bc_per_cell(
         which="major",
         labelsize=tick_fontsize,
     )
+    despine(ax)
 
 
 def plot_cells_spots(
@@ -157,7 +158,7 @@ def plot_cells_spots(
     min_x=400,
     max_x=1000,
     colors=[(1, 0, 0), (0, 1, 1)],
-    vmaxs=[800, 200],
+    vmaxs=[1500, 200],
     linewidth=0.9,
 ):
     """Plot the cells and spots for the fixed bounding box of the ROI of interest.
@@ -196,17 +197,16 @@ def plot_cells_spots(
     # Plot
     ax.imshow(rgb)
 
-    # (a) Outline all cells in black
-    ax.contour(
-        labels, levels=np.arange(labels.max()) + 0.5, colors="k", linewidths=linewidth
-    )
+    # ax.contour(
+    #     labels, levels=np.arange(labels.max()) + 0.5, colors="k", linewidths=linewidth
+    # )
 
-    # (b) Highlight the no_spot cells in white
-    if not roi_5_no_spot_cells.empty:
-        no_spot_label_ids = roi_5_no_spot_cells["label"].unique()
-        for lbl_id in no_spot_label_ids:
-            ax.contour(
-                labels == lbl_id, levels=[0.5], colors="white", linewidths=linewidth
-            )
+    # # (b) Highlight the no_spot cells in white
+    # if not roi_5_no_spot_cells.empty:
+    #     no_spot_label_ids = roi_5_no_spot_cells["label"].unique()
+    #     for lbl_id in no_spot_label_ids:
+    #         ax.contour(
+    #             labels == lbl_id, levels=[0.5], colors="white", linewidths=linewidth
+    #         )
     ax.set_xticks([])
     ax.set_yticks([])
