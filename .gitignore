@@ -7,3 +7,4 @@ __pycache__
 legacy
 build
 .vscode/BRISCo.code-workspace
+*.pkl
