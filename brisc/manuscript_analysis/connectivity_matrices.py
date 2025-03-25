@@ -8,9 +8,10 @@ import scanpy as sc
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 
+bg_atlas = BrainGlobeAtlas("allen_mouse_10um", check_latest=False)
+
 
 def get_ancestor_rank1(area_acronym):
-    bg_atlas = BrainGlobeAtlas("allen_mouse_10um", check_latest=False)
     try:
         ancestors = bg_atlas.get_structure_ancestors(area_acronym)
         if "TH" in ancestors:
@@ -42,12 +43,15 @@ def load_cell_barcode_data(
 
     # Load data from mCherry curated cells and barcodes with ed2, minimum match ?, ed correction weighting only first 10 bases
     ara_starters = pd.read_pickle(
-        processed_path.parent / "analysis" / "merged_cell_df_curated_mcherry.pkl"
+        processed_path.parent / "analysis" / "cell_barcode_df.pkl"
     )
     ara_starters = ara_starters[ara_starters["all_barcodes"].notna()]
     print("Before filtering:")
     print(f"Number of barcoded cells: {ara_starters.shape[0]}")
-    print(f"Number of barcodes: {ara_starters['main_barcode'].nunique()}")
+    print(
+        f"Number of barcodes (unique among all cells): "
+        f"{ara_starters.explode('all_barcodes')['all_barcodes'].nunique()}"
+    )
     print(
         f"Number of presynaptic cells: {ara_starters[ara_starters['is_starter'] == False].shape[0]}"
     )
@@ -57,7 +61,7 @@ def load_cell_barcode_data(
 
     # Step 1: Remove starters with shared barcodes
     ara_is_starters = pd.read_pickle(
-        processed_path.parent / "analysis" / "merged_cell_df_curated_mcherry.pkl"
+        processed_path.parent / "analysis" / "cell_barcode_df.pkl"
     )
     ara_is_starters = ara_is_starters[ara_is_starters["all_barcodes"].notna()]
 
@@ -67,9 +71,6 @@ def load_cell_barcode_data(
 
     ara_is_starters["all_barcodes"] = ara_is_starters["all_barcodes"].apply(
         shorten_barcodes
-    )
-    ara_is_starters["main_barcode"] = ara_is_starters["main_barcode"].apply(
-        lambda x: x[:10]
     )
 
     if filter_shared_bc_starters:
@@ -112,7 +113,10 @@ def load_cell_barcode_data(
 
     print("After shared starter cell count filtering:")
     print(f"Number of barcoded cells: {ara_starters.shape[0]}")
-    print(f"Number of barcodes: {ara_starters['main_barcode'].nunique()}")
+    print(
+        f"Number of barcodes (unique among all cells): "
+        f"{ara_starters.explode('all_barcodes')['all_barcodes'].nunique()}"
+    )
     print(
         f"Number of presynaptic cells: {ara_starters[ara_starters['starter'] == False].shape[0]}"
     )
@@ -170,7 +174,10 @@ def load_cell_barcode_data(
         ara_starters = ara_starters[ara_starters["total_n_spots"] > 0]
         print("After presynaptic cell count filtering:")
         print(f"Number of barcoded cells: {ara_starters.shape[0]}")
-        print(f"Number of barcodes: {ara_starters['main_barcode'].nunique()}")
+        print(
+            f"Number of barcodes (unique among all cells): "
+            f"{ara_starters.explode('all_barcodes')['all_barcodes'].nunique()}"
+        )
         print(
             f"Number of presynaptic cells: {ara_starters[ara_starters['starter'] == False].shape[0]}"
         )
@@ -211,7 +218,10 @@ def load_cell_barcode_data(
         )
         print("After cell type cluster centroid filtering:")
         print(f"Number of barcoded cells: {ara_starters.shape[0]}")
-        print(f"Number of barcodes: {ara_starters['main_barcode'].nunique()}")
+        print(
+            f"Number of barcodes (unique among all cells): "
+            f"{ara_starters.explode('all_barcodes')['all_barcodes'].nunique()}"
+        )
         print(
             f"Number of presynaptic cells: {ara_starters[ara_starters['starter'] == False].shape[0]}"
         )
@@ -224,7 +234,10 @@ def load_cell_barcode_data(
             ara_starters = ara_starters.dropna(subset=["Annotated_clusters"])
             print("After annotated cluster filtering:")
             print(f"Number of barcoded cells: {ara_starters.shape[0]}")
-            print(f"Number of barcodes: {ara_starters['main_barcode'].nunique()}")
+            print(
+                f"Number of barcodes (unique among all cells): "
+                f"{ara_starters.explode('all_barcodes')['all_barcodes'].nunique()}"
+            )
             print(
                 f"Number of presynaptic cells: {ara_starters[ara_starters['starter'] == False].shape[0]}"
             )

@@ -5,6 +5,8 @@ from tqdm import tqdm
 from multiprocessing import cpu_count
 from tqdm.contrib.concurrent import process_map
 
+from .barcodes_in_cells import find_singleton_bcs
+
 import iss_preprocess as iss
 
 
@@ -40,7 +42,7 @@ def pairwise_barcode_distances_with_nearest_diff(
     }
     processed_path = iss.io.load.get_processed_path(data_path)
     rabies_cell_properties = pd.read_pickle(
-        processed_path.parent / "analysis" / "merged_cell_df_curated_mcherry.pkl"
+        processed_path.parent / "analysis" / "cell_barcode_df.pkl"
     )
     rabies_cell_properties = rabies_cell_properties[
         rabies_cell_properties["all_barcodes"].notnull()
@@ -324,15 +326,8 @@ def load_presynaptic_distances(
     )
     ara_is_starters = ara_is_starters[ara_is_starters["all_barcodes"].notna()]
 
-    def shorten_barcodes(barcodes):
-        return [barcode[:10] for barcode in barcodes]
+    ara_is_starters = find_singleton_bcs(ara_is_starters)
 
-    ara_is_starters["all_barcodes"] = ara_is_starters["all_barcodes"].apply(
-        shorten_barcodes
-    )
-    ara_is_starters["main_barcode"] = ara_is_starters["main_barcode"].apply(
-        lambda x: x[:10]
-    )
     # Flatten all barcodes from starter cells to count their occurrences
     starter_barcodes_counts = (
         ara_is_starters[ara_is_starters["is_starter"] == True]["all_barcodes"]

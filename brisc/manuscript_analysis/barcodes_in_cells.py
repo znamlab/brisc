@@ -4,9 +4,6 @@ from matplotlib import pyplot as plt
 from brisc.manuscript_analysis.utils import despine
 
 
-
-
-
 def plot_hist(
     data_df,
     ax,
@@ -18,20 +15,20 @@ def plot_hist(
     show_counts=True,
 ):
     if max_val is None:
-            max_val = data_df[col].max() + 1
+        max_val = data_df[col].max() + 1
     if show_zero:
         min_val = 0
     else:
         min_val = 1
     counts = np.bincount(data_df[col].values, minlength=max_val + 1)
     props = counts / np.sum(counts)
-    counts = counts[min_val:max_val+1]
-    props = props[min_val:max_val+1]
+    counts = counts[min_val : max_val + 1]
+    props = props[min_val : max_val + 1]
     plt.stairs(
-        props, 
-        np.arange(min_val, max_val + 2) - 0.5, 
-        fill=True, 
-        edgecolor="black", 
+        props,
+        np.arange(min_val, max_val + 2) - 0.5,
+        fill=True,
+        edgecolor="black",
         facecolor="slategray",
         linewidth=0.5,
     )
@@ -69,8 +66,12 @@ def plot_presyn_per_barcode(
     max_val=50,
     colors=("darkorange", "dodgerblue"),
 ):
-    cells_with_starter = barcodes_df[barcodes_df["n_starters"] > 0]["n_presynaptic"].values
-    cells_without_starter = barcodes_df[barcodes_df["n_starters"] == 0]["n_presynaptic"].values
+    cells_with_starter = barcodes_df[barcodes_df["n_starters"] > 0][
+        "n_presynaptic"
+    ].values
+    cells_without_starter = barcodes_df[barcodes_df["n_starters"] == 0][
+        "n_presynaptic"
+    ].values
     # Regular histogram (left subplot)
     # Non-starters *with* starter
     bin_edges = np.arange(0, max_val + 5, 5)
@@ -81,16 +82,16 @@ def plot_presyn_per_barcode(
         print(f"Counts: {counts}")
         props = counts / np.sum(counts)
         plt.stairs(
-            props, 
-            bin_edges, 
-            fill=False, 
+            props,
+            bin_edges,
+            fill=False,
             linewidth=0.5,
             color=color,
         )
 
     ax.set_xlim(0, max_val)
-    ax.set_xticks(np.arange(0, max_val+10, 10))
-    
+    ax.set_xticks(np.arange(0, max_val + 10, 10))
+
     ax.set_xlabel(
         "mCherry- cells per barcode",
         fontsize=label_fontsize,
@@ -113,6 +114,86 @@ def plot_presyn_per_barcode(
         labelsize=tick_fontsize,
     )
     despine(ax)
+
+    return ax
+
+
+def plot_starters_per_barcode(
+    starters_per_barcode,
+    ax=None,
+    label_fontsize=12,
+    tick_fontsize=12,
+    padding=200,
+):
+    ax.hist(
+        starters_per_barcode,
+        bins=np.arange(0, starters_per_barcode.max() + 2, 1) - 0.5,
+        histtype="stepfilled",
+        edgecolor="black",
+        color="lightblue",
+        alpha=0.8,
+    )
+
+    bin_edges = np.arange(0, starters_per_barcode.max() + 2, 1) - 0.5
+    unfiltered_values, _ = np.histogram(starters_per_barcode, bins=bin_edges)
+
+    for i, val_unfiltered in enumerate(unfiltered_values):
+        y_offset = val_unfiltered + padding
+        ax.text(
+            i,
+            y_offset + 1,
+            str(val_unfiltered),
+            ha="center",
+            fontsize=label_fontsize,
+            color="black",
+            alpha=0.8,
+        )
+
+    ax.set_ylabel(
+        "Number of barcodes",
+        fontsize=label_fontsize,
+    )
+    ax.set_xlabel(
+        "Starter cells per barcode",
+        fontsize=label_fontsize,
+    )
+    ax.set_xlim(-0.5, 11.5)
+    ax.set_xticks(np.arange(0, 12, 1))
+    ax.tick_params(
+        axis="both",
+        which="major",
+        labelsize=tick_fontsize,
+    )
+
+
+def find_singleton_bcs(cells):
+    """
+    Find singleton barcodes that appear exactly once across all starter cells
+    and defines 'unique_barcodes' for all cells that is the intersection of its
+    barcodes with singletons
+
+    Args:
+        cells (pd.DataFrame): DataFrame of cells
+
+    Returns:
+        cells (pd.DataFrame): DataFrame of cells with 'unique_barcodes' column
+    """
+    starter_cells = cells[cells.is_starter == True]
+
+    # Identify 'singleton' barcodes among starters
+    all_starter_barcodes = []
+    for bc_list in starter_cells["all_barcodes"]:
+        all_starter_barcodes.extend(bc_list)
+
+    barcode_counts = pd.Series(all_starter_barcodes).value_counts()
+    singletons = set(barcode_counts.index[barcode_counts == 1])
+
+    # For each cell, define 'unique_barcodes' = intersection of its barcodes with singletons
+    cells["unique_barcodes"] = cells["all_barcodes"].apply(
+        lambda x: singletons.intersection(x)
+    )
+
+    return cells
 
 
 def load_double_barcode_data(
@@ -137,26 +218,7 @@ def load_double_barcode_data(
     # Only keep rows that actually have barcodes
     cells = cells.dropna(subset=["all_barcodes"])
 
-    def shorten_barcodes(barcode_list):
-        return [bc[:10] for bc in barcode_list]
-
-    cells["all_barcodes"] = cells["all_barcodes"].apply(shorten_barcodes)
-    starter_cells = cells[cells.is_starter == True]
-    presyn_cells = cells[cells.is_starter == False]
-
-    # Identify 'singleton' barcodes among starters
-    # i.e. barcodes that appear exactly once across all starter cells
-    all_starter_barcodes = []
-    for bc_list in starter_cells["all_barcodes"]:
-        all_starter_barcodes.extend(bc_list)
-
-    barcode_counts = pd.Series(all_starter_barcodes).value_counts()
-    singletons = set(barcode_counts.index[barcode_counts == 1])
-
-    # For each cell, define 'unique_barcodes' = intersection of its barcodes with singletons
-    cells["unique_barcodes"] = cells["all_barcodes"].apply(
-        lambda x: singletons.intersection(x)
-    )
+    cells = find_singleton_bcs(cells)
 
     # Among starter cells, pick out those whose unique_barcodes has length == 2
     double_barcoded_starters = cells[
@@ -166,6 +228,7 @@ def load_double_barcode_data(
     double_barcoded_starters["all_barcodes"] = double_barcoded_starters[
         "unique_barcodes"
     ].apply(list)
+    presyn_cells = cells[cells["is_starter"] == False]
     presyn_exploded = presyn_cells[["cell_id", "all_barcodes"]].explode("all_barcodes")
 
     # For each double-barcoded starter, count how many presyn cells have bc1, bc2, or both
