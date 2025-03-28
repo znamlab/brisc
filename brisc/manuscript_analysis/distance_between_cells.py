@@ -48,13 +48,12 @@ def pairwise_barcode_distances_with_nearest_diff(
         rabies_cell_properties["all_barcodes"].notnull()
     ]
     # rename is_starter column to starter
-    rabies_cell_properties.rename(columns={"is_starter": "starter"}, inplace=True)
     rabies_cell_properties["slice_number"] = rabies_cell_properties[
         "roi"
     ] + rabies_cell_properties["chamber"].map(chamber_map)
 
     # Filter to only starter cells
-    starter_df = rabies_cell_properties.query("starter == True").copy()
+    starter_df = rabies_cell_properties.query("is_starter == True").copy()
     n_starters = len(starter_df)
     if n_starters < 2:
         return (
@@ -270,13 +269,13 @@ def plot_dist_between_starters(
     ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
 
 
-def determine_presynaptic_distances(rabies_cell_properties):
+def determine_presynaptic_distances(cell_barcode_df):
     """
     Determine the distances between starter and presynaptic cells, based on
     sharing at least one unique barcode.
 
     Args:
-        rabies_cell_properties (pd.DataFrame): DataFrame with cell properties,
+        cell_barcode_df (pd.DataFrame): DataFrame with cell properties,
             including 'starter' (boolean) and 'unique_barcodes' (set) for each cell.
 
     Returns:
@@ -287,7 +286,7 @@ def determine_presynaptic_distances(rabies_cell_properties):
             and presynaptic cells (in micrometers).
     """
     # Filter only the starter cells
-    valid = rabies_cell_properties.query("starter == True").copy()
+    valid = cell_barcode_df.query("is_starter == True").copy()
     # Prepare columns to store the number of presynaptic cells and their coordinates
     valid["n_presynaptic"] = 0
     valid[
@@ -302,10 +301,10 @@ def determine_presynaptic_distances(rabies_cell_properties):
 
         # Find all cells that are NOT starters but share at least one of these barcodes
         # (i.e., their unique_barcodes set intersects with starter_bcs is non-empty)
-        presy = rabies_cell_properties[
-            (rabies_cell_properties["starter"] == False)
+        presy = cell_barcode_df[
+            (cell_barcode_df["is_starter"] == False)
             & (
-                rabies_cell_properties["unique_barcodes"].apply(
+                cell_barcode_df["unique_barcodes"].apply(
                     lambda x: len(x.intersection(starter_bcs)) > 0
                 )
             )
@@ -484,14 +483,14 @@ def shuffle_iteration(seed, starters_df, non_starters_df):
     )
 
     # 4. Identify (shuffled) starter cells for distance calculations
-    valid = shuffled_data.query("starter == True").copy()
+    valid = shuffled_data.query("is_starter == True").copy()
     valid["n_presynaptic"] = 0
 
     # 5. Count how many presynaptic cells each starter has, based on intersections of barcodes
     for stid, starter_row in valid.iterrows():
         bc_set = starter_row["unique_barcodes"]
         presy = shuffled_data[
-            (shuffled_data["starter"] == False)
+            (shuffled_data["is_starter"] == False)
             & (
                 shuffled_data["unique_barcodes"].apply(
                     lambda x: len(bc_set.intersection(x)) > 0
@@ -509,7 +508,7 @@ def shuffle_iteration(seed, starters_df, non_starters_df):
     for stid, starter_row in valid.iterrows():
         bc_set = starter_row["unique_barcodes"]
         presy = shuffled_data[
-            (shuffled_data["starter"] == False)
+            (shuffled_data["is_starter"] == False)
             & (
                 shuffled_data["unique_barcodes"].apply(
                     lambda x: len(bc_set.intersection(x)) > 0
@@ -535,7 +534,7 @@ def shuffle_wrapper(arg):
     return shuffle_iteration(seed, starters_df, non_starters_df)
 
 
-def create_barcode_shuffled_nulls_parallel(rabies_cell_properties, N_iter=1000):
+def create_barcode_shuffled_nulls_parallel(cell_barcode_df, N_iter=1000):
     """
     Parallelized version of barcode shuffling with live tqdm updates.
 
@@ -549,8 +548,8 @@ def create_barcode_shuffled_nulls_parallel(rabies_cell_properties, N_iter=1000):
         all_starter_coords (list): List of 2D arrays with x, y, z coordinates of
         starter cells for each iteration.
     """
-    starters_df = rabies_cell_properties.query("starter == True").copy()
-    non_starters_df = rabies_cell_properties.query("starter == False").copy()
+    starters_df = cell_barcode_df.query("is_starter == True").copy()
+    non_starters_df = cell_barcode_df.query("is_starter == False").copy()
 
     args = [(i, starters_df, non_starters_df) for i in range(N_iter)]
     # Use process_map for parallel processing with tqdm

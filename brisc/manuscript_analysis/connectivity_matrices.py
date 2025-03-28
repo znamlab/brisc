@@ -35,25 +35,24 @@ def get_ancestor_rank1(area_acronym):
 
 
 def load_cell_barcode_data(
-    data_path="becalia_rabies_barseq/BRAC8498.3e/chamber_07/",
+    processed_path,
     area_to_empty="fiber tracts",
     valid_areas=["Isocortex", "TH"],
     distance_threshold=150,
 ):
-    processed_path = iss.io.get_processed_path(data_path)
-    ara_starters = pd.read_pickle(
-        processed_path.parent / "analysis" / "cell_barcode_df.pkl"
+    cell_barcode_df = pd.read_pickle(
+        processed_path / "analysis" / "cell_barcode_df.pkl"
     )
-    ara_starters = ara_starters[ara_starters["all_barcodes"].notna()]
+    cell_barcode_df = cell_barcode_df[cell_barcode_df["all_barcodes"].notna()]
 
     # Create unique barcode column containing barcodes found in only 1 starter
-    ara_starters = bc_cells.find_singleton_bcs(ara_starters)
-    ara_starters = ara_starters[
-        ara_starters["unique_barcodes"].apply(lambda x: len(x) > 0)
+    cell_barcode_df = bc_cells.find_singleton_bcs(cell_barcode_df)
+    cell_barcode_df = cell_barcode_df[
+        cell_barcode_df["unique_barcodes"].apply(lambda x: len(x) > 0)
     ]
 
     # Move cells out of fiber tracts
-    pts = ara_starters[["ara_x", "ara_y", "ara_z"]].values * 1000
+    pts = cell_barcode_df[["ara_x", "ara_y", "ara_z"]].values * 1000
     moved = atlas_utils.move_out_of_area(
         pts=pts,
         atlas=bg_atlas,
@@ -63,18 +62,18 @@ def load_cell_barcode_data(
         verbose=True,
     )
 
-    ara_starters["was_in_wm"] = False
+    cell_barcode_df["was_in_wm"] = False
     actually_moved = moved.query("moved==True").copy()
-    cell_moved = ara_starters.iloc[actually_moved.pts_index].index
-    ara_starters.loc[cell_moved, "was_in_wm"] = True
-    ara_starters.loc[
+    cell_moved = cell_barcode_df.iloc[actually_moved.pts_index].index
+    cell_barcode_df.loc[cell_moved, "was_in_wm"] = True
+    cell_barcode_df.loc[
         cell_moved, "area_acronym"
     ] = actually_moved.new_area_acronym.values
-    ara_starters.loc[cell_moved, "area_id"] = actually_moved.new_area_id.values
+    cell_barcode_df.loc[cell_moved, "area_id"] = actually_moved.new_area_id.values
 
-    ara_starters["area_acronym_ancestor_rank1"] = ara_starters["area_acronym"].apply(
-        get_ancestor_rank1
-    )
+    cell_barcode_df["area_acronym_ancestor_rank1"] = cell_barcode_df[
+        "area_acronym"
+    ].apply(get_ancestor_rank1)
 
     cortical_areas = {
         #'outside': "outside",
@@ -483,79 +482,87 @@ def load_cell_barcode_data(
         "SPFp": "non_cortical",
     }
 
-    ara_starters["cortical_area"] = ara_starters["area_acronym"].map(cortical_areas)
-    ara_starters["cortical_layer"] = ara_starters["area_acronym"].map(cortical_layers)
+    cell_barcode_df["cortical_area"] = cell_barcode_df["area_acronym"].map(
+        cortical_areas
+    )
+    cell_barcode_df["cortical_layer"] = cell_barcode_df["area_acronym"].map(
+        cortical_layers
+    )
 
-    return ara_starters
+    return cell_barcode_df
 
 
-def compute_connectivity_matrix(ara_starters, areas_of_interest):
-    # Filter to only include cells in areas of interest
-    ara_starters = ara_starters[
-        ara_starters["area_acronym_ancestor_rank1"].isin(areas_of_interest)
-    ]
-
-    # 1) Separate starters and presynaptic cells
-    df_starters = ara_starters[ara_starters["is_starter"]].copy()
-    df_presyn = ara_starters[ara_starters["is_starter"] == False].copy()
+def compute_input_fractions(starter_row, presyn_cells, presyn_grouping):
+    """
+    For a single starter cell row, find all presynaptic cells sharing at least one barcode,
+    then compute the fraction of those presynaptic cells coming from each area.
+    """
+    starter_barcodes = starter_row["unique_barcodes"]
 
     # Get all possible presynaptic areas (to ensure consistent column ordering later)
-    all_presyn_areas = df_presyn["area_acronym_ancestor_rank1"].unique()
+    presyn_categories = presyn_cells[presyn_grouping].unique()
 
-    def compute_input_fractions(starter_row):
-        """
-        For a single starter cell row, find all presynaptic cells sharing at least one barcode,
-        then compute the fraction of those presynaptic cells coming from each area.
-        """
-        starter_barcodes = starter_row["unique_barcodes"]
+    # Find presyn cells that share at least 1 barcode
+    # (intersection > 0 means they share at least one)
+    shared_presyn = presyn_cells[
+        presyn_cells["unique_barcodes"].apply(
+            lambda barcodes: len(starter_barcodes & barcodes) > 0
+        )
+    ]
 
-        # Find presyn cells that share at least 1 barcode
-        # (intersection > 0 means they share at least one)
-        shared_presyn = df_presyn[
-            df_presyn["unique_barcodes"].apply(
-                lambda barcodes: len(starter_barcodes & barcodes) > 0
-            )
-        ]
+    if len(shared_presyn) == 0:
+        # No presynaptic cells share barcodes for this starter
+        # Return zeros for all presyn areas
+        fraction_by_area = pd.Series(
+            [0.0] * len(presyn_categories), index=presyn_categories
+        )
+        counts_by_area = pd.Series(
+            [0] * len(presyn_categories), index=presyn_categories
+        )
+    else:
+        # Group the shared presyn cells by their area, and compute fraction
+        counts_by_area = shared_presyn.groupby(presyn_grouping).size()
+        counts_by_area = counts_by_area.reindex(presyn_categories, fill_value=0)
+        fraction_by_area = counts_by_area / counts_by_area.sum()
 
-        if len(shared_presyn) == 0:
-            # No presynaptic cells share barcodes for this starter
-            # Return zeros for all presyn areas
-            fraction_by_area = pd.Series(
-                [0.0] * len(all_presyn_areas), index=all_presyn_areas
-            )
-            counts_by_area = pd.Series(
-                [0] * len(all_presyn_areas), index=all_presyn_areas
-            )
-        else:
-            # Group the shared presyn cells by their area, and compute fraction
-            counts_by_area = shared_presyn.groupby("area_acronym_ancestor_rank1").size()
-            counts_by_area = counts_by_area.reindex(all_presyn_areas, fill_value=0)
-            fraction_by_area = counts_by_area / counts_by_area.sum()
+    return fraction_by_area, counts_by_area
 
-        return fraction_by_area, counts_by_area
+
+def compute_connectivity_matrix(
+    cell_barcode_df,
+    starter_grouping="area_acronym_ancestor_rank1",
+    presyn_grouping="area_acronym_ancestor_rank1",
+):
+    # Filter to only include cells in areas of interest
+
+    # 1) Separate starters and presynaptic cells
+    starter_cells = cell_barcode_df[cell_barcode_df["is_starter"]].copy()
+    presyn_cells = cell_barcode_df[cell_barcode_df["is_starter"] == False].copy()
 
     # 2) Apply the function to each starter cell to get a table of fractions
-    fractions_counts_dfs = df_starters.apply(compute_input_fractions, axis=1)
+    fractions_counts_dfs = starter_cells.apply(
+        compute_input_fractions, axis=1, args=(presyn_cells, presyn_grouping)
+    )
     fractions_df = pd.DataFrame(
-        [t[0] for t in fractions_counts_dfs], index=df_starters.index
+        [t[0] for t in fractions_counts_dfs], index=starter_cells.index
     )
     counts_df = pd.DataFrame(
-        [t[1] for t in fractions_counts_dfs], index=df_starters.index
+        [t[1] for t in fractions_counts_dfs], index=starter_cells.index
     )
 
     # 3) Add a column for where the starter cell itself is located
-    fractions_df["starter_location"] = df_starters["area_acronym_ancestor_rank1"].values
-    counts_df["starter_location"] = df_starters["area_acronym_ancestor_rank1"].values
+    fractions_df[starter_grouping] = starter_cells[starter_grouping].values
+    counts_df[starter_grouping] = starter_cells[starter_grouping].values
     # remove rows that sum to 0
     fractions_df = fractions_df.loc[
         fractions_df.select_dtypes(include="number").sum(axis=1) > 0
     ]
 
     # Grouping by starter location, find the mean fraction of each presynaptic area
-    average_df = fractions_df.groupby("starter_location").mean().T
-    counts_df = counts_df.groupby("starter_location").sum().T
+    mean_input_frac_df = fractions_df.groupby(starter_grouping).mean().T
+    counts_df = counts_df.groupby(starter_grouping).sum().T
 
-    return ara_starters, average_df, counts_df, fractions_df
+    return counts_df, mean_input_frac_df, fractions_df
 
 
 def filter_matrix(matrix):
@@ -789,7 +796,7 @@ def plot_area_by_area_connectivity(
 
 
 def make_minimal_df(
-    ara_starters,
+    cell_barcode_df,
     starter_areas_to_keep=None,
     starter_cell_types_to_keep=None,
     presyn_areas_to_keep=None,
@@ -799,7 +806,11 @@ def make_minimal_df(
     Filter the ARA starters DataFrame to only include the necessary columns and rows.
 
     Args:
-        ara_starters (pd.DataFrame): DataFrame of ARA starters data
+        cell_barcode_df (pd.DataFrame): DataFrame of ARA starters data
+        starter_areas_to_keep (list): List of starter areas to include
+        starter_cell_types_to_keep (list): List of starter cell types to include
+        presyn_areas_to_keep (list): List of presynaptic areas to include
+        presyn_cell_types_to_keep (list): List of presynaptic cell types to include
 
     Returns:
         starters (pd.DataFrame): DataFrame of starter cells with columns:
@@ -813,8 +824,8 @@ def make_minimal_df(
     """
 
     # Separate out starter vs. non-starter rows
-    starters = ara_starters[ara_starters["is_starter"] == True].copy()
-    non_starters = ara_starters[ara_starters["is_starter"] == False].copy()
+    starters = cell_barcode_df[cell_barcode_df["is_starter"] == True].copy()
+    non_starters = cell_barcode_df[cell_barcode_df["is_starter"] == False].copy()
 
     starters = starters[
         ["unique_barcodes", "area_acronym_ancestor_rank1", "Annotated_clusters"]
