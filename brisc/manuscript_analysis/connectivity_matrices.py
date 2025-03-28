@@ -873,53 +873,6 @@ def make_minimal_df(
     return starters, non_starters
 
 
-def compute_observed_connectivity_matrix(starters, non_starters):
-    """
-    Compute the observed confusion matrix using set-based barcode matching.
-
-    Args:
-        starters (pd.DataFrame): DataFrame with columns ['barcode' (set), 'starter_area']
-        non_starters (pd.DataFrame): DataFrame with columns ['barcode' (set), 'presyn_area']
-
-    Returns:
-        confusion_df (pd.DataFrame): Confusion matrix of counts grouped by (presyn_area, starter_area)
-    """
-
-    # Build list of tuples: (presyn_area, starter_area) for every matching barcode set
-    pair_counts = []
-
-    for _, starter_row in starters.iterrows():
-        starter_barcodes = starter_row["barcode"]
-        starter_area = starter_row["starter_area"]
-        for _, presyn_row in non_starters.iterrows():
-            non_barcodes = presyn_row["barcode"]
-            presyn_area = presyn_row["presyn_area"]
-
-            if non_barcodes & starter_barcodes:  # non-empty intersection
-                pair_counts.append(
-                    {
-                        "presyn_area": presyn_area,
-                        "starter_area": starter_area,
-                        "count": 1,
-                    }
-                )
-
-    pair_counts_df = pd.DataFrame(pair_counts)
-    grouped = pair_counts_df.groupby(
-        ["presyn_area", "starter_area"], as_index=False
-    ).sum()
-
-    # Pivot to confusion matrix format
-    confusion_df = grouped.pivot_table(
-        index="presyn_area",
-        columns="starter_area",
-        values="count",
-        fill_value=0,
-    )
-
-    return confusion_df
-
-
 def shuffle_cm_chunk(
     non_starters_arr, starters_arr, row_index, col_index, n_permutations, seed_offset=0
 ):
@@ -978,7 +931,7 @@ def main_parallel_shuffling(starters, non_starters, n_permutations=10000, n_jobs
     """
 
     # Compute observed matrix (set-aware)
-    observed_confusion_matrix = compute_observed_connectivity_matrix(
+    observed_confusion_matrix, _, _ = compute_connectivity_matrix(
         starters, non_starters
     )
 
