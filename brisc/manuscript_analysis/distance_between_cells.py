@@ -339,68 +339,6 @@ def determine_presynaptic_distances(cell_barcode_df):
     return relative_presyn_coords, distances
 
 
-def load_presynaptic_distances(
-    processed_path,
-):
-    """
-    Load unique starter cells and presynaptic cells that share barcodes with starter cells.
-
-    Args:
-        processed_path (str): Path to the processed data folder.
-
-    Returns:
-        rabies_cell_properties (pd.DataFrame): DataFrame with starter and presynaptic cell
-    """
-    ara_is_starters = pd.read_pickle(
-        processed_path / "analysis" / "cell_barcode_df.pkl"
-    )
-    ara_is_starters = ara_is_starters[ara_is_starters["all_barcodes"].notna()]
-
-    ara_is_starters = find_singleton_bcs(ara_is_starters)
-
-    # Flatten all barcodes from starter cells to count their occurrences
-    starter_barcodes_counts = (
-        ara_is_starters[ara_is_starters["is_starter"] == True]["all_barcodes"]
-        .explode()
-        .value_counts()
-    )
-    # Identify barcodes that are unique to a single starter cell
-    unique_starter_barcodes = starter_barcodes_counts[
-        starter_barcodes_counts == 1
-    ].index
-    # Filter starter cells where all their barcodes are unique among starter cells
-    starter_cells_with_unique_barcodes = ara_is_starters[
-        (ara_is_starters["is_starter"] == True)
-        & (
-            ara_is_starters["all_barcodes"].apply(
-                lambda barcodes: all(b in unique_starter_barcodes for b in barcodes)
-            )
-        )
-    ]
-    # Get all barcodes from the identified starter cells
-    unique_barcodes_from_starters = (
-        starter_cells_with_unique_barcodes["all_barcodes"].explode().unique()
-    )
-    # Filter presynaptic cells that contain at least one of these barcodes
-    presynaptic_cells_with_shared_barcodes = ara_is_starters[
-        (ara_is_starters["is_starter"] == False)
-        & (
-            ara_is_starters["all_barcodes"].apply(
-                lambda barcodes: any(
-                    b in unique_barcodes_from_starters for b in barcodes
-                )
-            )
-        )
-    ]
-    # Combine the filtered starter cells and the filtered presynaptic cells
-    ara_starters = pd.concat(
-        [starter_cells_with_unique_barcodes, presynaptic_cells_with_shared_barcodes]
-    )
-    rabies_cell_properties = ara_starters.rename(columns={"is_starter": "starter"})
-
-    return rabies_cell_properties
-
-
 def plot_AP_ML_relative_coords(
     relative_presyn_coords,
     ax=None,
