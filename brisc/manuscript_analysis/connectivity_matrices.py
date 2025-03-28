@@ -3,10 +3,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from brainglobe_atlasapi import BrainGlobeAtlas
-import iss_preprocess as iss
-import scanpy as sc
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
+
+import iss_preprocess as iss
+from brisc.manuscript_analysis import barcodes_in_cells as bc_cells
+from cricksaw_analysis import atlas_utils
 
 bg_atlas = BrainGlobeAtlas("allen_mouse_10um", check_latest=False)
 
@@ -33,217 +35,42 @@ def get_ancestor_rank1(area_acronym):
 
 
 def load_cell_barcode_data(
-    data_path="becalia_rabies_barseq/BRAC8498.3e/chamber_07",
-    filter_by_presynaptics=False,
-    filter_shared_bc_starters=True,
-    filter_by_annotation=False,
-    use_centroid_cluster_mapping=False,
+    data_path="becalia_rabies_barseq/BRAC8498.3e/chamber_07/",
+    area_to_empty="fiber tracts",
+    valid_areas=["Isocortex", "TH"],
+    distance_threshold=150,
 ):
     processed_path = iss.io.get_processed_path(data_path)
-
-    # Load data from mCherry curated cells and barcodes with ed2, minimum match ?, ed correction weighting only first 10 bases
     ara_starters = pd.read_pickle(
         processed_path.parent / "analysis" / "cell_barcode_df.pkl"
     )
     ara_starters = ara_starters[ara_starters["all_barcodes"].notna()]
-    print("Before filtering:")
-    print(f"Number of barcoded cells: {ara_starters.shape[0]}")
-    print(
-        f"Number of barcodes (unique among all cells): "
-        f"{ara_starters.explode('all_barcodes')['all_barcodes'].nunique()}"
-    )
-    print(
-        f"Number of presynaptic cells: {ara_starters[ara_starters['is_starter'] == False].shape[0]}"
-    )
-    print(
-        f"Number of starter cells: {ara_starters[ara_starters['is_starter'] == True].shape[0]}\n"
-    )
 
-    # Step 1: Remove starters with shared barcodes
-    ara_is_starters = pd.read_pickle(
-        processed_path.parent / "analysis" / "cell_barcode_df.pkl"
-    )
-    ara_is_starters = ara_is_starters[ara_is_starters["all_barcodes"].notna()]
+    # Create unique barcode column containing barcodes found in only 1 starter
+    ara_starters = bc_cells.find_singleton_bcs(ara_starters)
+    ara_starters = ara_starters[
+        ara_starters["unique_barcodes"].apply(lambda x: len(x) > 0)
+    ]
 
-    # Assuming ara_is_starters is your dataframe
-    def shorten_barcodes(barcodes):
-        return [barcode[:10] for barcode in barcodes]
-
-    ara_is_starters["all_barcodes"] = ara_is_starters["all_barcodes"].apply(
-        shorten_barcodes
+    # Move cells out of fiber tracts
+    pts = ara_starters[["ara_x", "ara_y", "ara_z"]].values * 1000
+    moved = atlas_utils.move_out_of_area(
+        pts=pts,
+        atlas=bg_atlas,
+        areas_to_empty=area_to_empty,
+        valid_areas=valid_areas,
+        distance_threshold=distance_threshold,
+        verbose=True,
     )
 
-    if filter_shared_bc_starters:
-        # Flatten all barcodes from starter cells to count their occurrences
-        starter_barcodes_counts = (
-            ara_is_starters[ara_is_starters["is_starter"] == True]["all_barcodes"]
-            .explode()
-            .value_counts()
-        )
-
-        # Identify barcodes that are unique to a single starter cell
-        unique_starter_barcodes = starter_barcodes_counts[
-            starter_barcodes_counts == 1
-        ].index
-
-        # Filter starter cells where all their barcodes are unique among starter cells
-        starter_cells_with_unique_barcodes = ara_is_starters[
-            (ara_is_starters["is_starter"] == True)
-            & (
-                ara_is_starters["all_barcodes"].apply(
-                    lambda barcodes: all(b in unique_starter_barcodes for b in barcodes)
-                )
-            )
-        ]
-
-        # Filter presynaptic cells that contain at least one of these barcodes
-        presynaptic_cells_with_shared_barcodes = ara_is_starters[
-            (ara_is_starters["is_starter"] == False)
-            & (
-                ara_is_starters["all_barcodes"].apply(
-                    lambda barcodes: any(b in unique_starter_barcodes for b in barcodes)
-                )
-            )
-        ]
-        # Combine the filtered starter cells and the filtered presynaptic cells
-        ara_starters = pd.concat(
-            [starter_cells_with_unique_barcodes, presynaptic_cells_with_shared_barcodes]
-        )
-    ara_starters = ara_starters.rename(columns={"is_starter": "starter"})
-
-    print("After shared starter cell count filtering:")
-    print(f"Number of barcoded cells: {ara_starters.shape[0]}")
-    print(
-        f"Number of barcodes (unique among all cells): "
-        f"{ara_starters.explode('all_barcodes')['all_barcodes'].nunique()}"
-    )
-    print(
-        f"Number of presynaptic cells: {ara_starters[ara_starters['starter'] == False].shape[0]}"
-    )
-    print(
-        f"Number of starter cells: {ara_starters[ara_starters['starter'] == True].shape[0]}\n"
-    )
-
-    # Step 2: Identify barcodes found in more than 4 non-starter cells
-    if filter_by_presynaptics:
-        if False:
-            non_starter_barcodes_counts = (
-                ara_starters[ara_starters["starter"] == False]["all_barcodes"]
-                .explode()
-                .value_counts()
-            )
-            barcodes_to_keep = non_starter_barcodes_counts[
-                non_starter_barcodes_counts > 4
-            ].index.values
-            ara_starters = ara_starters[
-                ara_starters["all_barcodes"].apply(
-                    lambda x: any([b in barcodes_to_keep for b in x])
-                )
-            ]
-
-        # Step 1: Identify barcodes found in more than 4 non-starter cells
-        non_starter_barcodes_counts = (
-            ara_starters[ara_starters["starter"] == False]["all_barcodes"]
-            .explode()
-            .value_counts()
-        )
-        barcodes_to_keep = non_starter_barcodes_counts[
-            non_starter_barcodes_counts > 4
-        ].index.values
-
-        # Step 2: Remove barcodes that aren't present in 5 or more non-starter cells from all_barcodes
-        def filter_barcodes_and_update_counts(row):
-            filtered_barcodes = []
-            filtered_counts = []
-            total_removed = 0
-
-            for barcode, count in zip(row["all_barcodes"], row["n_spots_per_barcode"]):
-                if barcode in barcodes_to_keep:
-                    filtered_barcodes.append(barcode)
-                    filtered_counts.append(count)
-                else:
-                    total_removed += count
-
-            row["all_barcodes"] = filtered_barcodes
-            row["n_spots_per_barcode"] = filtered_counts
-            row["total_n_spots"] -= total_removed
-
-            return row
-
-        ara_starters = ara_starters.apply(filter_barcodes_and_update_counts, axis=1)
-        ara_starters = ara_starters[ara_starters["total_n_spots"] > 0]
-        print("After presynaptic cell count filtering:")
-        print(f"Number of barcoded cells: {ara_starters.shape[0]}")
-        print(
-            f"Number of barcodes (unique among all cells): "
-            f"{ara_starters.explode('all_barcodes')['all_barcodes'].nunique()}"
-        )
-        print(
-            f"Number of presynaptic cells: {ara_starters[ara_starters['starter'] == False].shape[0]}"
-        )
-        print(
-            f"Number of starter cells: {ara_starters[ara_starters['starter'] == True].shape[0]}\n"
-        )
-
-    # Step 2: Add cell type annotations and cell correlations to cluster centroids
-    adata = sc.read_h5ad(processed_path.parent / "analysis" / "adata_annotated.h5ad")
-    ara_starters["Annotated_clusters"] = adata.obs.Annotated_clusters
-    ara_starters["gene_total_counts"] = adata.obs.total_counts
-    ara_starters["n_genes"] = adata.obs.n_genes_by_counts
-    correlation_cells = pd.read_csv(
-        "/nemo/project/proj-znamenp-barseq/processed/becalia_rabies_barseq/BRAC8498.3e/analysis/correlation_scores_all_barcoded.csv",
-        index_col=0,
-    )
-    ara_starters = ara_starters.join(correlation_cells)
-
-    if use_centroid_cluster_mapping:
-        # Step 3: See how many cells would be left if we immediately filter to cells that already have an annotated cluster
-        ara_over25_genes = ara_starters.dropna(subset=["Annotated_clusters"])
-        print("After annotated cluster filtering:")
-        print(f"Number of barcoded cells: {ara_over25_genes.shape[0]}")
-        print(f"Number of barcodes: {ara_over25_genes['main_barcode'].nunique()}")
-        print(
-            f"Number of presynaptic cells: {ara_over25_genes[ara_over25_genes['starter'] == False].shape[0]}"
-        )
-        print(
-            f"Number of starter cells: {ara_over25_genes[ara_over25_genes['starter'] == True].shape[0]}\n"
-        )
-
-        # Filter to just cells with a high correlation to a cell type cluster centroid
-        ara_starters.dropna(subset=["best_cluster"], inplace=True)
-        ara_starters = ara_starters[ara_starters.best_cluster != "Zero_correlation"]
-        ara_starters = ara_starters[ara_starters.best_score > 0.2]
-        ara_starters["Clusters"] = ara_starters["Annotated_clusters"].fillna(
-            ara_starters["best_cluster"]
-        )
-        print("After cell type cluster centroid filtering:")
-        print(f"Number of barcoded cells: {ara_starters.shape[0]}")
-        print(
-            f"Number of barcodes (unique among all cells): "
-            f"{ara_starters.explode('all_barcodes')['all_barcodes'].nunique()}"
-        )
-        print(
-            f"Number of presynaptic cells: {ara_starters[ara_starters['starter'] == False].shape[0]}"
-        )
-        print(
-            f"Number of starter cells: {ara_starters[ara_starters['starter'] == True].shape[0]}\n"
-        )
-
-    else:
-        if filter_by_annotation:
-            ara_starters = ara_starters.dropna(subset=["Annotated_clusters"])
-            print("After annotated cluster filtering:")
-            print(f"Number of barcoded cells: {ara_starters.shape[0]}")
-            print(
-                f"Number of barcodes (unique among all cells): "
-                f"{ara_starters.explode('all_barcodes')['all_barcodes'].nunique()}"
-            )
-            print(
-                f"Number of presynaptic cells: {ara_starters[ara_starters['starter'] == False].shape[0]}"
-            )
-            print(
-                f"Number of starter cells: {ara_starters[ara_starters['starter'] == True].shape[0]}\n"
-            )
+    ara_starters["was_in_wm"] = False
+    actually_moved = moved.query("moved==True").copy()
+    cell_moved = ara_starters.iloc[actually_moved.pts_index].index
+    ara_starters.loc[cell_moved, "was_in_wm"] = True
+    ara_starters.loc[
+        cell_moved, "area_acronym"
+    ] = actually_moved.new_area_acronym.values
+    ara_starters.loc[cell_moved, "area_id"] = actually_moved.new_area_id.values
 
     ara_starters["area_acronym_ancestor_rank1"] = ara_starters["area_acronym"].apply(
         get_ancestor_rank1
@@ -662,41 +489,82 @@ def load_cell_barcode_data(
     return ara_starters
 
 
-def plot_raw_area_by_area_connectivity(
-    ara_starters,
-    ax=None,
-):
-    # Filtering data
-    starters = ara_starters[ara_starters["starter"] == True]
-    non_starters = ara_starters[ara_starters["starter"] == False]
+def compute_connectivity_matrix(ara_starters, areas_of_interest):
+    # Filter to only include cells in areas of interest
+    ara_starters = ara_starters[
+        ara_starters["area_acronym_ancestor_rank1"].isin(areas_of_interest)
+    ]
 
-    # Creating the confusion matrix
-    confusion_matrix = pd.DataFrame(
-        0,
-        index=non_starters["area_acronym_ancestor_rank1"].unique(),
-        columns=starters["area_acronym_ancestor_rank1"].unique(),
+    # 1) Separate starters and presynaptic cells
+    df_starters = ara_starters[ara_starters["is_starter"]].copy()
+    df_presyn = ara_starters[ara_starters["is_starter"] == False].copy()
+
+    # Get all possible presynaptic areas (to ensure consistent column ordering later)
+    all_presyn_areas = df_presyn["area_acronym_ancestor_rank1"].unique()
+
+    def compute_input_fractions(starter_row):
+        """
+        For a single starter cell row, find all presynaptic cells sharing at least one barcode,
+        then compute the fraction of those presynaptic cells coming from each area.
+        """
+        starter_barcodes = starter_row["unique_barcodes"]
+
+        # Find presyn cells that share at least 1 barcode
+        # (intersection > 0 means they share at least one)
+        shared_presyn = df_presyn[
+            df_presyn["unique_barcodes"].apply(
+                lambda barcodes: len(starter_barcodes & barcodes) > 0
+            )
+        ]
+
+        if len(shared_presyn) == 0:
+            # No presynaptic cells share barcodes for this starter
+            # Return zeros for all presyn areas
+            fraction_by_area = pd.Series(
+                [0.0] * len(all_presyn_areas), index=all_presyn_areas
+            )
+            counts_by_area = pd.Series(
+                [0] * len(all_presyn_areas), index=all_presyn_areas
+            )
+        else:
+            # Group the shared presyn cells by their area, and compute fraction
+            counts_by_area = shared_presyn.groupby("area_acronym_ancestor_rank1").size()
+            counts_by_area = counts_by_area.reindex(all_presyn_areas, fill_value=0)
+            fraction_by_area = counts_by_area / counts_by_area.sum()
+
+        return fraction_by_area, counts_by_area
+
+    # 2) Apply the function to each starter cell to get a table of fractions
+    fractions_counts_dfs = df_starters.apply(compute_input_fractions, axis=1)
+    fractions_df = pd.DataFrame(
+        [t[0] for t in fractions_counts_dfs], index=df_starters.index
+    )
+    counts_df = pd.DataFrame(
+        [t[1] for t in fractions_counts_dfs], index=df_starters.index
     )
 
-    for _, starter_row in starters.iterrows():
-        main_barcode = starter_row["main_barcode"]
-        starter_area = starter_row["area_acronym_ancestor_rank1"]
-
-        linked_non_starters = non_starters[non_starters["main_barcode"] == main_barcode]
-        for _, non_starter_row in linked_non_starters.iterrows():
-            non_starter_area = non_starter_row["area_acronym_ancestor_rank1"]
-            confusion_matrix.loc[non_starter_area, starter_area] += 1
-
-    # Sort the confusion matrix by index and columns alphabetically
-    confusion_matrix = confusion_matrix.sort_index(axis=0).sort_index(axis=1)
-
-    # Remove rows and columns with all zeros
-    filtered_confusion_matrix = confusion_matrix.loc[
-        (confusion_matrix != 0).any(axis=1)
+    # 3) Add a column for where the starter cell itself is located
+    fractions_df["starter_location"] = df_starters["area_acronym_ancestor_rank1"].values
+    counts_df["starter_location"] = df_starters["area_acronym_ancestor_rank1"].values
+    # remove rows that sum to 0
+    fractions_df = fractions_df.loc[
+        fractions_df.select_dtypes(include="number").sum(axis=1) > 0
     ]
+
+    # Grouping by starter location, find the mean fraction of each presynaptic area
+    average_df = fractions_df.groupby("starter_location").mean().T
+    counts_df = counts_df.groupby("starter_location").sum().T
+
+    return ara_starters, average_df, counts_df, fractions_df
+
+
+def filter_matrix(matrix):
+    matrix = matrix.sort_index(axis=0).sort_index(axis=1)
+    # Remove rows and columns with all zeros
+    filtered_confusion_matrix = matrix.loc[(matrix != 0).any(axis=1)]
     filtered_confusion_matrix = filtered_confusion_matrix.loc[
         :, (filtered_confusion_matrix != 0).any(axis=0)
     ]
-
     # Define the labels to drop
     labels_to_drop = ["Unknown", "fiber tracts", "grey", "ECT"]
     filtered_confusion_matrix = filtered_confusion_matrix.drop(
@@ -754,23 +622,43 @@ def plot_raw_area_by_area_connectivity(
         axis=1,
         errors="ignore",
     )
-    # Plotting the fully normalized confusion matrix using seaborn heatmap
-    plt.figure(figsize=(20, 18), dpi=80)
 
-    mask_zeroes = True
-    if mask_zeroes:
-        # Define a mask to hide zero values
-        mask = filtered_confusion_matrix == 0
-    else:
+    return filtered_confusion_matrix
+
+
+def plot_area_by_area_connectivity(
+    average_df,
+    counts_df,
+    fractions_df,
+    input_fraction=False,
+    sum_fraction=False,
+    ax=None,
+):
+    if input_fraction:
+        # Sort the confusion matrix by index and columns alphabetically
+        filtered_confusion_matrix = filter_matrix(average_df)
+        counts_matrix = filter_matrix(counts_df)
+        # filtered_confusion_matrix = filter_matrix(counts_df)
+        if sum_fraction:
+            filtered_confusion_matrix = filter_matrix(counts_df)
+            filtered_confusion_matrix = (
+                filtered_confusion_matrix / filtered_confusion_matrix.sum(axis=0)
+            )
         # make a mask that hides nothing
         mask = pd.DataFrame(
             False,
             index=filtered_confusion_matrix.index,
             columns=filtered_confusion_matrix.columns,
         )
+        vmax = 0.3
+    else:
+        filtered_confusion_matrix = filter_matrix(counts_df)
+        # Define a mask to hide zero values
+        mask = filtered_confusion_matrix == 0
+        vmax = 500
 
-    # Plot the heatmap with zero values masked
-    ax = sns.heatmap(
+    # Plot the heatmap
+    sns.heatmap(
         filtered_confusion_matrix,
         cmap="magma_r",
         cbar=False,
@@ -780,24 +668,38 @@ def plot_raw_area_by_area_connectivity(
         linecolor="white",
         mask=mask,
         annot=False,
-        vmax=390,
+        vmax=vmax,
+        ax=ax,
     )
-    ax.xaxis.set_ticks_position("top")
-    ax.xaxis.set_label_position("top")
 
     # Annotate with appropriate color based on background
     for (i, j), val in np.ndenumerate(filtered_confusion_matrix):
-        if not mask.iloc[i, j]:
-            text_color = "white" if val > 300 else "black"
+        if input_fraction:
+            text_color = "white" if val > 0.2 else "black"
             ax.text(
                 j + 0.5,
                 i + 0.5,
-                f"{val}",
+                f"{val:.2f}" if input_fraction else f"{int(val)}",
                 ha="center",
                 va="center",
                 color=text_color,
                 fontsize=15,
             )
+        else:
+            text_color = "white" if val > 300 else "black"
+            if not mask.iloc[i, j]:
+                ax.text(
+                    j + 0.5,
+                    i + 0.5,
+                    f"{val:.2f}" if input_fraction else f"{int(val)}",
+                    ha="center",
+                    va="center",
+                    color=text_color,
+                    fontsize=15,
+                )
+
+    ax.xaxis.set_ticks_position("top")
+    ax.xaxis.set_label_position("top")
 
     # Highlight the diagonal with a black outline
     for i in range(filtered_confusion_matrix.shape[1]):
@@ -824,7 +726,8 @@ def plot_raw_area_by_area_connectivity(
         label.set_position((x, y - 0.025))
 
     # Add number of starter cells in each area per column on the bottom of the heatmap
-    starter_counts = starters["area_acronym_ancestor_rank1"].value_counts()
+    # starter_counts = starters["area_acronym_ancestor_rank1"].value_counts()
+    starter_counts = fractions_df.starter_location.value_counts()
     for i, area in enumerate(filtered_confusion_matrix.columns):
         # if area in starter_counts else put 0
         ax.text(
@@ -848,9 +751,11 @@ def plot_raw_area_by_area_connectivity(
     )
 
     # Add number of non-starter cells in each area per row on the right of the heatmap
-    non_starter_counts = filtered_confusion_matrix.sum(
-        axis=1
-    )  # non_starters['area_acronym_ancestor_rank1'].value_counts()
+    if not input_fraction:
+        non_starter_counts = filtered_confusion_matrix.sum(axis=1)
+    else:
+        non_starter_counts = counts_matrix.sum(axis=1)
+
     for i, area in enumerate(filtered_confusion_matrix.index):
         # if area in starter_counts else put 0
         ax.text(
@@ -874,51 +779,133 @@ def plot_raw_area_by_area_connectivity(
         rotation=270,
     )
 
-    plt.xlabel("Starter cell location", fontsize=20, labelpad=20)
-    plt.ylabel("Presynaptic cell location", fontsize=20, labelpad=20)
-    plt.xticks(fontsize=15)
-    plt.yticks(fontsize=15)
+    ax.set_xlabel("Starter cell location", fontsize=20, labelpad=20)
+    ax.set_ylabel("Presynaptic cell location", fontsize=20, labelpad=20)
+
+    # set y tick size
+    ax.tick_params(axis="y", labelsize=15)
+    # set x tick size
+    ax.tick_params(axis="x", labelsize=15)
 
 
-def make_minimal_df(ara_starters):
-    starters = ara_starters[ara_starters["starter"] == True]
-    non_starters = ara_starters[ara_starters["starter"] == False]
-    # make df which is only columns "main_barcode" and "area_acronym_ancestor_rank1",
-    # but rename "area_acronym_ancestor_rank1" to "starter_area"
-    starters = starters[["main_barcode", "area_acronym_ancestor_rank1"]]
-    starters = starters.rename(columns={"area_acronym_ancestor_rank1": "starter_area"})
-    non_starters = non_starters[["main_barcode", "area_acronym_ancestor_rank1"]]
-    non_starters = non_starters.rename(
-        columns={"area_acronym_ancestor_rank1": "presyn_area"}
+def make_minimal_df(
+    ara_starters,
+    starter_areas_to_keep=None,
+    starter_cell_types_to_keep=None,
+    presyn_areas_to_keep=None,
+    presyn_cell_types_to_keep=None,
+):
+    """
+    Filter the ARA starters DataFrame to only include the necessary columns and rows.
+
+    Args:
+        ara_starters (pd.DataFrame): DataFrame of ARA starters data
+
+    Returns:
+        starters (pd.DataFrame): DataFrame of starter cells with columns:
+            - barcode
+            - starter_area
+            - starter_cell_type
+        non_starters (pd.DataFrame): DataFrame of non-starter cells with columns:
+            - barcode
+            - presyn_area
+            - presyn_cell_type
+    """
+
+    # Separate out starter vs. non-starter rows
+    starters = ara_starters[ara_starters["is_starter"] == True].copy()
+    non_starters = ara_starters[ara_starters["is_starter"] == False].copy()
+
+    starters = starters[
+        ["unique_barcodes", "area_acronym_ancestor_rank1", "Annotated_clusters"]
+    ]
+    starters = starters.rename(
+        columns={
+            "unique_barcodes": "barcode",
+            "area_acronym_ancestor_rank1": "starter_area",
+            "Annotated_clusters": "starter_cell_type",
+        }
     )
-    starter_areas_to_keep = ["VISp5", "VISp4", "VISp2/3", "VISp6a", "VISp1", "VISp6b"]
-    starters = starters[starters["starter_area"].isin(starter_areas_to_keep)]
-    starters_barcodes = starters.main_barcode.unique()
-    non_starters = non_starters[non_starters["main_barcode"].isin(starters_barcodes)]
+
+    non_starters = non_starters[
+        ["unique_barcodes", "area_acronym_ancestor_rank1", "Annotated_clusters"]
+    ]
+    non_starters = non_starters.rename(
+        columns={
+            "unique_barcodes": "barcode",
+            "area_acronym_ancestor_rank1": "presyn_area",
+            "Annotated_clusters": "presyn_cell_type",
+        }
+    )
+
+    # Keep only certain starter-area rows
+
+    if starter_areas_to_keep:
+        starters = starters[starters["starter_area"].isin(starter_areas_to_keep)]
+    if starter_cell_types_to_keep:
+        starters = starters[
+            starters["starter_cell_type"].isin(starter_cell_types_to_keep)
+        ]
+    if presyn_areas_to_keep:
+        non_starters = non_starters[
+            non_starters["presyn_area"].isin(presyn_areas_to_keep)
+        ]
+    if presyn_cell_types_to_keep:
+        non_starters = non_starters[
+            non_starters["presyn_cell_type"].isin(presyn_cell_types_to_keep)
+        ]
+
+    # Filter to only include cells with single starter barcodes
+    starters = starters[starters["barcode"].notna()]
+    non_starters = non_starters[non_starters["barcode"].notna()]
 
     return starters, non_starters
 
 
-def compute_observed_confusion_matrix(starters, non_starters):
+def compute_observed_connectivity_matrix(starters, non_starters):
     """
-    Vectorized computation of the *observed* confusion matrix.
+    Compute the observed confusion matrix using set-based barcode matching.
 
-    We merge on 'main_barcode' (starters <-> non_starters),
-    group by (presyn_area, starter_area) to count connections,
-    and pivot into a DataFrame.
+    Args:
+        starters (pd.DataFrame): DataFrame with columns ['barcode' (set), 'starter_area']
+        non_starters (pd.DataFrame): DataFrame with columns ['barcode' (set), 'presyn_area']
+
+    Returns:
+        confusion_df (pd.DataFrame): Confusion matrix of counts grouped by (presyn_area, starter_area)
     """
-    merged = pd.merge(
-        non_starters[["presyn_area", "main_barcode"]],
-        starters[["starter_area", "main_barcode"]],
-        on="main_barcode",
-        how="inner",
-    )
-    grouped = (
-        merged.groupby(["presyn_area", "starter_area"]).size().reset_index(name="count")
-    )
+
+    # Build list of tuples: (presyn_area, starter_area) for every matching barcode set
+    pair_counts = []
+
+    for _, starter_row in starters.iterrows():
+        starter_barcodes = starter_row["barcode"]
+        starter_area = starter_row["starter_area"]
+        for _, presyn_row in non_starters.iterrows():
+            non_barcodes = presyn_row["barcode"]
+            presyn_area = presyn_row["presyn_area"]
+
+            if non_barcodes & starter_barcodes:  # non-empty intersection
+                pair_counts.append(
+                    {
+                        "presyn_area": presyn_area,
+                        "starter_area": starter_area,
+                        "count": 1,
+                    }
+                )
+
+    pair_counts_df = pd.DataFrame(pair_counts)
+    grouped = pair_counts_df.groupby(
+        ["presyn_area", "starter_area"], as_index=False
+    ).sum()
+
+    # Pivot to confusion matrix format
     confusion_df = grouped.pivot_table(
-        index="presyn_area", columns="starter_area", values="count", fill_value=0
+        index="presyn_area",
+        columns="starter_area",
+        values="count",
+        fill_value=0,
     )
+
     return confusion_df
 
 
@@ -926,58 +913,49 @@ def shuffle_cm_chunk(
     non_starters_arr, starters_arr, row_index, col_index, n_permutations, seed_offset=0
 ):
     """
-    Perform *n_permutations* random shuffles in one process.
-    Return a list of confusion-matrix arrays, each reindexed
-    to match (row_index, col_index).
-
-    Parameters
-    ----------
-    non_starters_arr : dict with keys {'presyn_area', 'barcodes'}
-    starters_arr : dict with keys {'starter_area', 'barcodes'}
-    row_index : pd.Index for the final matrix rows
-    col_index : pd.Index for the final matrix columns
-    n_permutations : int
-    seed_offset : int, optional random seed offset
+    Perform n_permutations of barcode shuffling and compute null confusion matrices.
+    Matching is done using set intersections.
     """
     np.random.seed(seed_offset)
     results = []
 
     for _ in range(n_permutations):
-        # Shuffle
-        shuffled_barcodes = np.random.permutation(non_starters_arr["barcodes"])
+        # Shuffle starter labels independently of barcodes
+        shuffled_starter_areas = np.random.permutation(starters_arr["starter_area"])
 
-        # Build a merged DataFrame with vectorized approach
-        ns_df = pd.DataFrame(
-            {
-                "presyn_area": non_starters_arr["presyn_area"],
-                "main_barcode": shuffled_barcodes,
-            }
-        )
-        st_df = pd.DataFrame(
-            {
-                "starter_area": starters_arr["starter_area"],
-                "main_barcode": starters_arr["barcodes"],
-            }
-        )
+        # Prepare local confusion matrix counts
+        pair_counts = []
 
-        merged = pd.merge(ns_df, st_df, on="main_barcode", how="inner")
+        # Compare each non-starter cell to each shuffled starter cell
+        for ns_area, ns_barcodes in zip(
+            non_starters_arr["presyn_area"], non_starters_arr["barcodes"]
+        ):
+            for st_area, st_barcodes in zip(
+                shuffled_starter_areas, starters_arr["barcodes"]
+            ):
+                if ns_barcodes & st_barcodes:  # non-empty intersection
+                    pair_counts.append(
+                        {"presyn_area": ns_area, "starter_area": st_area, "count": 1}
+                    )
 
-        # groupby -> pivot
-        grouped = (
-            merged.groupby(["presyn_area", "starter_area"])
-            .size()
-            .reset_index(name="count")
-        )
+        # Convert pair_counts to a DataFrame
+        pair_counts_df = pd.DataFrame(pair_counts)
+
+        # Group by (presyn_area, starter_area) and sum the counts
+        grouped = pair_counts_df.groupby(
+            ["presyn_area", "starter_area"], as_index=False
+        ).sum()
+
+        # Pivot to confusion matrix shape
         shuffle_cm = grouped.pivot_table(
             index="presyn_area", columns="starter_area", values="count", fill_value=0
         )
 
-        # Reindex to match the final shape (row_index, col_index)
+        # Reindex to match full matrix shape
         shuffle_cm = shuffle_cm.reindex(
             index=row_index, columns=col_index, fill_value=0
         )
 
-        # Append the numpy array version
         results.append(shuffle_cm.values)
 
     return results
@@ -985,48 +963,43 @@ def shuffle_cm_chunk(
 
 def main_parallel_shuffling(starters, non_starters, n_permutations=10000, n_jobs=8):
     """
-    Orchestrates the parallel shuffling procedure:
-    1) Compute observed confusion matrix (vectorized).
-    2) Prepare minimal data structures for pickling.
-    3) Chunk the total permutations into fewer tasks.
-    4) Parallelize with ProcessPoolExecutor.
-    5) Return list of all null matrices (arrays).
+    Parallel shuffling using set-based barcode matching logic.
     """
 
-    # Compute observed confusion matrix
-    observed_confusion_matrix = compute_observed_confusion_matrix(
+    # Compute observed matrix (set-aware)
+    observed_confusion_matrix = compute_observed_connectivity_matrix(
         starters, non_starters
     )
 
-    # Save row/col indices for consistent reindexing
+    # Indexes for shape
     row_index = observed_confusion_matrix.index
     col_index = observed_confusion_matrix.columns
 
-    # Prepare minimal data for pickling
+    # Prepare data for pickling — keep sets
     non_starters_arr = {
         "presyn_area": non_starters["presyn_area"].values,
-        "barcodes": non_starters["main_barcode"].values,
+        "barcodes": non_starters["barcode"]
+        .apply(lambda x: set(x) if not isinstance(x, set) else x)
+        .values,
     }
     starters_arr = {
         "starter_area": starters["starter_area"].values,
-        "barcodes": starters["main_barcode"].values,
+        "barcodes": starters["barcode"]
+        .apply(lambda x: set(x) if not isinstance(x, set) else x)
+        .values,
     }
 
-    # Chunk permutations into fewer tasks
+    # Set up tasks
     all_null_matrices = []
     chunk_size = max(n_permutations // n_jobs, 1)
     remainder = n_permutations % n_jobs
-    tasks = []
-    for i in range(n_jobs):
-        this_chunk = chunk_size + (1 if i < remainder else 0)
-        tasks.append(this_chunk)
+    tasks = [chunk_size + (1 if i < remainder else 0) for i in range(n_jobs)]
 
-    # Parallel loop
+    # Parallel execution
     with ProcessPoolExecutor(max_workers=n_jobs) as executor:
         futures = []
         seed_offset = 42
         for chunk in tasks:
-            # Each task does `chunk` permutations
             if chunk > 0:
                 future = executor.submit(
                     shuffle_cm_chunk,
@@ -1040,19 +1013,16 @@ def main_parallel_shuffling(starters, non_starters, n_permutations=10000, n_jobs
                 futures.append(future)
                 seed_offset += 1
 
-        # Wrap as_completed in tqdm for progress
         for f in tqdm(as_completed(futures), total=len(futures), desc="Shuffling"):
-            chunk_result = f.result()  # list of matrix arrays
-            all_null_matrices.extend(chunk_result)
+            all_null_matrices.extend(f.result())
 
-    # Return results
     print(f"Done! Generated {len(all_null_matrices)} shuffled matrices.")
     return observed_confusion_matrix, all_null_matrices
 
 
-def run_connectivity_parallel_shuffling(starters, non_starters):
-    n_permutations = 100000
-    n_jobs = 250
+def run_connectivity_parallel_shuffling(
+    starters, non_starters, n_permutations=100000, n_jobs=250
+):
     observed_cm, all_nulls = main_parallel_shuffling(
         starters, non_starters, n_permutations=n_permutations, n_jobs=n_jobs
     )
