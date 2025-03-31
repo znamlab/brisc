@@ -1252,6 +1252,65 @@ def compute_empirical_pvalues(observed_cm, null_array, two_sided=True):
     return pval_df
 
 
+def benjamini_hochberg(pval_df, alpha=0.05):
+    """
+    Implement Benjamini–Hochberg (BH) FDR correction for a DataFrame of p-values.
+
+    Parameters
+    ----------
+    pval_df : pd.DataFrame
+        DataFrame of raw p-values.
+    alpha : float
+        Desired FDR level (commonly 0.05).
+
+    Returns
+    -------
+    rejected_df : pd.DataFrame (bool)
+        A boolean DataFrame indicating which null hypotheses are rejected
+        at the desired FDR level (True = significant).
+    pval_corrected_df : pd.DataFrame (float)
+        The BH-adjusted p-values in the same shape as pval_df.
+    """
+
+    # Flatten all p-values into a 1D array (excluding NaNs)
+    pvals = pval_df.values.flatten()
+    not_nan_mask = ~np.isnan(pvals)
+    pvals_nonan = pvals[not_nan_mask]
+    m = pvals_nonan.size
+
+    # Sort the p-values in ascending order; keep track of their original indices
+    sort_idx = np.argsort(pvals_nonan)
+    pvals_sorted = pvals_nonan[sort_idx]
+    pvals_bh_sorted = np.empty_like(pvals_sorted)
+
+    # BH procedure:
+    # pBH(i) = p_sorted(i) * (m / i)
+    factor = m / np.arange(1, m + 1)
+    pvals_bh_sorted = pvals_sorted * factor
+
+    # Now enforce monotonicity from largest to smallest
+    for i in range(m - 2, -1, -1):
+        pvals_bh_sorted[i] = min(pvals_bh_sorted[i], pvals_bh_sorted[i + 1])
+
+    # Create an array for the BH-corrected p-values in their *original* order
+    pvals_bh = np.full_like(pvals, np.nan, dtype=float)
+    pvals_bh_idx = sort_idx
+    pvals_bh[not_nan_mask][pvals_bh_idx] = pvals_bh_sorted
+
+    # Determine significance:  pBH(i) <= alpha
+    rejected = pvals_bh <= alpha
+
+    # Reshape everything back into the original DataFrame shape
+    pval_corrected_df = pd.DataFrame(
+        pvals_bh.reshape(pval_df.shape), index=pval_df.index, columns=pval_df.columns
+    )
+    rejected_df = pd.DataFrame(
+        rejected.reshape(pval_df.shape), index=pval_df.index, columns=pval_df.columns
+    )
+
+    return rejected_df, pval_corrected_df
+
+
 def plot_log_ratio_matrix(subset_observed_cm, subset_null_array):
     pval_df = compute_empirical_pvalues(
         subset_observed_cm, subset_null_array, two_sided=True
