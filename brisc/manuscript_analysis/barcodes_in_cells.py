@@ -115,89 +115,9 @@ def plot_presyn_per_barcode(
     )
     despine(ax)
 
-    return ax
 
-
-def plot_starters_per_barcode(
-    starters_per_barcode,
-    ax=None,
-    label_fontsize=12,
-    tick_fontsize=12,
-    padding=200,
-):
-    ax.hist(
-        starters_per_barcode,
-        bins=np.arange(0, starters_per_barcode.max() + 2, 1) - 0.5,
-        histtype="stepfilled",
-        edgecolor="black",
-        color="lightblue",
-        alpha=0.8,
-    )
-
-    bin_edges = np.arange(0, starters_per_barcode.max() + 2, 1) - 0.5
-    unfiltered_values, _ = np.histogram(starters_per_barcode, bins=bin_edges)
-
-    for i, val_unfiltered in enumerate(unfiltered_values):
-        y_offset = val_unfiltered + padding
-        ax.text(
-            i,
-            y_offset + 1,
-            str(val_unfiltered),
-            ha="center",
-            fontsize=label_fontsize,
-            color="black",
-            alpha=0.8,
-        )
-
-    ax.set_ylabel(
-        "Number of barcodes",
-        fontsize=label_fontsize,
-    )
-    ax.set_xlabel(
-        "Starter cells per barcode",
-        fontsize=label_fontsize,
-    )
-    ax.set_xlim(-0.5, 11.5)
-    ax.set_xticks(np.arange(0, 12, 1))
-    ax.tick_params(
-        axis="both",
-        which="major",
-        labelsize=tick_fontsize,
-    )
-
-
-def find_singleton_bcs(cells):
-    """
-    Find singleton barcodes that appear exactly once across all starter cells
-    and defines 'unique_barcodes' for all cells that is the intersection of its
-    barcodes with singletons
-
-    Args:
-        cells (pd.DataFrame): DataFrame of cells
-
-    Returns:
-        cells (pd.DataFrame): DataFrame of cells with 'unique_barcodes' column
-    """
-    starter_cells = cells[cells.is_starter == True]
-
-    # Identify 'singleton' barcodes among starters
-    all_starter_barcodes = []
-    for bc_list in starter_cells["all_barcodes"]:
-        all_starter_barcodes.extend(bc_list)
-
-    barcode_counts = pd.Series(all_starter_barcodes).value_counts()
-    singletons = set(barcode_counts.index[barcode_counts == 1])
-
-    # For each cell, define 'unique_barcodes' = intersection of its barcodes with singletons
-    cells["unique_barcodes"] = cells["all_barcodes"].apply(
-        lambda x: singletons.intersection(x)
-    )
-
-    return cells
-
-
-def load_double_barcode_data(
-    data_path,
+def analyze_multibarcoded_starters(
+    cells_df,
 ):
     """
     Load data for double barcodes analysis
@@ -214,48 +134,33 @@ def load_double_barcode_data(
         - n_presyn_with_barcode2 (int): Number of presynaptic cells with barcode2
         - n_presyn_with_both (int): Number of presynaptic cells with both barcodes
     """
-    cells = pd.read_pickle(f"{data_path}/cell_barcode_df.pkl")
-    # Only keep rows that actually have barcodes
-    cells = cells.dropna(subset=["all_barcodes"])
-
-    cells = find_singleton_bcs(cells)
-
+    # For each cell, define 'unique_barcodes' = intersection of its barcodes with singletons
     # Among starter cells, pick out those whose unique_barcodes has length == 2
-    double_barcoded_starters = cells[
-        (cells["is_starter"] == True) & (cells["unique_barcodes"].apply(len) == 2)
+    double_barcoded_starters = cells_df[
+        (cells_df["is_starter"] == True) & (cells_df["unique_barcodes"].apply(len) > 1)
     ].copy()
-
-    double_barcoded_starters["all_barcodes"] = double_barcoded_starters[
-        "unique_barcodes"
-    ].apply(list)
-    presyn_cells = cells[cells["is_starter"] == False]
-    presyn_exploded = presyn_cells[["cell_id", "all_barcodes"]].explode("all_barcodes")
-
+    presyn_cells = cells_df[cells_df["is_starter"] == False]
     # For each double-barcoded starter, count how many presyn cells have bc1, bc2, or both
     results = []
     for i, row in double_barcoded_starters.iterrows():
         starter_id = row["cell_id"]
-        barcodes = row["all_barcodes"]
-        b1, b2 = barcodes[0], barcodes[1]
-
-        presyn_with_b1 = set(
-            presyn_exploded.loc[presyn_exploded["all_barcodes"] == b1, "cell_id"]
-        )
-        presyn_with_b2 = set(
-            presyn_exploded.loc[presyn_exploded["all_barcodes"] == b2, "cell_id"]
-        )
-
-        n_presyn_b1 = len(presyn_with_b1)
-        n_presyn_b2 = len(presyn_with_b2)
-        n_presyn_both = len(presyn_with_b1.intersection(presyn_with_b2))
+        barcodes = row["unique_barcodes"]
+        n_presyn_per_barcode = [ presyn_cells["unique_barcodes"].apply(
+                lambda x: len(x.intersection(barcodes)) == 1 and barcode in x
+            ).sum() for barcode in barcodes]
+        n_presyn = presyn_cells["unique_barcodes"].apply(
+            lambda x: len(x.intersection(barcodes)) > 0
+        ).sum()
+        barcode_counts = presyn_cells["unique_barcodes"].apply(
+            lambda x: len(x.intersection(barcodes))
+        ).value_counts().values
         results.append(
             {
                 "starter_cell_id": starter_id,
-                "barcode1": b1,
-                "barcode2": b2,
-                "n_presyn_with_barcode1": n_presyn_b1,
-                "n_presyn_with_barcode2": n_presyn_b2,
-                "n_presyn_with_both": n_presyn_both,
+                "barcodes": barcodes,
+                "n_presyn_per_barcode": n_presyn_per_barcode,
+                "barcode_counts": barcode_counts,
+                "n_presyn": n_presyn
             }
         )
     result_df = pd.DataFrame(results)
@@ -263,14 +168,44 @@ def load_double_barcode_data(
     return result_df
 
 
-def plot_double_barcode_barstack(
-    result_df,
-    ax_stack=None,
-    ax_violin=None,
+def find_singleton_bcs(cells_df):
+    """
+    Find singleton barcodes that appear exactly once across all starter cells
+    and defines 'unique_barcodes' for all cells that is the intersection of its
+    barcodes with singletons
+
+    Args:
+        cells (pd.DataFrame): DataFrame of cells
+
+    Returns:
+        cells (pd.DataFrame): DataFrame of cells with 'unique_barcodes' column
+        
+    """
+# Identify 'singleton' barcodes among starters
+    starter_barcodes_counts = (
+        cells_df[cells_df["is_starter"] == True]["all_barcodes"]
+        .explode()
+        .value_counts()
+    )
+    # Identify barcodes that are unique to a single starter cell
+    singletons = set(starter_barcodes_counts[
+        starter_barcodes_counts == 1
+    ].index)
+    # For each cell, define 'unique_barcodes' = intersection of its barcodes with singletons
+    cells_df["unique_barcodes"] = cells_df["all_barcodes"].apply(
+        lambda x: singletons.intersection(x)
+    )
+
+    return cells_df
+
+
+def plot_multibarcoded_starters(
+    multibarcoded_starters,
+    ax=None,
     label_fontsize=12,
     tick_fontsize=12,
     barcode_proportion=True,
-    swarmplot_dotsize=2,
+    legend_fontsize=8
 ):
     """
     Plot a barstack and violin plot of the number of presynaptic cells with each barcode
@@ -286,130 +221,83 @@ def plot_double_barcode_barstack(
             - n_presyn_with_barcode2 (int): Number of presynaptic cells with barcode2
             - n_presyn_with_both (int): Number of presynaptic cells with both barcodes
     """
-
-    # Create columns for "barcode1 only", "both", "barcode2 only"
-    result_df["b1_only"] = (
-        result_df["n_presyn_with_barcode1"] - result_df["n_presyn_with_both"]
+    max_bc = multibarcoded_starters["n_presyn_per_barcode"].apply(len).max().astype(int)
+    multibarcoded_starters["n_barcodes"] = multibarcoded_starters["barcodes"].apply(len)
+    multibarcoded_starters["n_presyn_per_barcode"] = multibarcoded_starters["n_presyn_per_barcode"].apply(
+        lambda x: sorted(x, reverse=True)
     )
-    result_df["b2_only"] = (
-        result_df["n_presyn_with_barcode2"] - result_df["n_presyn_with_both"]
+    multibarcoded_starters["top_barcode_prop"] = multibarcoded_starters.apply(
+        lambda x: x["n_presyn_per_barcode"][0] / x["n_presyn"],
+        axis=1,
     )
-    result_df["both"] = result_df["n_presyn_with_both"]
-
-    # Compute total presynaptic cells and sort
-    result_df["total_presyn"] = (
-        result_df["b1_only"] + result_df["both"] + result_df["b2_only"]
-    )
-    result_df_sorted = result_df.sort_values(
-        by="total_presyn", ascending=False
-    ).reset_index(drop=True)
-
-    # Compute fraction of the dominant barcode
-    union_count = (
-        result_df_sorted["n_presyn_with_barcode1"]
-        + result_df_sorted["n_presyn_with_barcode2"]
-        - result_df_sorted["n_presyn_with_both"]
-    ).replace(0, np.nan)
-    dominant_count = np.maximum(
-        result_df_sorted["n_presyn_with_barcode1"],
-        result_df_sorted["n_presyn_with_barcode2"],
-    )
-
-    result_df_sorted["frac_dominant"] = (dominant_count / union_count).replace(
-        [np.inf, -np.inf], np.nan
-    )
-
-    # Compute the proportion of presynaptic cells that have both barcodes
-    result_df_sorted["both_prop"] = (
-        result_df_sorted["both"] / result_df_sorted["total_presyn"]
-    )
-
-    # Sort first by largest "both_prop", then by largest "frac_dominant"
-    result_df_sorted = result_df_sorted.sort_values(
-        by=["both_prop", "frac_dominant"], ascending=False
-    ).reset_index(drop=True)
-
-    b1_only = result_df_sorted["b1_only"]
-    b2_only = result_df_sorted["b2_only"]
-    both = result_df_sorted["both"]
-
-    # If barcode_proportion is True, convert counts to proportions
     if barcode_proportion:
-        b1_only = b1_only / result_df_sorted["total_presyn"]
-        b2_only = b2_only / result_df_sorted["total_presyn"]
-        both = both / result_df_sorted["total_presyn"]
-
-    b_most = np.maximum(b1_only, b2_only)
-    b_least = np.minimum(b1_only, b2_only)
-
-    x = range(len(result_df_sorted))
-
-    # Bottom segment: most abundant
-    ax_stack.bar(x, b_most, label="Most Abundant Barcode", color="lightskyblue")
-
-    # Middle: both
-    ax_stack.bar(x, both, bottom=b_most, label="Both", color="red")
-
-    # Top: least abundant
-    ax_stack.bar(
-        x,
-        b_least,
-        bottom=b_most + both,
-        label="Least Abundant Barcode",
-        color="lightgrey",  # "#b2df8a",
+        multibarcoded_starters = multibarcoded_starters.sort_values(["top_barcode_prop",], ascending=False)
+    else:
+        multibarcoded_starters = multibarcoded_starters.sort_values(["n_presyn",], ascending=False)
+    # pad barcode_counts to max_bc+1
+    barcode_counts = np.stack(
+        multibarcoded_starters["barcode_counts"].apply(
+            lambda x: np.append(x, [0,] * (max_bc - len(x) + 1))
+        ).values
+    )
+    n_presyn_per_barcode = np.stack(
+        multibarcoded_starters["n_presyn_per_barcode"].apply(
+            lambda x: np.append(x, [0,] * (max_bc - len(x)))
+        ).values
     )
 
-    # ax_stack.set_xticks([])
-    ax_stack.set_ylabel(
-        "Fraction of Presynaptic Cells",
+    bar_data = np.hstack([n_presyn_per_barcode, barcode_counts[:, 2:]])
+    if barcode_proportion:
+        bar_data /= np.sum(bar_data, axis=1)[:, None]
+    bottom = 0
+    colors = [
+        "lightskyblue",
+        "dodgerblue",
+        "royalblue",
+        "darkblue",
+        "red",
+        "orange",
+        "orangered",
+    ]
+    labels = [
+        "Barcode 1",
+        "Barcode 2",
+        "Barcode 3",
+        "Barcode 4",
+        "Any 2",
+        "Any 3",
+        "Any 4",
+    ]
+    for i, color, label in zip(range(bar_data.shape[1]), colors, labels):
+        ax.bar(
+            np.arange(bar_data.shape[0]) + 1,
+            bar_data[:, i],
+            bottom=bottom,
+            color=color,
+            label=label,
+            width=1,
+        )
+        bottom += bar_data[:, i]        
+    if barcode_proportion:
+        ax.set_ylabel("Proportion of presynaptic cells", fontsize=label_fontsize)
+    else:
+        ax.set_ylabel("Number of presynaptic cells", fontsize=label_fontsize)
+    ax.set_xlabel(
+        "Starter cell",
         fontsize=label_fontsize,
     )
-    ax_stack.set_xlabel(
-        "Starter Cell",
-        fontsize=label_fontsize,
-    )
-    ax_stack.legend(
-        fontsize=tick_fontsize,
-        bbox_to_anchor=(0.8, -0.2),
+    ax.legend(
+        fontsize=legend_fontsize,
+        loc="upper left",
         handlelength=1,
+        frameon=False,
+        bbox_to_anchor=[0.6, 1.1],
     )
-    ax_stack.tick_params(
+    ax.tick_params(
         axis="both",
         which="major",
         labelsize=tick_fontsize,
     )
+    ax.set_xticks([1, bar_data.shape[0]])
+    despine(ax)
 
-    vals = result_df_sorted["frac_dominant"].dropna()
-    parts = ax_violin.violinplot(
-        [vals],
-        positions=[0],
-        widths=0.6,
-        showmeans=False,
-        showextrema=False,
-        showmedians=False,
-    )
-
-    # Adjust alpha on the violin body
-    for pc in parts["bodies"]:
-        pc.set_alpha(0.3)
-        pc.set_facecolor("gray")
-
-    # Swarm plot with small jitter
-    x_jitter = np.random.uniform(-0.05, 0.05, size=len(vals))
-    ax_violin.scatter(
-        x_jitter, vals, marker="o", alpha=0.8, edgecolors="black", s=swarmplot_dotsize
-    )
-
-    ax_violin.set_xticks([0])
-    ax_violin.set_xticklabels([""])
-    ax_violin.set_xlim(-0.5, 0.5)
-    ax_violin.set_ylim(0.5, 1.05)
-    ax_violin.set_ylabel(
-        "Fraction of presyn cells\nwith the most abundant barcode",
-        fontsize=label_fontsize,
-    )
-    ax_violin.tick_params(
-        axis="both",
-        which="major",
-        labelsize=tick_fontsize,
-    )

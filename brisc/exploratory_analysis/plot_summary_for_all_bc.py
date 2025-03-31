@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import ccf_streamlines.projection as ccfproj
-import bg_atlasapi as bga
+import brainglobe_atlasapi as bga
 import flexiznam as flz
 
 from cricksaw_analysis import atlas_utils
@@ -180,34 +180,37 @@ def plot_background(
     cor_ax.set_ylim(500, -10)
 
 
+def compute_flatmap_coors(df):
+    flat_coors = df[["ara_x", "ara_y", "ara_z"]].values
+    bad = np.any(flat_coors < 0, axis=1)
+    # also remove NaN
+    bad = np.logical_or(bad, np.any(np.isnan(flat_coors), axis=1))
+    if np.any(bad):
+        print(f"Found {np.sum(bad)} bad coordinates")
+        flat_coors[bad, :] = np.nan
+    ccf_coord_proj = get_projector()
+    flat_coors[~bad, :] = ccf_coord_proj.project_coordinates(
+        flat_coors[~bad, :] * 1000,
+        drop_voxels_outside_view_streamlines=False,
+        view_space_for_other_hemisphere=ARA_PROJECTION,
+        hemisphere="right",
+    )
+    return flat_coors  
+
+
 def plot_spots(cor_ax, flat_ax, df, **kwargs):
     midline = get_midline()
-
     cor_coors = np.vstack(
         [
             df["ara_z"].values * 1000 / ATLAS_SIZE - midline,
             df["ara_y"].values * 1000 / ATLAS_SIZE,
         ]
-    )
+    )    
     if cor_ax is not None:
-        cor_ax.scatter(*cor_coors, **kwargs)
-    flat_coords = df[["ara_x", "ara_y", "ara_z"]].values
-    bad = np.any(flat_coords < 0, axis=1)
-    # also remove NaN
-    bad = np.logical_or(bad, np.any(np.isnan(flat_coords), axis=1))
-    if np.any(bad):
-        print(f"Found {np.sum(bad)} bad coordinates")
-        flat_coords = flat_coords[~bad]
-    ccf_coord_proj = get_projector()
-    flat_coords = ccf_coord_proj.project_coordinates(
-        flat_coords * 1000,
-        drop_voxels_outside_view_streamlines=False,
-        view_space_for_other_hemisphere=ARA_PROJECTION,
-        hemisphere="right",
-    )
-
-    flat_ax.scatter(flat_coords[:, 0], flat_coords[:, 1], **kwargs)
-    return cor_coors, flat_coords
+        cor_ax.scatter(*cor_coors, **kwargs)    
+    flat_coors = compute_flatmap_coors(df)        
+    flat_ax.scatter(flat_coors[:, 0], flat_coors[:, 1], **kwargs)
+    return cor_coors, flat_coors
 
 
 def plot_starter_raw(starter, bc, fig, rnd_axes, spot_axis=None, mcherry_axis=None):

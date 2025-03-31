@@ -2,6 +2,251 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.cm as cm
 import numpy as np
+import brainglobe_atlasapi as bga
+import pandas as pd
+import seaborn as sns
+from cricksaw_analysis import atlas_utils
+
+
+def prepare_area_labels(
+    xpos=860,
+    structures=[ "root", "CTX", "MB", "DG", "DG-mo", "DG-sg", "SCdg", "SCdw", "SCig", "SCiw", "SCop", "SCsg", "SCzo", "PAG", "MRN", "TH", "RN",],
+    atlas_size=10
+):
+    atlas = bga.bg_atlas.BrainGlobeAtlas(f"allen_mouse_{atlas_size}um")    
+    bin_image = atlas.get_structure_mask(atlas.structures["root"]["id"])[xpos, :, :]
+    for i, structure in enumerate(structures):
+        mask = atlas.get_structure_mask(atlas.structures[structure]["id"])[xpos, :, :]
+        bin_image[mask > 0] = i + 1
+    return bin_image
+
+
+def plot_all_rv_cells(
+    cells_df,
+    ax_coronal,
+    ax_flatmap,
+    bin_image,
+    legend_fontsize=6,
+    atlas_size=10,
+    area_colors={
+        'AUDp': "limegreen", 
+        'AUDpo': "mediumseagreen", 
+        'AUDv': "springgreen", 
+        'RSP': "darkorchid", 
+        'TEa': "forestgreen", 
+        'TH': "orangered", 
+        'VISal': "aquamarine", 
+        'VISl': "darkturquoise", 
+        'VISli': "mediumaquamarine",
+        'VISp': "deepskyblue", 
+        'VISpm': "royalblue", 
+        'fiber_tract': "gray",
+    },
+    presynaptic_marker_size=1,
+    starter_marker_size=2,
+):
+    ax_coronal.contour(
+        bin_image, 
+        levels=np.arange(0.5, np.max(bin_image) + 1, 0.5), 
+        colors="slategray", 
+        linewidths=0.5,
+        zorder=0,
+    )
+    cells_df["inside"] = cells_df["cortical_area"].apply(lambda area: area != "hippocampal" and not pd.isnull(area))
+    cells_inside = cells_df[(cells_df["inside"] == True) & (cells_df["area"] != "outside")]
+    cells_inside["cortical_area"] = cells_inside["cortical_area"].astype("category")
+    cells_inside["cortical_layer"] = cells_inside["cortical_layer"].astype("category")
+    starters = cells_inside[cells_inside["is_starter"] == True]
+
+    areas = cells_inside["cortical_area"].cat.categories
+    ax_coronal.scatter(
+        cells_inside["ara_z"]  * 1000 / atlas_size, 
+        cells_inside["ara_y"] * 1000 / atlas_size, 
+        s=presynaptic_marker_size,
+        linewidths=0,
+        c=cells_inside["cortical_area"].cat.codes.map(lambda x: area_colors[areas[x]]),
+        zorder=1,
+        alpha=0.3,
+    )
+    ax_coronal.scatter(
+        starters["ara_z"]  * 1000 / atlas_size, 
+        starters["ara_y"] * 1000 / atlas_size, 
+        s=starter_marker_size,
+        edgecolors="none",
+        c="black",
+        zorder=2,
+        alpha=0.6,        
+    )
+    ax_coronal.set_xlim(550, 1150)
+    ax_coronal.set_ylim(450, 0)
+    ax_coronal.set_axis_off()
+    ax_coronal.set_aspect("equal")
+
+    atlas_utils.plot_flatmap(
+        ax_flatmap,
+        hemisphere="right",
+        ccf_streamlines_folder=None,
+    )
+    ax_flatmap.scatter(
+        cells_inside["flatmap_x"],
+        cells_inside["flatmap_y"],
+        s=presynaptic_marker_size,
+        linewidths=0,
+        c=cells_inside["cortical_area"].cat.codes.map(lambda x: area_colors[areas[x]]),
+        zorder=1,
+        alpha=0.3,
+    )
+    ax_flatmap.scatter(
+        starters["flatmap_x"],
+        starters["flatmap_y"],
+        s=starter_marker_size,
+        edgecolors="none",
+        c="black",
+        zorder=2,
+        alpha=0.6,
+    )
+    ax_flatmap.set_ylim(800, 1350)
+    ax_flatmap.set_xlim(100, 1200)
+    ax_flatmap.invert_yaxis()
+    ax_flatmap.set_axis_off()
+    ax_flatmap.set_aspect("equal")
+
+
+    # Filter out unwanted categories
+    legend_patches = [
+        mpatches.Patch(color=area_colors[area], label=area)
+        for area in areas
+    ]
+
+    # Modify the legend placement and format
+    ax_flatmap.legend(
+        handles=legend_patches,
+        loc="upper left",
+        bbox_to_anchor=[0, 0],
+        frameon=False,
+        handlelength=1,
+        ncols=3,
+        fontsize=legend_fontsize
+    )
+
+
+def plot_example_barcodes(
+    cells_df,
+    ax_coronal,
+    ax_flatmap,
+    bin_image,
+    barcodes=(),
+    barcode_colors=(),
+    legend_fontsize=6,
+    atlas_size=10,
+    starter_marker_size=15,
+    presynaptic_marker_size=2,
+    all_cells_marker_size=1,
+    starter_marker="o",
+):
+    cells_df = cells_df[
+        cells_df["cortical_area"].apply(lambda area: not pd.isnull(area))
+    ]
+
+    ax_coronal.contour(
+        bin_image, 
+        levels=np.arange(0.5, np.max(bin_image) + 1, 0.5), 
+        colors="slategray", 
+        linewidths=0.5,
+        zorder=0,
+    )
+    starters = cells_df[cells_df["is_starter"] == True]
+    ax_coronal.scatter(
+        cells_df["ara_z"]  * 1000 / atlas_size, 
+        cells_df["ara_y"] * 1000 / atlas_size, 
+        s=all_cells_marker_size,
+        linewidths=0,
+        c="gray",
+        alpha=0.15,
+        zorder=1,
+        label="All barcoded cells"
+    )
+
+    atlas_utils.plot_flatmap(
+        ax_flatmap,
+        hemisphere="right",
+        ccf_streamlines_folder=None,
+    )
+    ax_flatmap.scatter(
+        cells_df["flatmap_x"],
+        cells_df["flatmap_y"],
+        s=all_cells_marker_size,
+        linewidths=0,
+        c="gray",
+        zorder=1,
+        alpha=0.15,
+    )
+
+    for barcode, color in zip(barcodes, barcode_colors):
+        this_barcode = cells_df[cells_df["all_barcodes"].apply(lambda bcs: barcode in bcs)]
+        ax_coronal.scatter(
+            this_barcode["ara_z"]  * 1000 / atlas_size, 
+            this_barcode["ara_y"] * 1000 / atlas_size, 
+            alpha=1,
+            linewidths=0,
+            s=presynaptic_marker_size,
+            c=color,
+            zorder=2,
+        )
+        ax_flatmap.scatter(
+            this_barcode["flatmap_x"],
+            this_barcode["flatmap_y"],
+            alpha=1,
+            linewidths=0,
+            s=presynaptic_marker_size,
+            c=color,
+            zorder=2,
+        )
+        starters = this_barcode[this_barcode["is_starter"] == True]
+        print(f"barcode {barcode} in starters {starters.index.values}")
+        ax_coronal.scatter(
+            starters["ara_z"]  * 1000 / atlas_size, 
+            starters["ara_y"] * 1000 / atlas_size, 
+            s=starter_marker_size,
+            alpha=1,            
+            edgecolors="white",
+            marker=starter_marker,
+            c=color,
+            linewidths=1,
+            label=barcode,
+            zorder=3,
+        )
+        ax_flatmap.scatter(
+            starters["flatmap_x"],
+            starters["flatmap_y"],
+            s=starter_marker_size * 0.7,
+            edgecolors="white",
+            marker=starter_marker,
+            c=color,
+            linewidths=1,
+            label=barcode,
+            zorder=3,
+        )
+
+    ax_coronal.set_xlim(550, 1150)
+    ax_coronal.set_ylim(450, 0)
+    ax_coronal.set_axis_off()
+    ax_coronal.set_aspect("equal")
+
+    ax_flatmap.set_ylim(790, 1350)
+    ax_flatmap.set_xlim(100, 1200)
+    ax_flatmap.invert_yaxis()
+    ax_flatmap.set_axis_off()
+    ax_flatmap.set_aspect("equal")
+
+    # Modify the legend placement and format
+    ax_coronal.legend(
+        loc="lower left",
+        bbox_to_anchor=[0.9, 0],
+        frameon=False,
+        fontsize=legend_fontsize,
+        ncols=3,
+    )
 
 
 def plot_flat_ml_rv_cells(
@@ -39,11 +284,6 @@ def plot_flat_ml_rv_cells(
     color_mapping = {
         category: cmap(i / (n_categories - 1)) for i, category in enumerate(categories)
     }
-    legend_patches = [
-        mpatches.Patch(color=color_mapping[category], label=category)
-        for category in categories
-    ]
-
     x_coords = cells["flatmap_dorsal_x"]
     y_coords = cells["normalised_depth"] / 2
     x_starters = starter_cells["flatmap_dorsal_x"]
@@ -73,35 +313,19 @@ def plot_flat_ml_rv_cells(
     ax.set_xlim(16000, 26000)
     plt.gca().set_aspect("equal")
     plt.gca().invert_yaxis()
-    # Filter out unwanted categories
-    legend_patches = [
-        mpatches.Patch(color=color_mapping[category], label=category)
-        for category in categories
-        if category not in ["non_cortical", "hippocampal", "fiber_tract"]
-    ]
 
-    # Modify the legend placement and format
-    ax.legend(
-        handles=legend_patches,
-        title="Cortical Area",
-        loc="upper center",
-        # prop={'size': 4},
-        bbox_to_anchor=(0.5, legend_height),
-        fontsize=tick_fontsize,
-        title_fontsize=tick_fontsize,
-        ncol=4,
-    )
     ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
 
 
 def plot_rabies_cells(
     ax_interest,
     ax_density,
-    all_cell_properties,
+    cells_df,
     label_fontsize=10,
     tick_fontsize=8,
 ):
     layer_tops = {
+        "1": 0.0,
         "2/3": 116.8406715462,
         "4": 349.9050202564,
         "5": 477.8605504893,
@@ -113,184 +337,77 @@ def plot_rabies_cells(
     current_max = 2000.0
     target_max = layer_tops["wm"]
     norm_factor = target_max / current_max
-
-    x_all = all_cell_properties["flatmap_dorsal_x"]
-    y_all = all_cell_properties["normalised_layers"]
-
-    cells = all_cell_properties[all_cell_properties["all_barcodes"].notna()]
-    cells["cortical_area"] = cells["cortical_area"].astype("category")
-    cells["cortical_layer"] = cells["cortical_layer"].astype("category")
-    starter_cells = cells[cells["is_starter"]]
-
-    x_coords = cells["flatmap_dorsal_x"]
-    y_coords = cells["normalised_layers"]
-    x_starters = starter_cells["flatmap_dorsal_x"]
-    y_starters = starter_cells["normalised_layers"]
-
-    y_all = y_all * norm_factor
-    y_coords = y_coords * norm_factor
-    y_starters = y_starters * norm_factor
-
     x_min, x_max = 19800, 21800
-    y_min, y_max = 957.0592130899, y_coords.min()
-
-    mask_region_all = (
-        (x_all >= x_min) & (x_all <= x_max) & (y_all <= y_min) & (y_all >= y_max)
-    )
-    mask_region = (
-        (x_coords >= x_min)
-        & (x_coords <= x_max)
-        & (y_coords <= y_min)
-        & (y_coords >= y_max)
-    )
-    mask_region_starters = (
-        (x_starters >= x_min)
-        & (x_starters <= x_max)
-        & (y_starters <= y_min)
-        & (y_starters >= y_max)
-    )
-    x_all_sub = x_all[mask_region_all]
-    y_all_sub = y_all[mask_region_all]
-    x_sub = x_coords[mask_region]
-    y_sub = y_coords[mask_region]
-    c_sub = cells["cortical_layer"][mask_region]
-    x_starters = x_starters[mask_region_starters]
-    y_starters = y_starters[mask_region_starters]
-
-    scatter = ax_interest.scatter(
-        x_sub,
-        y_sub,
-        s=3,
+    y_min, y_max = 957.0592130899, cells_df["normalised_layers"].min()    
+    # cells_df = cells_df[
+    #     (cells_df["flatmap_dorsal_x"] >= x_min)
+    #     & (cells_df["flatmap_dorsal_x"] <= x_max)
+    #     & (cells_df["normalised_layers"] * norm_factor <= y_min)
+    # ]
+    cells_df = cells_df[cells_df["cortical_area"] == "VISp"]
+    ax_interest.scatter(
+        cells_df["flatmap_dorsal_x"],
+        cells_df["normalised_layers"] * norm_factor,
+        s=2,
         edgecolors="none",
-        c=c_sub.cat.codes,
-        cmap="tab20",
-        rasterized=True,
+        c="gray",
+        alpha=0.5,
+        label="Presynaptic cells",
     )
     ax_interest.scatter(
-        x_starters, y_starters, s=8, edgecolors="none", c="black", rasterized=True
+        cells_df[cells_df["is_starter"]]["flatmap_dorsal_x"],
+        cells_df[cells_df["is_starter"]]["normalised_layers"] * norm_factor,
+        s=3, 
+        edgecolors="none", 
+        c="black", 
+        label="Starter cells",
     )
-
+    ax_interest.set_xticks([0, 1000])
     ax_interest.set_xlim(x_min, x_max)
     ax_interest.set_ylim(y_min, y_max)
-    # ax_interest.set_title("Rabies barcoded cells", fontsize=label_fontsize)
-    ax_interest.set_xlabel("Medio-lateral coordinates (µm)", fontsize=label_fontsize)
-    ax_interest.set_ylabel("Cortical Depth (µm)", fontsize=label_fontsize)
+    ax_interest.set_xlabel("M-L\ncoordinates (µm)", fontsize=label_fontsize)
+    ax_interest.set_ylabel("Cortical depth (µm)", fontsize=label_fontsize)
     for layer, z in layer_tops.items():
-        ax_interest.axhline(z, c="black", lw=0.5)
+        ax_interest.axhline(z, c="black", lw=0.5, linestyle="--")
 
-    unique_codes = np.unique(cells["cortical_layer"].cat.codes)
-    handles = [
-        plt.Line2D(
-            [0],
-            [0],
-            marker="o",
-            color="w",
-            markerfacecolor=scatter.cmap(scatter.norm(code)),
-            markersize=5,
-            linestyle="None",
-        )
-        for code in unique_codes
-    ]
-    labels = cells["cortical_layer"].cat.categories[unique_codes]
-
-    # Define the items to exclude from legend
-    exclude = ["TH", "fiber_tract", "non_cortical", "hippocampal"]
-    filtered_handles_labels = [
-        (h, l) for h, l in zip(handles, labels) if l not in exclude
-    ]
-    handles, labels = (
-        zip(*filtered_handles_labels) if filtered_handles_labels else ([], [])
+    sns.violinplot(
+        y=cells_df["normalised_layers"] * norm_factor, 
+        hue=cells_df["is_starter"], 
+        split=True, 
+        fill=True,
+        alpha=1,
+        ax=ax_density,
+        bw_adjust=0.5,        
+        linewidth=1,
+        inner=None,
+        palette={True: "black", False: "gray"},
+        hue_order=[True, False],
     )
-
-    ax_interest.legend(
-        handles,
-        labels,
-        title="Cell types",
+    ax_density.legend(
+        labels=["Starter cells", "Presynaptic cells"],
         loc="lower center",
         fontsize=tick_fontsize,
-        bbox_to_anchor=(0.5, -0.4),
-        ncol=3,
+        bbox_to_anchor=(-0.2, 1.0),
+        frameon=False,
+        handlelength=1,
+        ncol=2,
     )
-
-    def plot_density(ax, y_filtered, color, label):
-        if len(y_filtered) > 2:
-            counts, bin_edges = np.histogram(
-                y_filtered,
-                bins=50,
-                density=True,
-            )
-            bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
-            ax.plot(
-                counts,
-                bin_centers,
-                color=color,
-                label=label,
-                alpha=0.8,
-                drawstyle="steps-post",
-                linewidth=2,
-            )
-            ax.fill_betweenx(bin_centers, 0, counts, color=color, alpha=0.1, step="pre")
-
-    ax_secondary = ax_density.twiny()
-
-    def plot_normalized_density(ax_secondary, y_all, y_rab, label="Normalized Density"):
-        if len(y_all) > 2 and len(y_rab) > 2:
-            bin_edges = np.linspace(
-                min(y_all.min(), y_rab.min()), max(y_all.max(), y_rab.max()), 51
-            )
-            counts_all, _ = np.histogram(y_all, bins=bin_edges, density=True)
-            counts_rab, _ = np.histogram(y_rab, bins=bin_edges, density=True)
-            with np.errstate(divide="ignore", invalid="ignore"):
-                normalized_density = np.divide(
-                    counts_rab,
-                    counts_all,
-                    out=np.zeros_like(counts_rab),
-                    where=counts_all > 0,
-                )
-            bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
-            ax_secondary.plot(
-                normalized_density,
-                bin_centers,
-                color="red",
-                label=label,
-                alpha=0.8,
-                drawstyle="steps-post",
-                linewidth=2,
-            )
-            ax_secondary.fill_betweenx(
-                bin_centers, 0, normalized_density, color="red", alpha=0.2, step="pre"
-            )
-
-    plot_density(ax_density, y_starters, "black", label="Density -\nStarter Cells")
-    ax_density.set_xlabel("Fraction of starter cells", fontsize=label_fontsize)
+    ax_density.set_xlabel("Cell density", fontsize=label_fontsize)
     ax_density.set_yticks([])
+    ax_density.set_xticks([])
 
     ax_density.set_ylim(y_min, y_max)
-    ax_density.set_xlim(0, 0.0035)
-    ax_secondary.set_xlim(0, 2.1)
-    ax_secondary.set_xlabel("Ratio of density", fontsize=label_fontsize, color="red")
-    ax_secondary.tick_params(axis="x", colors="red", labelsize=tick_fontsize)
-    for layer, z in layer_tops.items():
-        ax_density.axhline(z, c="black", lw=0.5)
-    plot_normalized_density(
-        ax_secondary, y_all_sub, y_sub, label="Density Ratio -\n(Rabies / All Cells)"
-    )
-    ax_secondary.set_ylabel(
-        "Density Ratio (Rabies / All Cells)", fontsize=label_fontsize, labelpad=10
-    )
+    ax_density.set_ylabel("")
     ax_interest.tick_params(axis="both", labelsize=tick_fontsize)
     ax_density.tick_params(axis="both", labelsize=tick_fontsize)
-
-    # Fetch handles and labels from both axes
-    handles_density, labels_density = ax_density.get_legend_handles_labels()
-    handles_secondary, labels_secondary = ax_secondary.get_legend_handles_labels()
+    for layer, z in layer_tops.items():
+        ax_density.axhline(z, c="black", lw=0.5, linestyle="--")
     # Combine handles and labels from both plots
-    handles = handles_density + handles_secondary
-    labels = labels_density + labels_secondary
-    ax_density.legend(
-        handles,
-        labels,
-        loc="lower center",
-        fontsize=tick_fontsize,
-        bbox_to_anchor=(0.5, -0.4),
-    )
+    # add yticks on the right
+    ax_density.yaxis.tick_right()
+    ax_density.yaxis.set_label_position("right")
+    # prepend a 0 to layer tops and find layer centres
+    layer_edges = np.array(list(layer_tops.values()))
+    layer_centres = (layer_edges[1:] + layer_edges[:-1]) / 2
+    ax_density.set_yticks(layer_centres, labels=list(layer_tops.keys())[:-1])
+    
