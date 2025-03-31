@@ -52,7 +52,7 @@ def load_data(
     rabies_stack = None
     labeled_images = None
     for roi in tqdm(roi_dims[:, 0], total=len(roi_dims)):
-        stack, _ = issp.pipeline.register.load_and_register_tile(
+        stack, _ = issp.pipeline.load_and_register_tile(
             data_path,
             prefix=prefix,
             tile_coors=(roi, 0, 0),

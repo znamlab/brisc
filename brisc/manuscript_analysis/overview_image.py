@@ -1,8 +1,9 @@
-from iss_preprocess.diagnostics.diag_stitching import plot_single_overview
+from iss_preprocess.vis import plot_single_overview
 from iss_preprocess.vis import round_to_rgb
 from iss_preprocess.vis import add_bases_legend
 from iss_preprocess.vis.utils import get_stack_part
 from iss_preprocess.pipeline.sequencing import basecall_tile
+import matplotlib.image as mpimg
 
 import numpy as np
 
@@ -42,9 +43,7 @@ def run_plot_overview(
     return fig
 
 
-def plot_rabies_raw(
-    ax, img, crop_top=50, crop_bottom=350, crop_left=50, crop_right=50
-):
+def plot_rabies_raw(ax, img, crop_top=50, crop_bottom=350, crop_left=50, crop_right=50):
     """
     Load a .png file from image_path, rotate it 90 degrees left,
     crop it according to the given parameters,
@@ -70,6 +69,8 @@ def plot_rabies_raw(
     ax : matplotlib.axes.Axes
         The same axis with the image displayed.
     """
+    # Load the image data
+    img = mpimg.imread(img)
     img_rotated = np.rot90(img)
     img_cropped = img_rotated[crop_top:-crop_bottom, crop_left:-crop_right]
     ax.imshow(img_cropped[300:1500])
@@ -129,9 +130,9 @@ def plot_selected_rounds(
     channel_colors = ([1, 0, 0], [0, 1, 0], [1, 0, 1], [0, 1, 1])
     for ax, iround in zip(axes, selected_rounds):
         rgb_stack = round_to_rgb(
-            stack_part, 
-            iround - 1, 
-            extent=None, 
+            stack_part,
+            iround - 1,
+            extent=None,
             channel_colors=channel_colors,
             vmin=vmin,
             vmax=vmax,
