@@ -873,125 +873,109 @@ def make_minimal_df(
     return starters, non_starters
 
 
-def shuffle_cm_chunk(
-    non_starters_arr, starters_arr, row_index, col_index, n_permutations, seed_offset=0
+def shuffle_barcodes(
+    seed,
+    cell_barcode_df,
+    shuffle_presyn=False,
+    shuffle_starters=False,
 ):
     """
-    Perform n_permutations of barcode shuffling and compute null confusion matrices.
-    Matching is done using set intersections.
+    Perform one permutation of shuffling the barcodes within starter / non-starter cells.
+
+    Args:
+        cell_barcode_df (pd.DataFrame): DataFrame of ARA starters data
+        shuffle_starters (bool): Whether to shuffle the starter barcodes
+        shuffle_presyn (bool): Whether to shuffle the presynaptic barcodes
+
+    Returns:
+        shuffled_cell_barcode_df (pd.DataFrame): DataFrame of shuffled ARA starters data
     """
-    np.random.seed(seed_offset)
-    results = []
+    np.random.seed(seed + 1)
+    shuffled_cell_barcode_df = cell_barcode_df.copy()
 
-    for _ in range(n_permutations):
-        # Shuffle starter labels independently of barcodes
-        shuffled_starter_areas = np.random.permutation(starters_arr["starter_area"])
+    # Shuffle barcode sets across starter cells
+    if shuffle_starters:
+        mask = shuffled_cell_barcode_df["is_starter"] == True
+        values = shuffled_cell_barcode_df.loc[mask, "unique_barcodes"].tolist()
+        np.random.shuffle(values)  # In-place permutation
+        shuffled_cell_barcode_df.loc[mask, "unique_barcodes"] = values
 
-        # Prepare local confusion matrix counts
-        pair_counts = []
+    # Shuffle barcode sets across presynaptic (non-starter) cells
+    if shuffle_presyn:
+        mask = shuffled_cell_barcode_df["is_starter"] == False
+        values = shuffled_cell_barcode_df.loc[mask, "unique_barcodes"].tolist()
+        np.random.shuffle(values)  # In-place permutation
+        shuffled_cell_barcode_df.loc[mask, "unique_barcodes"] = values
 
-        # Compare each non-starter cell to each shuffled starter cell
-        for ns_area, ns_barcodes in zip(
-            non_starters_arr["presyn_area"], non_starters_arr["barcodes"]
-        ):
-            for st_area, st_barcodes in zip(
-                shuffled_starter_areas, starters_arr["barcodes"]
-            ):
-                if ns_barcodes & st_barcodes:  # non-empty intersection
-                    pair_counts.append(
-                        {"presyn_area": ns_area, "starter_area": st_area, "count": 1}
-                    )
-
-        # Convert pair_counts to a DataFrame
-        pair_counts_df = pd.DataFrame(pair_counts)
-
-        # Group by (presyn_area, starter_area) and sum the counts
-        grouped = pair_counts_df.groupby(
-            ["presyn_area", "starter_area"], as_index=False
-        ).sum()
-
-        # Pivot to confusion matrix shape
-        shuffle_cm = grouped.pivot_table(
-            index="presyn_area", columns="starter_area", values="count", fill_value=0
-        )
-
-        # Reindex to match full matrix shape
-        shuffle_cm = shuffle_cm.reindex(
-            index=row_index, columns=col_index, fill_value=0
-        )
-
-        results.append(shuffle_cm.values)
-
-    return results
+    return shuffled_cell_barcode_df
 
 
-def main_parallel_shuffling(starters, non_starters, n_permutations=10000, n_jobs=8):
+def shuffle_wrapper(arg):
+    seed, minimal_cell_barcode_df, shuffle_presyn, shuffle_starters = arg
+    return shuffle_barcodes(
+        seed, minimal_cell_barcode_df, shuffle_presyn, shuffle_starters
+    )
+
+
+def shuffle_and_compute_connectivity(
+    minimal_cell_barcode_df,
+    n_permutations=10000,
+    shuffle_starters=False,
+    shuffle_presyn=True,
+    starter_grouping="area_acronym_ancestor_rank1",
+    presyn_grouping="area_acronym_ancestor_rank1",
+):
     """
-    Parallel shuffling using set-based barcode matching logic.
-    """
+    Shuffle the barcodes within starter / non-starter cells and compute the connectivity matrix.
 
-    # Compute observed matrix (set-aware)
+    Args:
+        minimal_cell_barcode_df (pd.DataFrame): DataFrame of ARA starters data
+        n_permutations (int): Number of permutations to perform
+        n_concurrent_jobs (int): Number of concurrent jobs to run
+        shuffle_starters (bool): Whether to shuffle the starter barcodes
+        shuffle_presyn (bool): Whether to shuffle the presynaptic barcodes
+
+    Returns:
+        observed_confusion_matrix (pd.DataFrame): Observed confusion matrix
+        all_null_matrices (list): List of shuffled confusion matrices
+    """
     observed_confusion_matrix, _, _ = compute_connectivity_matrix(
-        starters, non_starters
+        minimal_cell_barcode_df,
+        starter_grouping,
+        presyn_grouping,
+    )
+    args = [
+        (seed, minimal_cell_barcode_df, shuffle_presyn, shuffle_starters)
+        for seed in range(n_permutations)
+    ]
+    shuffled_cell_barcode_dfs = process_map(
+        shuffle_wrapper, args, max_workers=cpu_count()
     )
 
-    # Indexes for shape
-    row_index = observed_confusion_matrix.index
-    col_index = observed_confusion_matrix.columns
-
-    # Prepare data for pickling — keep sets
-    non_starters_arr = {
-        "presyn_area": non_starters["presyn_area"].values,
-        "barcodes": non_starters["barcode"]
-        .apply(lambda x: set(x) if not isinstance(x, set) else x)
-        .values,
-    }
-    starters_arr = {
-        "starter_area": starters["starter_area"].values,
-        "barcodes": starters["barcode"]
-        .apply(lambda x: set(x) if not isinstance(x, set) else x)
-        .values,
-    }
-
-    # Set up tasks
-    all_null_matrices = []
-    chunk_size = max(n_permutations // n_jobs, 1)
-    remainder = n_permutations % n_jobs
-    tasks = [chunk_size + (1 if i < remainder else 0) for i in range(n_jobs)]
-
-    # Parallel execution
-    with ProcessPoolExecutor(max_workers=n_jobs) as executor:
-        futures = []
-        seed_offset = 42
-        for chunk in tasks:
-            if chunk > 0:
-                future = executor.submit(
-                    shuffle_cm_chunk,
-                    non_starters_arr,
-                    starters_arr,
-                    row_index,
-                    col_index,
-                    chunk,
-                    seed_offset,
-                )
-                futures.append(future)
-                seed_offset += 1
-
-        for f in tqdm(as_completed(futures), total=len(futures), desc="Shuffling"):
-            all_null_matrices.extend(f.result())
-
-    print(f"Done! Generated {len(all_null_matrices)} shuffled matrices.")
-    return observed_confusion_matrix, all_null_matrices
-
-
-def run_connectivity_parallel_shuffling(
-    starters, non_starters, n_permutations=100000, n_jobs=250
-):
-    observed_cm, all_nulls = main_parallel_shuffling(
-        starters, non_starters, n_permutations=n_permutations, n_jobs=n_jobs
+    # Create a partial function that fixes the extra arguments
+    partial_func = partial(
+        compute_connectivity_matrix,
+        starter_grouping=starter_grouping,
+        presyn_grouping=presyn_grouping,
     )
 
-    return observed_cm, all_nulls
+    # Run it in parallel
+    results = process_map(
+        partial_func,
+        shuffled_cell_barcode_dfs,
+        max_workers=cpu_count(),
+        desc="Computing connectivity",
+    )
+
+    shuffled_matrices, mean_input_fractions, starter_input_fractions = zip(*results)
+
+    return (
+        observed_confusion_matrix,
+        shuffled_cell_barcode_dfs,
+        shuffled_matrices,
+        mean_input_fractions,
+        starter_input_fractions,
+    )
 
 
 def plot_null_histograms_square(
