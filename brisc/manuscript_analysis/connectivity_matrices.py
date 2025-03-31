@@ -14,6 +14,15 @@ bg_atlas = BrainGlobeAtlas("allen_mouse_10um", check_latest=False)
 
 
 def get_ancestor_rank1(area_acronym):
+    """
+    Determine the rank 1 ancestor of a given area acronym.
+
+    Args:
+        area_acronym (str): Area acronym to find the rank 1 ancestor
+
+    Returns:
+        rank1_ancestor (str): Rank 1 ancestor of the given area acronym
+    """
     try:
         ancestors = bg_atlas.get_structure_ancestors(area_acronym)
         if "TH" in ancestors:
@@ -40,6 +49,20 @@ def load_cell_barcode_data(
     valid_areas=["Isocortex", "TH"],
     distance_threshold=150,
 ):
+    """
+    Load the cell barcode data and assign areas and layers to each cell,
+    changing cells labeled as being in white matter to the nearest valid area label.
+
+    Args:
+        processed_path (Path): Path to the processed data directory
+        area_to_empty (str): Area to empty of cells
+        valid_areas (list): List of valid areas to move cells to
+        distance_threshold (int): Maximum distance to move cells out of fiber tracts
+
+    Returns:
+        cell_barcode_df (pd.DataFrame): DataFrame of barcoded cell data with areas and layers assigned
+    """
+    # Load dataframe
     cell_barcode_df = pd.read_pickle(
         processed_path / "analysis" / "cell_barcode_df.pkl"
     )
@@ -495,7 +518,16 @@ def load_cell_barcode_data(
 def compute_input_fractions(starter_row, presyn_cells, presyn_grouping):
     """
     For a single starter cell row, find all presynaptic cells sharing at least one barcode,
-    then compute the fraction of those presynaptic cells coming from each area.
+    then compute the counts and input fraction of those presynaptic cells coming from each presyn group.
+
+    Args:
+        starter_row (pd.Series): Row of starter cell data
+        presyn_cells (pd.DataFrame): DataFrame of presynaptic cell data
+        presyn_grouping (str): Property to group presynaptic cells on
+
+    Returns:
+        fraction_by_area (pd.Series): Fraction of presynaptic cells in each area
+        counts_by_area (pd.Series): Counts of presynaptic cells in each area
     """
     starter_barcodes = starter_row["unique_barcodes"]
 
@@ -533,8 +565,20 @@ def compute_connectivity_matrix(
     starter_grouping="area_acronym_ancestor_rank1",
     presyn_grouping="area_acronym_ancestor_rank1",
 ):
-    # Filter to only include cells in areas of interest
+    """
+    Compute the connectivity matrix for all starter cells in the given DataFrame.
+    Group starters and presyns by any given property present in a df column
 
+    Args:
+        cell_barcode_df (pd.DataFrame): DataFrame of barcoded cell data
+        starter_grouping (str): Property to group starter cells on
+        presyn_grouping (str): Property to group presynaptic cells
+
+    Returns:
+        counts_df (pd.DataFrame): DataFrame of counts of presynaptic cells in each area for each starter
+        mean_input_frac_df (pd.DataFrame): DataFrame of mean fraction of presynaptic cells in each area for each starter
+        fractions_df (pd.DataFrame): DataFrame of fractions of presynaptic cells in each area for each starter
+    """
     # 1) Separate starters and presynaptic cells
     starter_cells = cell_barcode_df[cell_barcode_df["is_starter"]].copy()
     presyn_cells = cell_barcode_df[cell_barcode_df["is_starter"] == False].copy()
@@ -565,36 +609,9 @@ def compute_connectivity_matrix(
     return counts_df, mean_input_frac_df, fractions_df
 
 
-def filter_matrix(matrix):
-    matrix = matrix.sort_index(axis=0).sort_index(axis=1)
-    # Remove rows and columns with all zeros
-    filtered_confusion_matrix = matrix.loc[(matrix != 0).any(axis=1)]
-    filtered_confusion_matrix = filtered_confusion_matrix.loc[
-        :, (filtered_confusion_matrix != 0).any(axis=0)
-    ]
-    # Define the labels to drop
-    labels_to_drop = ["Unknown", "fiber tracts", "grey", "ECT"]
-    filtered_confusion_matrix = filtered_confusion_matrix.drop(
-        labels=labels_to_drop, axis=0, errors="ignore"
-    )
-    filtered_confusion_matrix = filtered_confusion_matrix.drop(
-        labels=["Unknown", "fiber tracts"], axis=1, errors="ignore"
-    )
-    filtered_confusion_matrix = filtered_confusion_matrix.drop(
-        labels=[
-            "VISli",
-            "VISal",
-            "AUD",
-            "RSP",
-            "TEa",
-            "TH",
-        ],
-        axis=1,
-        errors="ignore",
-    )
-
-    # Filter to include only areas of interest
-    areas_of_interest = [
+def filter_matrix(
+    matrix,
+    presyn_groups_of_interest=[
         "VISp1",
         "VISp2/3",
         "VISp4",
@@ -609,26 +626,45 @@ def filter_matrix(matrix):
         "AUD",
         "TEa",
         "TH",
+    ],
+    starter_groups_of_interest=[
+        "VISp1",
+        "VISp2/3",
+        "VISp4",
+        "VISp5",
+        "VISp6a",
+        "VISp6b",
+        "VISal",
+        "VISl",
+        "VISpm",
+    ],
+):
+    """
+    Filter the confusion matrix to include only areas of interest and remove rows and columns with all zeros.
+
+    Args:
+        matrix (pd.DataFrame): DataFrame of confusion matrix data
+
+    Returns:
+        filtered_confusion_matrix (pd.DataFrame): Filtered confusion matrix
+    """
+    matrix = matrix.sort_index(axis=0).sort_index(axis=1)
+    # Remove rows and columns with all zeros
+    filtered_confusion_matrix = matrix.loc[(matrix != 0).any(axis=1)]
+    filtered_confusion_matrix = filtered_confusion_matrix.loc[
+        :, (filtered_confusion_matrix != 0).any(axis=0)
     ]
+
+    # Filter to include only areas of interest
     filtered_confusion_matrix = filtered_confusion_matrix.reindex(
-        index=areas_of_interest, columns=areas_of_interest, fill_value=0
+        index=presyn_groups_of_interest,
+        columns=starter_groups_of_interest,
+        fill_value=0,
     )
 
     filtered_confusion_matrix = filtered_confusion_matrix.loc[
-        areas_of_interest, areas_of_interest
+        presyn_groups_of_interest, starter_groups_of_interest
     ]
-    filtered_confusion_matrix = filtered_confusion_matrix.drop(
-        labels=[
-            "VISli",
-            "VISal",
-            "AUD",
-            "RSP",
-            "TEa",
-            "TH",
-        ],
-        axis=1,
-        errors="ignore",
-    )
 
     return filtered_confusion_matrix
 
