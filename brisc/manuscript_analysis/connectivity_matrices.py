@@ -3,10 +3,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from brainglobe_atlasapi import BrainGlobeAtlas
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from tqdm import tqdm
+from tqdm.contrib.concurrent import process_map
+from multiprocessing import cpu_count
+from functools import partial
 
-import iss_preprocess as iss
 from brisc.manuscript_analysis import barcodes_in_cells as bc_cells
 from cricksaw_analysis import atlas_utils
 
@@ -84,7 +84,6 @@ def load_cell_barcode_data(
         distance_threshold=distance_threshold,
         verbose=True,
     )
-
     cell_barcode_df["was_in_wm"] = False
     actually_moved = moved.query("moved==True").copy()
     cell_moved = cell_barcode_df.iloc[actually_moved.pts_index].index
@@ -94,6 +93,7 @@ def load_cell_barcode_data(
     ] = actually_moved.new_area_acronym.values
     cell_barcode_df.loc[cell_moved, "area_id"] = actually_moved.new_area_id.values
 
+    # Assign areas and layers to each cell
     cell_barcode_df["area_acronym_ancestor_rank1"] = cell_barcode_df[
         "area_acronym"
     ].apply(get_ancestor_rank1)
@@ -594,15 +594,15 @@ def compute_connectivity_matrix(
         [t[1] for t in fractions_counts_dfs], index=starter_cells.index
     )
 
-    # 3) Add a column for where the starter cell itself is located
+    # 3) Add a column for a property to group the starter on
     fractions_df[starter_grouping] = starter_cells[starter_grouping].values
     counts_df[starter_grouping] = starter_cells[starter_grouping].values
-    # remove rows that sum to 0
+    # remove rows that sum to 0 (starters with no presynaptic cells)
     fractions_df = fractions_df.loc[
         fractions_df.select_dtypes(include="number").sum(axis=1) > 0
     ]
 
-    # Grouping by starter location, find the mean fraction of each presynaptic area
+    # Grouping by starter property, find the mean fraction of each presynaptic grouping
     mean_input_frac_df = fractions_df.groupby(starter_grouping).mean().T
     counts_df = counts_df.groupby(starter_grouping).sum().T
 
@@ -681,7 +681,6 @@ def plot_area_by_area_connectivity(
         # Sort the confusion matrix by index and columns alphabetically
         filtered_confusion_matrix = filter_matrix(average_df)
         counts_matrix = filter_matrix(counts_df)
-        # filtered_confusion_matrix = filter_matrix(counts_df)
         if sum_fraction:
             filtered_confusion_matrix = filter_matrix(counts_df)
             filtered_confusion_matrix = (
@@ -770,7 +769,7 @@ def plot_area_by_area_connectivity(
 
     # Add number of starter cells in each area per column on the bottom of the heatmap
     # starter_counts = starters["area_acronym_ancestor_rank1"].value_counts()
-    starter_counts = fractions_df.starter_location.value_counts()
+    starter_counts = fractions_df.iloc[:, -1].value_counts()
     for i, area in enumerate(filtered_confusion_matrix.columns):
         # if area in starter_counts else put 0
         ax.text(
