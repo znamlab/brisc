@@ -356,7 +356,7 @@ def compute_input_fractions(starter_row, presyn_cells, presyn_grouping):
         )
     else:
         # Group the shared presyn cells by their area, and compute fraction
-        counts_by_area = shared_presyn.groupby(presyn_grouping).size()
+        counts_by_area = shared_presyn.groupby(presyn_grouping, observed=True).size()
         counts_by_area = counts_by_area.reindex(presyn_categories, fill_value=0)
         fraction_by_area = counts_by_area / counts_by_area.sum()
 
@@ -469,6 +469,7 @@ def plot_area_by_area_connectivity(
     fractions_df,
     input_fraction=False,
     sum_fraction=False,
+    mask_zeros=False,
     ax=None,
 ):
     if input_fraction:
@@ -480,18 +481,20 @@ def plot_area_by_area_connectivity(
             filtered_confusion_matrix = (
                 filtered_confusion_matrix / filtered_confusion_matrix.sum(axis=0)
             )
-        # make a mask that hides nothing
+        vmax = 0.3
+    else:
+        filtered_confusion_matrix = filter_matrix(counts_df)
+        vmax = 500
+
+    # Define a mask to hide zero values
+    if mask_zeros:
+        mask = filtered_confusion_matrix == 0
+    else:
         mask = pd.DataFrame(
             False,
             index=filtered_confusion_matrix.index,
             columns=filtered_confusion_matrix.columns,
         )
-        vmax = 0.3
-    else:
-        filtered_confusion_matrix = filter_matrix(counts_df)
-        # Define a mask to hide zero values
-        mask = filtered_confusion_matrix == 0
-        vmax = 500
 
     # Plot the heatmap
     sns.heatmap(
@@ -550,7 +553,16 @@ def plot_area_by_area_connectivity(
     # add a red horizontal line at the 10th row
     ax.axhline(y=6, xmin=0.05, xmax=0.95, color="red", lw=3)
 
-    ax.add_patch(plt.Rectangle((0, 0), 8, 14, fill=False, edgecolor="black", lw=3))
+    ax.add_patch(
+        plt.Rectangle(
+            (0, 0),
+            filtered_confusion_matrix.shape[1],
+            filtered_confusion_matrix.shape[0],
+            fill=False,
+            edgecolor="black",
+            lw=3,
+        )
+    )
 
     for label in ax.get_yticklabels():
         x, y = label.get_position()
