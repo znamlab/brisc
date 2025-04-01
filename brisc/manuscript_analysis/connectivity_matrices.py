@@ -817,25 +817,26 @@ def plot_null_histograms_square(
     Plot a grid of square histogram subplots, one for each cell in the observed confusion matrix,
     with optional custom ordering/filtering of rows (presynaptic areas) and columns (starter areas).
 
-    Parameters
-    ----------
-    observed_cm : pd.DataFrame
-        Observed confusion matrix (rows = presyn areas, columns = starter areas).
-    all_null_matrices : list of np.ndarray
-        List of length N_permutations, each a 2D array (n_rows x n_cols) from a shuffle,
-        with the same row/col alignment as observed_cm.
-    bins : int
-        Number of histogram bins.
-    row_label_fontsize : int
-        Font size for the row (presyn area) label on the left edge.
-    col_label_fontsize : int
-        Font size for the column (starter area) label on the top edge.
-    row_order : list or None
-        List of row labels (presynaptic areas) to include and in which order.
-        If None, use observed_cm.index as-is.
-    col_order : list or None
-        List of column labels (starter areas) to include and in which order.
-        If None, use observed_cm.columns as-is.
+    Args:
+        observed_cm : pd.DataFrame
+            Observed confusion matrix (rows = presyn areas, columns = starter areas).
+        all_null_matrices : list of np.ndarray
+            List of length N_permutations, each a 2D array (n_rows x n_cols) from a shuffle,
+            with the same row/col alignment as observed_cm.
+        bins : int
+            Number of histogram bins.
+        row_label_fontsize : int
+            Font size for the row (presyn area) label on the left edge.
+        col_label_fontsize : int
+            Font size for the column (starter area) label on the top edge.
+        row_order : list or None
+            List of row labels (presynaptic areas) to include and in which order.
+            If None, use observed_cm.index as-is.
+        col_order : list or None
+            List of column labels (starter areas) to include and in which order.
+            If None, use observed_cm.columns as-is.
+    Returns:
+        subset_null_array:
     """
 
     # Determine row/column order
