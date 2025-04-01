@@ -214,12 +214,15 @@ def get_ancestor_rank1(area_acronym):
         else:
             return ancestors[1] if len(ancestors) > 1 else "Unknown"
     except KeyError:
-        return "Unknown"
+        if area_acronym == "outside":
+            return "outside"
+        else:
+            return "Unknown"
 
 
 def load_cell_barcode_data(
     processed_path,
-    area_to_empty="fiber tracts",
+    areas_to_empty=["fiber tracts", "outside"],
     valid_areas=["Isocortex", "TH"],
     distance_threshold=150,
 ):
@@ -229,7 +232,6 @@ def load_cell_barcode_data(
 
     Args:
         processed_path (Path): Path to the processed data directory
-        area_to_empty (str): Area to empty of cells
         valid_areas (list): List of valid areas to move cells to
         distance_threshold (int): Maximum distance to move cells out of fiber tracts
 
@@ -248,24 +250,58 @@ def load_cell_barcode_data(
         cell_barcode_df["unique_barcodes"].apply(lambda x: len(x) > 0)
     ]
 
-    # Move cells out of fiber tracts
-    pts = cell_barcode_df[["ara_x", "ara_y", "ara_z"]].values * 1000
-    moved = atlas_utils.move_out_of_area(
-        pts=pts,
+    # Define special-case parameters
+    chamber = "chamber_09"
+    roi = 2
+    special_query = f"chamber == '{chamber}' and roi == {roi}"
+
+    # Process the full DataFrame with default areas_to_empty
+    full_pts = cell_barcode_df[["ara_x", "ara_y", "ara_z"]].values * 1000
+    full_moved = atlas_utils.move_out_of_area(
+        pts=full_pts,
         atlas=bg_atlas,
-        areas_to_empty=area_to_empty,
+        areas_to_empty=areas_to_empty,
         valid_areas=valid_areas,
         distance_threshold=distance_threshold,
         verbose=True,
     )
+
+    # Apply movement info to the full dataframe
     cell_barcode_df["was_in_wm"] = False
-    actually_moved = moved.query("moved==True").copy()
-    cell_moved = cell_barcode_df.iloc[actually_moved.pts_index].index
-    cell_barcode_df.loc[cell_moved, "was_in_wm"] = True
+    full_actually_moved = full_moved.query("moved == True").copy()
+    full_moved_indices = cell_barcode_df.iloc[full_actually_moved.pts_index].index
+    cell_barcode_df.loc[full_moved_indices, "was_in_wm"] = True
     cell_barcode_df.loc[
-        cell_moved, "area_acronym"
-    ] = actually_moved.new_area_acronym.values
-    cell_barcode_df.loc[cell_moved, "area_id"] = actually_moved.new_area_id.values
+        full_moved_indices, "area_acronym"
+    ] = full_actually_moved.new_area_acronym.values
+    cell_barcode_df.loc[
+        full_moved_indices, "area_id"
+    ] = full_actually_moved.new_area_id.values
+
+    # Apply custom behavior for specific chamber and roi
+    special_cells = cell_barcode_df.query(special_query).copy()
+    if not special_cells.empty:
+        special_pts = special_cells[["ara_x", "ara_y", "ara_z"]].values * 1000
+        special_moved = atlas_utils.move_out_of_area(
+            pts=special_pts,
+            atlas=bg_atlas,
+            areas_to_empty="fiber tracts",
+            valid_areas=valid_areas,
+            distance_threshold=distance_threshold,
+            verbose=True,
+        )
+
+        special_actually_moved = special_moved.query("moved == True").copy()
+        special_moved_indices = special_cells.iloc[
+            special_actually_moved.pts_index
+        ].index
+        cell_barcode_df.loc[special_moved_indices, "was_in_wm"] = True
+        cell_barcode_df.loc[
+            special_moved_indices, "area_acronym"
+        ] = special_actually_moved.new_area_acronym.values
+        cell_barcode_df.loc[
+            special_moved_indices, "area_id"
+        ] = special_actually_moved.new_area_id.values
 
     # Assign areas and layers to each cell
     cell_barcode_df["area_acronym_ancestor_rank1"] = cell_barcode_df[
