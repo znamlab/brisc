@@ -1061,8 +1061,8 @@ def benjamini_hochberg(pval_df, alpha=0.05):
 
     # Create an array for the BH-corrected p-values in their *original* order
     pvals_bh = np.full_like(pvals, np.nan, dtype=float)
-    pvals_bh_idx = sort_idx
-    pvals_bh[not_nan_mask][pvals_bh_idx] = pvals_bh_sorted
+    idx_non_nan = np.where(not_nan_mask)[0]
+    pvals_bh[idx_non_nan[sort_idx]] = pvals_bh_sorted
 
     # Determine significance:  pBH(i) <= alpha
     rejected = pvals_bh <= alpha
