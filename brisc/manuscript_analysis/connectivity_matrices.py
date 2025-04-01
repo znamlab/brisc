@@ -1203,6 +1203,8 @@ def bubble_plot(log_ratio_matrix, pval_df, size_scale=800):
     # Reformat input dfs into a long-form DataFrame for plotting
     row_name = log_ratio_matrix.index.name or "row_label"
     col_name = log_ratio_matrix.columns.name or "col_label"
+    log_ratio_matrix.index.name = row_name
+    log_ratio_matrix.columns.name = col_name
     df_plot = (
         log_ratio_matrix.stack()
         .reset_index()
