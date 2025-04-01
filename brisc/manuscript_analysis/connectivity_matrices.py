@@ -451,25 +451,16 @@ def filter_matrix(
     Returns:
         filtered_confusion_matrix (pd.DataFrame): Filtered confusion matrix
     """
-    matrix = matrix.sort_index(axis=0).sort_index(axis=1)
-    # Remove rows and columns with all zeros
-    filtered_confusion_matrix = matrix.loc[(matrix != 0).any(axis=1)]
-    filtered_confusion_matrix = filtered_confusion_matrix.loc[
-        :, (filtered_confusion_matrix != 0).any(axis=0)
-    ]
 
-    # Filter to include only areas of interest
-    filtered_confusion_matrix = filtered_confusion_matrix.reindex(
+    matrix = matrix.reindex(
         index=presyn_groups_of_interest,
         columns=starter_groups_of_interest,
         fill_value=0,
     )
 
-    filtered_confusion_matrix = filtered_confusion_matrix.loc[
-        presyn_groups_of_interest, starter_groups_of_interest
-    ]
-
-    return filtered_confusion_matrix
+    # Drop rows or columns with only 0s
+    matrix = matrix.loc[matrix.any(axis=1), matrix.any(axis=0)]
+    return matrix
 
 
 def plot_area_by_area_connectivity(
@@ -660,55 +651,58 @@ def make_minimal_df(
             - presyn_area
             - presyn_cell_type
     """
-
-    # Separate out starter vs. non-starter rows
-    starters = cell_barcode_df[cell_barcode_df["is_starter"] == True].copy()
-    non_starters = cell_barcode_df[cell_barcode_df["is_starter"] == False].copy()
-
-    starters = starters[
-        ["unique_barcodes", "area_acronym_ancestor_rank1", "Annotated_clusters"]
-    ]
-    starters = starters.rename(
-        columns={
-            "unique_barcodes": "barcode",
-            "area_acronym_ancestor_rank1": "starter_area",
-            "Annotated_clusters": "starter_cell_type",
-        }
-    )
-
-    non_starters = non_starters[
-        ["unique_barcodes", "area_acronym_ancestor_rank1", "Annotated_clusters"]
-    ]
-    non_starters = non_starters.rename(
-        columns={
-            "unique_barcodes": "barcode",
-            "area_acronym_ancestor_rank1": "presyn_area",
-            "Annotated_clusters": "presyn_cell_type",
-        }
-    )
-
-    # Keep only certain starter-area rows
-
-    if starter_areas_to_keep:
-        starters = starters[starters["starter_area"].isin(starter_areas_to_keep)]
-    if starter_cell_types_to_keep:
-        starters = starters[
-            starters["starter_cell_type"].isin(starter_cell_types_to_keep)
+    cell_barcode_df = cell_barcode_df[
+        [
+            "unique_barcodes",
+            "area_acronym_ancestor_rank1",
+            "Annotated_clusters",
+            "is_starter",
+            "ara_x",
+            "ara_y",
+            "ara_z",
+            "flatmap_dorsal_x",
+            "flatmap_dorsal_y",
+            "normalised_depth",
+            "cortical_area",
+            "cortical_layer",
         ]
+    ]
+
+    # Filter rows where is_starter == True and area_acronym_ancestor_rank1 is in starter_groups_of_interest
+    if starter_areas_to_keep:
+        starter_rows = cell_barcode_df[
+            (cell_barcode_df["is_starter"] == True)
+            & (
+                cell_barcode_df["area_acronym_ancestor_rank1"].isin(
+                    starter_areas_to_keep
+                )
+            )
+        ]
+    if starter_cell_types_to_keep:
+        starter_rows = cell_barcode_df[
+            (cell_barcode_df["is_starter"] == True)
+            & (cell_barcode_df["Annotated_clusters"].isin(starter_cell_types_to_keep))
+        ]
+
+    # Filter rows where is_starter == False and area_acronym_ancestor_rank1 is in presyn_groups_of_interest
     if presyn_areas_to_keep:
-        non_starters = non_starters[
-            non_starters["presyn_area"].isin(presyn_areas_to_keep)
+        presyn_rows = cell_barcode_df[
+            (cell_barcode_df["is_starter"] == False)
+            & (
+                cell_barcode_df["area_acronym_ancestor_rank1"].isin(
+                    presyn_areas_to_keep
+                )
+            )
         ]
     if presyn_cell_types_to_keep:
-        non_starters = non_starters[
-            non_starters["presyn_cell_type"].isin(presyn_cell_types_to_keep)
+        presyn_rows = cell_barcode_df[
+            (cell_barcode_df["is_starter"] == False)
+            & (cell_barcode_df["Annotated_clusters"].isin(presyn_cell_types_to_keep))
         ]
 
-    # Filter to only include cells with single starter barcodes
-    starters = starters[starters["barcode"].notna()]
-    non_starters = non_starters[non_starters["barcode"].notna()]
+    cell_barcode_df = pd.concat([starter_rows, presyn_rows])
 
-    return starters, non_starters
+    return cell_barcode_df
 
 
 def shuffle_barcodes(
