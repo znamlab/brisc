@@ -766,6 +766,7 @@ def shuffle_and_compute_connectivity(
     n_permutations=10000,
     shuffle_starters=False,
     shuffle_presyn=True,
+    compute_connectivity=True,
     starter_grouping="area_acronym_ancestor_rank1",
     presyn_grouping="area_acronym_ancestor_rank1",
 ):
@@ -793,33 +794,41 @@ def shuffle_and_compute_connectivity(
         for seed in range(n_permutations)
     ]
     shuffled_cell_barcode_dfs = process_map(
-        shuffle_wrapper, args, max_workers=cpu_count()
+        shuffle_wrapper,
+        args,
+        max_workers=round(cpu_count() / 3),
+        desc="Shuffling data",
+        total=n_permutations,
     )
 
-    # Create a partial function that fixes the extra arguments
-    partial_func = partial(
-        compute_connectivity_matrix,
-        starter_grouping=starter_grouping,
-        presyn_grouping=presyn_grouping,
-    )
+    if compute_connectivity:
+        # Create a partial function that fixes the extra arguments
+        partial_func = partial(
+            compute_connectivity_matrix,
+            starter_grouping=starter_grouping,
+            presyn_grouping=presyn_grouping,
+        )
 
-    # Run it in parallel
-    results = process_map(
-        partial_func,
-        shuffled_cell_barcode_dfs,
-        max_workers=cpu_count(),
-        desc="Computing connectivity",
-    )
+        # Run it in parallel
+        results = process_map(
+            partial_func,
+            shuffled_cell_barcode_dfs,
+            max_workers=round(cpu_count() / 3),
+            desc="Computing connectivity",
+            total=n_permutations,
+        )
 
-    shuffled_matrices, mean_input_fractions, starter_input_fractions = zip(*results)
+        shuffled_matrices, mean_input_fractions, starter_input_fractions = zip(*results)
 
-    return (
-        observed_confusion_matrix,
-        shuffled_cell_barcode_dfs,
-        shuffled_matrices,
-        mean_input_fractions,
-        starter_input_fractions,
-    )
+        return (
+            observed_confusion_matrix,
+            shuffled_cell_barcode_dfs,
+            shuffled_matrices,
+            mean_input_fractions,
+            starter_input_fractions,
+        )
+    else:
+        return observed_confusion_matrix, shuffled_cell_barcode_dfs
 
 
 def plot_null_histograms_square(
