@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import PIL
 import cv2
-import bg_atlasapi as bga
+import brainglobe_atlasapi as bga
 
 import flexiznam as flz
 from flexiznam.schema import Dataset
