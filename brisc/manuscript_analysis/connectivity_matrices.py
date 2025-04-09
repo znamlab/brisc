@@ -434,30 +434,19 @@ def plot_area_by_area_connectivity(
 
 def make_minimal_df(
     cell_barcode_df,
-    starter_areas_to_keep=None,
-    starter_cell_types_to_keep=None,
-    presyn_areas_to_keep=None,
-    presyn_cell_types_to_keep=None,
+    starter_filtering_dict=None,
+    presyn_filtering_dict=None,
 ):
     """
     Filter the ARA starters DataFrame to only include the necessary columns and rows.
 
     Args:
         cell_barcode_df (pd.DataFrame): DataFrame of ARA starters data
-        starter_areas_to_keep (list): List of starter areas to include
-        starter_cell_types_to_keep (list): List of starter cell types to include
-        presyn_areas_to_keep (list): List of presynaptic areas to include
-        presyn_cell_types_to_keep (list): List of presynaptic cell types to include
+        starter_filtering_dict (dict): Dictionary of columns and allowed values to filter starter cells
+        presyn_filtering_dict (dict): Dictionary of columns and allowed values to filter presynaptic cells
 
     Returns:
-        starters (pd.DataFrame): DataFrame of starter cells with columns:
-            - barcode
-            - starter_area
-            - starter_cell_type
-        non_starters (pd.DataFrame): DataFrame of non-starter cells with columns:
-            - barcode
-            - presyn_area
-            - presyn_cell_type
+        minimal_cell_barcode_df (pd.DataFrame): Minimal DataFrame of ARA starters data
     """
     cell_barcode_df = cell_barcode_df[
         [
@@ -476,37 +465,20 @@ def make_minimal_df(
         ]
     ]
 
-    # Filter rows where is_starter == True and area_acronym_ancestor_rank1 is in starter_groups_of_interest
-    if starter_areas_to_keep:
-        starter_rows = cell_barcode_df[
-            (cell_barcode_df["is_starter"] == True)
-            & (
-                cell_barcode_df["area_acronym_ancestor_rank1"].isin(
-                    starter_areas_to_keep
-                )
-            )
-        ]
-    if starter_cell_types_to_keep:
-        starter_rows = cell_barcode_df[
-            (cell_barcode_df["is_starter"] == True)
-            & (cell_barcode_df["Annotated_clusters"].isin(starter_cell_types_to_keep))
-        ]
+    # Separate starters vs. non-starters
+    starter_rows = cell_barcode_df[cell_barcode_df["is_starter"] == True].copy()
+    presyn_rows = cell_barcode_df[cell_barcode_df["is_starter"] == False].copy()
 
-    # Filter rows where is_starter == False and area_acronym_ancestor_rank1 is in presyn_groups_of_interest
-    if presyn_areas_to_keep:
-        presyn_rows = cell_barcode_df[
-            (cell_barcode_df["is_starter"] == False)
-            & (
-                cell_barcode_df["area_acronym_ancestor_rank1"].isin(
-                    presyn_areas_to_keep
-                )
-            )
-        ]
-    if presyn_cell_types_to_keep:
-        presyn_rows = cell_barcode_df[
-            (cell_barcode_df["is_starter"] == False)
-            & (cell_barcode_df["Annotated_clusters"].isin(presyn_cell_types_to_keep))
-        ]
+    # Filter the starter rows based on starter_filtering_dict
+    if starter_filtering_dict:
+        for col, allowed_vals in starter_filtering_dict.items():
+            # Keep only rows where col is in the list of allowed values
+            starter_rows = starter_rows[starter_rows[col].isin(allowed_vals)]
+
+    # Filter the non-starter (presyn) rows based on presyn_filtering_dict
+    if presyn_filtering_dict:
+        for col, allowed_vals in presyn_filtering_dict.items():
+            presyn_rows = presyn_rows[presyn_rows[col].isin(allowed_vals)]
 
     cell_barcode_df = pd.concat([starter_rows, presyn_rows])
 
