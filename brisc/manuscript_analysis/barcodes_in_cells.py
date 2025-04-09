@@ -168,37 +168,6 @@ def analyze_multibarcoded_starters(
     return result_df
 
 
-def find_singleton_bcs(cells_df):
-    """
-    Find singleton barcodes that appear exactly once across all starter cells
-    and defines 'unique_barcodes' for all cells that is the intersection of its
-    barcodes with singletons
-
-    Args:
-        cells (pd.DataFrame): DataFrame of cells
-
-    Returns:
-        cells (pd.DataFrame): DataFrame of cells with 'unique_barcodes' column
-        
-    """
-# Identify 'singleton' barcodes among starters
-    starter_barcodes_counts = (
-        cells_df[cells_df["is_starter"] == True]["all_barcodes"]
-        .explode()
-        .value_counts()
-    )
-    # Identify barcodes that are unique to a single starter cell
-    singletons = set(starter_barcodes_counts[
-        starter_barcodes_counts == 1
-    ].index)
-    # For each cell, define 'unique_barcodes' = intersection of its barcodes with singletons
-    cells_df["unique_barcodes"] = cells_df["all_barcodes"].apply(
-        lambda x: singletons.intersection(x)
-    )
-
-    return cells_df
-
-
 def plot_multibarcoded_starters(
     multibarcoded_starters,
     ax=None,
