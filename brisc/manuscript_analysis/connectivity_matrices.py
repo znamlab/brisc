@@ -306,18 +306,18 @@ def plot_area_by_area_connectivity(
     ax.xaxis.set_ticks_position("top")
     ax.xaxis.set_label_position("top")
 
-    # Highlight the diagonal with a black outline
-    for i in range(filtered_confusion_matrix.shape[1]):
-        ax.add_patch(plt.Rectangle((i, i), 1, 1, fill=False, edgecolor="black", lw=3))
+    # # Highlight the diagonal with a black outline
+    # for i in range(filtered_confusion_matrix.shape[1]):
+    #     ax.add_patch(plt.Rectangle((i, i), 1, 1, fill=False, edgecolor="black", lw=3))
 
     # Adjust the limits of the x and y axes to avoid cutting off the outer edges
     ax.set_xlim(-0.5, filtered_confusion_matrix.shape[1] - 0.5 + 1)
     ax.set_ylim(filtered_confusion_matrix.shape[0] - 0.5 + 1, -0.5)
 
     # add a red vertical line at the 9th column
-    ax.axvline(x=6, ymin=0.04, ymax=0.96, color="red", lw=3)
+    # ax.axvline(x=6, ymin=0.04, ymax=0.96, color="red", lw=3)
     # add a red horizontal line at the 10th row
-    ax.axhline(y=6, xmin=0.05, xmax=0.95, color="red", lw=3)
+    # ax.axhline(y=6, xmin=0.05, xmax=0.95, color="red", lw=3)
 
     ax.add_patch(
         plt.Rectangle(
@@ -334,6 +334,7 @@ def plot_area_by_area_connectivity(
         x, y = label.get_position()
         label.set_position((x + 0.025, y))
     ax.tick_params(axis="both", width=0)
+    ax.tick_params(axis="y", rotation=0)
 
     for label in ax.get_xticklabels():
         x, y = label.get_position()
