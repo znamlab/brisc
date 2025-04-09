@@ -56,6 +56,7 @@ def compute_connectivity_matrix(
     cell_barcode_df,
     starter_grouping="area_acronym_ancestor_rank1",
     presyn_grouping="area_acronym_ancestor_rank1",
+    output_fraction=False,
 ):
     """
     Compute the connectivity matrix for all starter cells in the given DataFrame.
@@ -97,6 +98,11 @@ def compute_connectivity_matrix(
     # Grouping by starter property, find the mean fraction of each presynaptic grouping
     mean_input_frac_df = fractions_df.groupby(starter_grouping).mean().T
     counts_df = counts_df.groupby(starter_grouping).sum().T
+
+    if output_fraction:
+        # For each presyn area (each row), divide by the row sum so it sums to 1
+        # We reuse mean_input_frac_df just to keep the same return signature
+        mean_input_frac_df = counts_df.div(counts_df.sum(axis=1), axis=0)
 
     return counts_df, mean_input_frac_df, fractions_df
 
@@ -458,6 +464,7 @@ def shuffle_and_compute_connectivity(
     compute_connectivity=True,
     starter_grouping="area_acronym_ancestor_rank1",
     presyn_grouping="area_acronym_ancestor_rank1",
+    output_fraction=False,
 ):
     """
     Shuffle the barcodes within starter / non-starter cells and compute the connectivity matrix.
@@ -477,6 +484,7 @@ def shuffle_and_compute_connectivity(
         minimal_cell_barcode_df,
         starter_grouping,
         presyn_grouping,
+        output_fraction=output_fraction,
     )
     args = [
         (seed, minimal_cell_barcode_df, shuffle_presyn, shuffle_starters)
