@@ -192,18 +192,15 @@ def find_singleton_bcs(cells_df):
 
     Returns:
         cells (pd.DataFrame): DataFrame of cells with 'unique_barcodes' column
-        
     """
-# Identify 'singleton' barcodes among starters
+    # Identify 'singleton' barcodes among starters
     starter_barcodes_counts = (
         cells_df[cells_df["is_starter"] == True]["all_barcodes"]
         .explode()
         .value_counts()
     )
     # Identify barcodes that are unique to a single starter cell
-    singletons = set(starter_barcodes_counts[
-        starter_barcodes_counts == 1
-    ].index)
+    singletons = set(starter_barcodes_counts[starter_barcodes_counts == 1].index)
     # For each cell, define 'unique_barcodes' = intersection of its barcodes with singletons
     cells_df["unique_barcodes"] = cells_df["all_barcodes"].apply(
         lambda x: singletons.intersection(x)
@@ -261,8 +258,7 @@ def load_cell_barcode_data(
         distance_threshold (int): Maximum distance to move cells out of fiber tracts
 
     Returns:
-        pd.DataFrame: DataFrame of barcoded cell data with areas and layers assigned
-
+        cells_df (pd.DataFrame): DataFrame of barcoded cell data with areas and layers assigned
     """
     # Load dataframe
     cells_df = pd.read_pickle(processed_path)
@@ -270,15 +266,13 @@ def load_cell_barcode_data(
 
     # Create unique barcode column containing barcodes found in only 1 starter
     cells_df = find_singleton_bcs(cells_df)
-    cells_df = cells_df[
-        cells_df["unique_barcodes"].apply(lambda x: len(x) > 0)
-    ]
+    cells_df = cells_df[cells_df["unique_barcodes"].apply(lambda x: len(x) > 0)]
 
     # Define special-case parameters
     chamber = "chamber_09"
     roi = 2
     special_query = f"chamber == '{chamber}' and roi == {roi}"
-
+    cells_df["was_outside"] = cells_df["area_acronym"] == "outside"
     # Process the full DataFrame with default areas_to_empty
     full_pts = cells_df[["ara_x", "ara_y", "ara_z"]].values * 1000
     full_moved = atlas_utils.move_out_of_area(
@@ -294,13 +288,13 @@ def load_cell_barcode_data(
     cells_df["was_in_wm"] = False
     full_actually_moved = full_moved.query("moved == True").copy()
     full_moved_indices = cells_df.iloc[full_actually_moved.pts_index].index
-    cells_df.loc[full_moved_indices, "was_in_wm"] = True
+    not_outside_mask = cells_df.loc[full_moved_indices, "area_acronym"] != "outside"
+    wm_indices = full_moved_indices[not_outside_mask]
+    cells_df.loc[wm_indices, "was_in_wm"] = True
     cells_df.loc[
         full_moved_indices, "area_acronym"
     ] = full_actually_moved.new_area_acronym.values
-    cells_df.loc[
-        full_moved_indices, "area_id"
-    ] = full_actually_moved.new_area_id.values
+    cells_df.loc[full_moved_indices, "area_id"] = full_actually_moved.new_area_id.values
 
     # Apply custom behavior for specific chamber and roi
     special_cells = cells_df.query(special_query).copy()
@@ -319,7 +313,11 @@ def load_cell_barcode_data(
         special_moved_indices = special_cells.iloc[
             special_actually_moved.pts_index
         ].index
-        cells_df.loc[special_moved_indices, "was_in_wm"] = True
+        not_outside_mask = (
+            cells_df.loc[special_moved_indices, "area_acronym"] != "outside"
+        )
+        wm_indices = special_moved_indices[not_outside_mask]
+        cells_df.loc[wm_indices, "was_in_wm"] = True
         cells_df.loc[
             special_moved_indices, "area_acronym"
         ] = special_actually_moved.new_area_acronym.values
@@ -328,9 +326,9 @@ def load_cell_barcode_data(
         ] = special_actually_moved.new_area_id.values
 
     # Assign areas and layers to each cell
-    cells_df["area_acronym_ancestor_rank1"] = cells_df[
-        "area_acronym"
-    ].apply(get_ancestor_rank1)
+    cells_df["area_acronym_ancestor_rank1"] = cells_df["area_acronym"].apply(
+        get_ancestor_rank1
+    )
 
     cells_df["cortical_area"] = (
         cells_df["area_acronym"].map(BRAIN_AREA_MAPPING).astype("category")
