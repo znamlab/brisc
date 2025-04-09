@@ -107,6 +107,53 @@ def compute_connectivity_matrix(
     return counts_df, mean_input_frac_df, fractions_df
 
 
+def compute_odds_ratio(p_matrix, starter_counts):
+    """
+    Calculate the odds ratio comparing p_matrix (the fraction of presynaptic outputs)
+    to the fraction of all starter cells in each area.
+
+    Parameters
+    ----------
+    p_matrix : pd.DataFrame
+        Rows = presynaptic areas, Columns = starter areas,
+        each row sums to 1 (fraction from presyn. area i to each starter area).
+    starter_counts : pd.Series
+        The total number of starter cells in each area.
+        The index should match p_matrix.columns.
+
+    Returns
+    -------
+    pd.DataFrame
+        An odds-ratio matrix of the same shape as p_matrix.
+    """
+    # Fraction of all starter cells in each area
+    fraction_of_starters = starter_counts / starter_counts.sum()
+
+    or_matrix = p_matrix.copy()
+    for j in p_matrix.columns:
+        q_j = fraction_of_starters[j]
+        print(q_j)
+
+        # We apply the odds-ratio formula to each entry p_ij in column j
+        def odds_ratio(p):
+            # Protect against p == 1 or p == 0 or q_j == 1 or q_j == 0
+            # by adding small epsilons if necessary, or just do a direct check:
+            if p >= 1.0:
+                return np.inf
+            elif p <= 0.0:
+                return 0.0
+            elif q_j >= 1.0:
+                return 0.0
+            elif q_j <= 0.0:
+                return np.inf
+
+            return (p * (1 - q_j)) / (q_j * (1 - p))
+
+        or_matrix[j] = p_matrix[j].apply(odds_ratio)
+
+    return or_matrix
+
+
 def filter_matrix(
     matrix,
     presyn_groups_of_interest=[
@@ -166,6 +213,8 @@ def plot_area_by_area_connectivity(
     sum_fraction=False,
     mask_zeros=False,
     ax=None,
+    transpose=True,
+    odds_ratio=False,
 ):
     if input_fraction:
         # Sort the confusion matrix by index and columns alphabetically
@@ -176,10 +225,10 @@ def plot_area_by_area_connectivity(
             filtered_confusion_matrix = (
                 filtered_confusion_matrix / filtered_confusion_matrix.sum(axis=0)
             )
-        vmax = 0.3
     else:
         filtered_confusion_matrix = filter_matrix(counts_df)
-        vmax = 500
+    if transpose:
+        filtered_confusion_matrix = filtered_confusion_matrix.T
 
     # Define a mask to hide zero values
     if mask_zeros:
@@ -190,11 +239,19 @@ def plot_area_by_area_connectivity(
             index=filtered_confusion_matrix.index,
             columns=filtered_confusion_matrix.columns,
         )
-
+    # Calculate odds ratio
+    starter_counts = fractions_df.iloc[:, -1].value_counts()
+    if odds_ratio:
+        filtered_confusion_matrix = compute_odds_ratio(
+            filtered_confusion_matrix, starter_counts
+        )
+        filtered_confusion_matrix = np.log(filtered_confusion_matrix)
+    vmin = np.min(filtered_confusion_matrix[filtered_confusion_matrix != -np.inf]) * 0.7
+    vmax = -vmin if odds_ratio else filtered_confusion_matrix.max(axis=None)
     # Plot the heatmap
     sns.heatmap(
         filtered_confusion_matrix,
-        cmap="magma_r",
+        cmap="RdBu_r" if odds_ratio else "inferno",
         cbar=False,
         yticklabels=True,
         square=True,
@@ -202,6 +259,7 @@ def plot_area_by_area_connectivity(
         linecolor="white",
         mask=mask,
         annot=False,
+        vmin=vmin,
         vmax=vmax,
         ax=ax,
     )
@@ -209,7 +267,16 @@ def plot_area_by_area_connectivity(
     # Annotate with appropriate color based on background
     for (i, j), val in np.ndenumerate(filtered_confusion_matrix):
         if input_fraction:
-            text_color = "white" if val > 0.2 else "black"
+            if odds_ratio:
+                q1 = np.percentile(filtered_confusion_matrix, 15)
+                q3 = np.percentile(filtered_confusion_matrix, 85)
+                text_color = "white" if val <= q1 or val >= q3 else "black"
+            else:
+                text_color = (
+                    "white"
+                    if val < filtered_confusion_matrix.max(axis=None) / 2
+                    else "black"
+                )
             ax.text(
                 j + 0.5,
                 i + 0.5,
@@ -220,7 +287,11 @@ def plot_area_by_area_connectivity(
                 fontsize=15,
             )
         else:
-            text_color = "white" if val > 300 else "black"
+            text_color = (
+                "white"
+                if val > filtered_confusion_matrix.max(axis=None) / 2
+                else "black"
+            )
             if not mask.iloc[i, j]:
                 ax.text(
                     j + 0.5,
@@ -269,24 +340,41 @@ def plot_area_by_area_connectivity(
         label.set_position((x, y - 0.025))
 
     # Add number of starter cells in each area per column on the bottom of the heatmap
-    # starter_counts = starters["area_acronym_ancestor_rank1"].value_counts()
-    starter_counts = fractions_df.iloc[:, -1].value_counts()
     for i, area in enumerate(filtered_confusion_matrix.columns):
         # if area in starter_counts else put 0
-        ax.text(
-            i + 0.5,
-            filtered_confusion_matrix.shape[0] + 0.5,
-            f"{starter_counts.get(area, 0)}",
-            ha="center",
-            va="center",
-            color="black",
-            fontsize=15,
-        )
+        if odds_ratio:
+            ax.text(
+                filtered_confusion_matrix.shape[1] + 0.5 if transpose else i + 0.5,
+                i + 0.5 if transpose else filtered_confusion_matrix.shape[0] + 0.5,
+                f"{(starter_counts.get(area, 0)/starter_counts.sum()):.2f}",
+                ha="center",
+                va="center",
+                color="black",
+                fontsize=15,
+            )
+        else:
+            ax.text(
+                filtered_confusion_matrix.shape[0] + 0.5 if transpose else i + 0.5,
+                i + 0.5 if transpose else filtered_confusion_matrix.shape[0] + 0.5,
+                f"{starter_counts.get(area, 0)}",
+                ha="center",
+                va="center",
+                color="black",
+                fontsize=15,
+            )
     # add a label saying what the sum is
     ax.text(
         filtered_confusion_matrix.shape[1] / 2,
         filtered_confusion_matrix.shape[0] + 1,
-        "Total starter cells per area",
+        (
+            "Proportion of starter cells per area"
+            if odds_ratio and not transpose
+            else (
+                "Total presynaptic cells per area"
+                if transpose
+                else "Total starter cells per area"
+            )
+        ),
         ha="center",
         va="center",
         color="black",
@@ -302,9 +390,9 @@ def plot_area_by_area_connectivity(
     for i, area in enumerate(filtered_confusion_matrix.index):
         # if area in starter_counts else put 0
         ax.text(
-            filtered_confusion_matrix.shape[1] + 0.5,
-            i + 0.5,
-            f"{non_starter_counts.get(area, 0)}",
+            x=i + 0.5 if transpose else filtered_confusion_matrix.shape[1] + 0.5,
+            y=filtered_confusion_matrix.shape[0] + 0.5 if transpose else i + 0.5,
+            s=f"{non_starter_counts.get(area, 0)}",
             ha="center",
             va="center",
             color="black",
@@ -314,21 +402,34 @@ def plot_area_by_area_connectivity(
     ax.text(
         filtered_confusion_matrix.shape[1] + 1,
         filtered_confusion_matrix.shape[0] / 2,
-        "Total presynaptic cells per area",
+        rotation=270,
+        s=(
+            "Proportion of starter cells per area"
+            if transpose and odds_ratio
+            else (
+                "Total starter cells per area"
+                if transpose
+                else "Total presynaptic cells per area"
+            )
+        ),
         ha="center",
         va="center",
         color="black",
         fontsize=20,
-        rotation=270,
     )
-
-    ax.set_xlabel("Starter cell location", fontsize=20, labelpad=20)
-    ax.set_ylabel("Presynaptic cell location", fontsize=20, labelpad=20)
+    if transpose:
+        ax.set_xlabel("Presynaptic cell location", fontsize=20, labelpad=20)
+        ax.set_ylabel("Starter cell location", fontsize=20, labelpad=20)
+    else:
+        ax.set_xlabel("Starter cell location", fontsize=20, labelpad=20)
+        ax.set_ylabel("Presynaptic cell location", fontsize=20, labelpad=20)
 
     # set y tick size
     ax.tick_params(axis="y", labelsize=15)
     # set x tick size
     ax.tick_params(axis="x", labelsize=15)
+
+    return filtered_confusion_matrix
 
 
 def make_minimal_df(
@@ -504,6 +605,7 @@ def shuffle_and_compute_connectivity(
             compute_connectivity_matrix,
             starter_grouping=starter_grouping,
             presyn_grouping=presyn_grouping,
+            output_fraction=output_fraction,
         )
 
         # Run it in parallel
