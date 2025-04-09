@@ -585,7 +585,7 @@ def shuffle_and_compute_connectivity(
         results = process_map(
             partial_func,
             shuffled_cell_barcode_dfs,
-            max_workers=round(cpu_count() / 3),
+            max_workers=33,
             desc="Computing connectivity",
             total=n_permutations,
         )
@@ -635,6 +635,7 @@ def plot_null_histograms_square(
         "VISl",
         "VISpm",
     ],
+    x_axis_lims=None,
 ):
     """
     Plot a grid of square histogram subplots, one for each cell in the observed confusion matrix,
@@ -751,6 +752,9 @@ def plot_null_histograms_square(
                     transform=ax.transAxes,
                     fontsize=col_label_fontsize,
                 )
+            # Set x-axis limits
+            if x_axis_lims is not None:
+                ax.set_xlim(x_axis_lims)
 
     # Add global labels (optional)
     plt.suptitle("Starter cell area", fontsize=16, y=0.93)
@@ -1013,7 +1017,7 @@ def plot_log_ratio_matrix(subset_observed_cm, subset_null_array):
     plt.show()
 
 
-def bubble_plot(log_ratio_matrix, pval_df, size_scale=800):
+def bubble_plot(log_ratio_matrix, pval_df, alpha=0.05, size_scale=800, ax=None):
     """
     Create a bubble plot to visualize log-ratios with p-values.
     Args:
@@ -1053,8 +1057,6 @@ def bubble_plot(log_ratio_matrix, pval_df, size_scale=800):
         df_plot["p_value"].clip(lower=1e-300)
     )
 
-    fig, ax = plt.subplots(figsize=(8, 10))
-
     # Main scatter
     sc = ax.scatter(
         x=df_plot["x"],
@@ -1068,7 +1070,7 @@ def bubble_plot(log_ratio_matrix, pval_df, size_scale=800):
     )
 
     # Add black outlines for significant cells
-    significant_cells = pval_df < 0.05
+    significant_cells = pval_df < alpha
     is_signif = significant_cells.stack().values
     df_signif = df_plot[is_signif]
     ax.scatter(
@@ -1108,7 +1110,5 @@ def bubble_plot(log_ratio_matrix, pval_df, size_scale=800):
     ax.set_yticklabels(y_categories)
     # Invert y-axis so top row is y=0
     ax.invert_yaxis()
-    plt.xlabel("Starter area", fontsize=13, fontweight="bold")
-    plt.ylabel("Presynaptic area", fontsize=13, fontweight="bold")
-    plt.tight_layout()
-    plt.show()
+    ax.set_xlabel("Starter area", fontsize=13, fontweight="bold")
+    ax.set_ylabel("Presynaptic area", fontsize=13, fontweight="bold")
