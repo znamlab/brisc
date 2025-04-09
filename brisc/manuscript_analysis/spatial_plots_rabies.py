@@ -44,11 +44,12 @@ def plot_all_rv_cells(
     },
     presynaptic_marker_size=1,
     starter_marker_size=2,
+    invert_xaxis=True
 ):
     ax_coronal.contour(
         bin_image, 
         levels=np.arange(0.5, np.max(bin_image) + 1, 0.5), 
-        colors="slategray", 
+        colors="black", 
         linewidths=0.5,
         zorder=0,
     )
@@ -77,7 +78,9 @@ def plot_all_rv_cells(
         zorder=2,
         alpha=0.6,        
     )
-    ax_coronal.set_xlim(550, 1150)
+    ax_coronal.plot([980, 1080], [50, 50], color="black", lw=3)
+
+    ax_coronal.set_xlim(570, 1100)
     ax_coronal.set_ylim(450, 0)
     ax_coronal.set_axis_off()
     ax_coronal.set_aspect("equal")
@@ -105,12 +108,15 @@ def plot_all_rv_cells(
         zorder=2,
         alpha=0.6,
     )
-    ax_flatmap.set_ylim(800, 1350)
+    ax_flatmap.plot([100, 200], [1330, 1330], color="black", lw=3)
+    ax_flatmap.set_ylim(740, 1350)
     ax_flatmap.set_xlim(100, 1200)
     ax_flatmap.invert_yaxis()
     ax_flatmap.set_axis_off()
     ax_flatmap.set_aspect("equal")
-
+    if invert_xaxis:
+        ax_flatmap.invert_xaxis()
+        ax_coronal.invert_xaxis()
 
     # Filter out unwanted categories
     legend_patches = [
@@ -143,6 +149,7 @@ def plot_example_barcodes(
     presynaptic_marker_size=2,
     all_cells_marker_size=1,
     starter_marker="o",
+    invert_xaxis=True,
 ):
     cells_df = cells_df[
         cells_df["cortical_area"].apply(lambda area: not pd.isnull(area))
@@ -151,7 +158,7 @@ def plot_example_barcodes(
     ax_coronal.contour(
         bin_image, 
         levels=np.arange(0.5, np.max(bin_image) + 1, 0.5), 
-        colors="slategray", 
+        colors="black", 
         linewidths=0.5,
         zorder=0,
     )
@@ -227,25 +234,29 @@ def plot_example_barcodes(
             label=barcode,
             zorder=3,
         )
-
-    ax_coronal.set_xlim(550, 1150)
+    ax_coronal.plot([980, 1080], [50, 50], color="black", lw=3)
+    ax_coronal.set_xlim(570, 1100)
     ax_coronal.set_ylim(450, 0)
     ax_coronal.set_axis_off()
     ax_coronal.set_aspect("equal")
 
-    ax_flatmap.set_ylim(790, 1350)
+    ax_flatmap.plot([100, 200], [1330, 1330], color="black", lw=3)
+    ax_flatmap.set_ylim(740, 1350)
     ax_flatmap.set_xlim(100, 1200)
     ax_flatmap.invert_yaxis()
     ax_flatmap.set_axis_off()
     ax_flatmap.set_aspect("equal")
 
+    if invert_xaxis:
+        ax_flatmap.invert_xaxis()
+        ax_coronal.invert_xaxis()
     # Modify the legend placement and format
     ax_coronal.legend(
         loc="lower left",
-        bbox_to_anchor=[0.9, 0],
+        bbox_to_anchor=[1.0, 0.05],
         frameon=False,
         fontsize=legend_fontsize,
-        ncols=3,
+        ncols=2,
     )
 
 
@@ -338,12 +349,8 @@ def plot_rabies_cells(
     target_max = layer_tops["wm"]
     norm_factor = target_max / current_max
     x_min, x_max = 19800, 21800
-    y_min, y_max = 957.0592130899, cells_df["normalised_layers"].min()    
-    # cells_df = cells_df[
-    #     (cells_df["flatmap_dorsal_x"] >= x_min)
-    #     & (cells_df["flatmap_dorsal_x"] <= x_max)
-    #     & (cells_df["normalised_layers"] * norm_factor <= y_min)
-    # ]
+    y_min, y_max = 1000, 0
+
     cells_df = cells_df[cells_df["cortical_area"] == "VISp"]
     ax_interest.scatter(
         cells_df["flatmap_dorsal_x"],
@@ -362,10 +369,10 @@ def plot_rabies_cells(
         c="black", 
         label="Starter cells",
     )
-    ax_interest.set_xticks([0, 1000])
-    ax_interest.set_xlim(x_min, x_max)
+    ax_interest.set_xticks((18750, 19750, 20750, 21750, 22750), labels=[-2, -1, 0, 1, 2])
+    ax_interest.set_xlim(18750, 22750)
     ax_interest.set_ylim(y_min, y_max)
-    ax_interest.set_xlabel("M-L\ncoordinates (µm)", fontsize=label_fontsize)
+    ax_interest.set_xlabel("Medio-lateral\nlocation (mm)", fontsize=label_fontsize)
     ax_interest.set_ylabel("Cortical depth (µm)", fontsize=label_fontsize)
     for layer, z in layer_tops.items():
         ax_interest.axhline(z, c="black", lw=0.5, linestyle="--")

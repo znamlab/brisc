@@ -353,7 +353,7 @@ def plot_relative_coors(
     color="black",
     label_fontsize=12,
     tick_fontsize=10,
-    labels = [ "Medio-lateral (μm)",  "Antero-posterior (μm)" ]
+    labels = [ "Medio-lateral location (μm)",  "Antero-posterior (μm)" ]
 ):
     """
     Plot the distribution of presynaptic cells relative to starter cells in the
@@ -371,8 +371,8 @@ def plot_relative_coors(
 
     """
     ax.scatter(
-        relative_presyn_coors[:, coors_to_plot[0]] * 1000,  # z
-        relative_presyn_coors[:, coors_to_plot[1]] * 1000,  # x
+        relative_presyn_coors[:, coors_to_plot[0]],
+        relative_presyn_coors[:, coors_to_plot[1]], 
         s=s,
         alpha=alpha,
         color=color,
