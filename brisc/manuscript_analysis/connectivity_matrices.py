@@ -132,12 +132,8 @@ def compute_odds_ratio(p_matrix, starter_counts):
     or_matrix = p_matrix.copy()
     for j in p_matrix.columns:
         q_j = fraction_of_starters[j]
-        print(q_j)
 
-        # We apply the odds-ratio formula to each entry p_ij in column j
         def odds_ratio(p):
-            # Protect against p == 1 or p == 0 or q_j == 1 or q_j == 0
-            # by adding small epsilons if necessary, or just do a direct check:
             if p >= 1.0:
                 return np.inf
             elif p <= 0.0:
@@ -215,6 +211,9 @@ def plot_area_by_area_connectivity(
     ax=None,
     transpose=True,
     odds_ratio=False,
+    label_fontsize=12,
+    tick_fontsize=12,
+    line_width=1,
 ):
     if input_fraction:
         # Sort the confusion matrix by index and columns alphabetically
@@ -255,7 +254,7 @@ def plot_area_by_area_connectivity(
         cbar=False,
         yticklabels=True,
         square=True,
-        linewidths=1,
+        linewidths=line_width,
         linecolor="white",
         mask=mask,
         annot=False,
@@ -284,12 +283,12 @@ def plot_area_by_area_connectivity(
                 ha="center",
                 va="center",
                 color=text_color,
-                fontsize=15,
+                fontsize=tick_fontsize,
             )
         else:
             text_color = (
                 "white"
-                if val > filtered_confusion_matrix.max(axis=None) / 2
+                if val < filtered_confusion_matrix.max(axis=None) / 2
                 else "black"
             )
             if not mask.iloc[i, j]:
@@ -300,7 +299,7 @@ def plot_area_by_area_connectivity(
                     ha="center",
                     va="center",
                     color=text_color,
-                    fontsize=15,
+                    fontsize=tick_fontsize,
                 )
 
     ax.xaxis.set_ticks_position("top")
@@ -311,8 +310,8 @@ def plot_area_by_area_connectivity(
     #     ax.add_patch(plt.Rectangle((i, i), 1, 1, fill=False, edgecolor="black", lw=3))
 
     # Adjust the limits of the x and y axes to avoid cutting off the outer edges
-    ax.set_xlim(-0.5, filtered_confusion_matrix.shape[1] - 0.5 + 1)
-    ax.set_ylim(filtered_confusion_matrix.shape[0] - 0.5 + 1, -0.5)
+    # ax.set_xlim(-0.5, filtered_confusion_matrix.shape[1] - 0.5 + 1)
+    # ax.set_ylim(filtered_confusion_matrix.shape[0] - 0.5 + 1, -0.5)
 
     # add a red vertical line at the 9th column
     # ax.axvline(x=6, ymin=0.04, ymax=0.96, color="red", lw=3)
@@ -326,19 +325,20 @@ def plot_area_by_area_connectivity(
             filtered_confusion_matrix.shape[0],
             fill=False,
             edgecolor="black",
-            lw=3,
+            lw=line_width,
         )
     )
 
-    for label in ax.get_yticklabels():
-        x, y = label.get_position()
-        label.set_position((x + 0.025, y))
     ax.tick_params(axis="both", width=0)
+    ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
     ax.tick_params(axis="y", rotation=0)
 
-    for label in ax.get_xticklabels():
-        x, y = label.get_position()
-        label.set_position((x, y - 0.025))
+    # for label in ax.get_yticklabels():
+    #     x, y = label.get_position()
+    #     label.set_position((x + 0.025, y))
+    # for label in ax.get_xticklabels():
+    #     x, y = label.get_position()
+    #     label.set_position((x, y - 0.025))
 
     # Add number of starter cells in each area per column on the bottom of the heatmap
     for i, area in enumerate(filtered_confusion_matrix.columns):
@@ -351,7 +351,7 @@ def plot_area_by_area_connectivity(
                 ha="center",
                 va="center",
                 color="black",
-                fontsize=15,
+                fontsize=tick_fontsize,
             )
         else:
             ax.text(
@@ -361,7 +361,7 @@ def plot_area_by_area_connectivity(
                 ha="center",
                 va="center",
                 color="black",
-                fontsize=15,
+                fontsize=tick_fontsize,
             )
     # add a label saying what the sum is
     ax.text(
@@ -379,7 +379,7 @@ def plot_area_by_area_connectivity(
         ha="center",
         va="center",
         color="black",
-        fontsize=20,
+        fontsize=label_fontsize,
     )
 
     # Add number of non-starter cells in each area per row on the right of the heatmap
@@ -397,7 +397,7 @@ def plot_area_by_area_connectivity(
             ha="center",
             va="center",
             color="black",
-            fontsize=15,
+            fontsize=tick_fontsize,
         )
     # add a label saying what the sum is
     ax.text(
@@ -416,19 +416,14 @@ def plot_area_by_area_connectivity(
         ha="center",
         va="center",
         color="black",
-        fontsize=20,
+        fontsize=label_fontsize,
     )
     if transpose:
-        ax.set_xlabel("Presynaptic cell location", fontsize=20, labelpad=20)
-        ax.set_ylabel("Starter cell location", fontsize=20, labelpad=20)
+        ax.set_xlabel("Presynaptic cell location", fontsize=label_fontsize)
+        ax.set_ylabel("Starter cell location", fontsize=label_fontsize)
     else:
-        ax.set_xlabel("Starter cell location", fontsize=20, labelpad=20)
-        ax.set_ylabel("Presynaptic cell location", fontsize=20, labelpad=20)
-
-    # set y tick size
-    ax.tick_params(axis="y", labelsize=15)
-    # set x tick size
-    ax.tick_params(axis="x", labelsize=15)
+        ax.set_xlabel("Starter cell location", fontsize=label_fontsize)
+        ax.set_ylabel("Presynaptic cell location", fontsize=label_fontsize)
 
     return filtered_confusion_matrix
 
@@ -554,12 +549,7 @@ def shuffle_and_compute_connectivity(
         observed_confusion_matrix (pd.DataFrame): Observed confusion matrix
         all_null_matrices (list): List of shuffled confusion matrices
     """
-    observed_confusion_matrix, _, _ = compute_connectivity_matrix(
-        minimal_cell_barcode_df,
-        starter_grouping,
-        presyn_grouping,
-        output_fraction=output_fraction,
-    )
+
     args = [
         (seed, minimal_cell_barcode_df, shuffle_presyn, shuffle_starters)
         for seed in range(n_permutations)
@@ -593,14 +583,13 @@ def shuffle_and_compute_connectivity(
         shuffled_matrices, mean_input_fractions, starter_input_fractions = zip(*results)
 
         return (
-            observed_confusion_matrix,
             shuffled_cell_barcode_dfs,
             shuffled_matrices,
             mean_input_fractions,
             starter_input_fractions,
         )
     else:
-        return observed_confusion_matrix, shuffled_cell_barcode_dfs
+        return shuffled_cell_barcode_dfs
 
 
 def plot_null_histograms_square(
@@ -1017,7 +1006,15 @@ def plot_log_ratio_matrix(subset_observed_cm, subset_null_array):
     plt.show()
 
 
-def bubble_plot(log_ratio_matrix, pval_df, alpha=0.05, size_scale=800, ax=None):
+def bubble_plot(
+    log_ratio_matrix,
+    pval_df,
+    alpha=0.05,
+    size_scale=800,
+    label_fontsize=12,
+    tick_fontsize=12,
+    ax=None,
+):
     """
     Create a bubble plot to visualize log-ratios with p-values.
     Args:
@@ -1082,8 +1079,20 @@ def bubble_plot(log_ratio_matrix, pval_df, alpha=0.05, size_scale=800, ax=None):
         linewidths=1.2,
     )
 
-    cbar = plt.colorbar(sc, ax=ax)
-    cbar.set_label("Sign(log₁₀(ratio)) × -log₁₀(p-value)", fontsize=12)
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.1)
+    cbar = plt.colorbar(sc, cax=cax)
+
+    cbar.set_label("Sign(log₁₀(ratio)) × -log₁₀(p-value)", fontsize=label_fontsize)
+    cbar.ax.tick_params(
+        axis="both",
+        which="both",
+        length=0,  # removes tick lines
+        pad=2,  # brings tick labels closer
+        labelsize=tick_fontsize,
+    )
 
     # Bubble-size legend
     legend_values = [0.1, 0.3, 0.6]
@@ -1094,21 +1103,24 @@ def bubble_plot(log_ratio_matrix, pval_df, alpha=0.05, size_scale=800, ax=None):
             [], [], s=size_val, c="gray", alpha=0.5, label=f"|log₁₀(ratio)| = {val}"
         )
         legend_handles.append(h)
+
     ax.legend(
         handles=legend_handles,
-        title="Bubble Size Legend",
         loc="upper left",
         bbox_to_anchor=(1.05, -0.05),
         borderaxespad=0.0,
         frameon=True,
         handleheight=4.0,
+        fontsize=tick_fontsize,
     )
 
     ax.set_xticks(range(len(x_categories)))
     ax.set_yticks(range(len(y_categories)))
     ax.set_xticklabels(x_categories, rotation=90)
     ax.set_yticklabels(y_categories)
+    ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
     # Invert y-axis so top row is y=0
     ax.invert_yaxis()
-    ax.set_xlabel("Starter area", fontsize=13, fontweight="bold")
-    ax.set_ylabel("Presynaptic area", fontsize=13, fontweight="bold")
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlabel("Starter area", fontsize=label_fontsize)
+    ax.set_ylabel("Presynaptic area", fontsize=label_fontsize)
