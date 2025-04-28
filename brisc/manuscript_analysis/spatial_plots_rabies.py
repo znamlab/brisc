@@ -44,7 +44,8 @@ def plot_all_rv_cells(
     },
     presynaptic_marker_size=1,
     starter_marker_size=2,
-    invert_xaxis=True
+    invert_xaxis=True,
+    drop_areas=("hippocampal", "fiber_tract")
 ):
     ax_coronal.contour(
         bin_image, 
@@ -53,7 +54,7 @@ def plot_all_rv_cells(
         linewidths=0.5,
         zorder=0,
     )
-    cells_df["inside"] = cells_df["cortical_area"].apply(lambda area: area != "hippocampal" and not pd.isnull(area))
+    cells_df["inside"] = cells_df["cortical_area"].apply(lambda area: area not in drop_areas and not pd.isnull(area))
     cells_inside = cells_df[(cells_df["inside"] == True) & (cells_df["area"] != "outside")]
     cells_inside["cortical_area"] = cells_inside["cortical_area"].astype("category")
     cells_inside["cortical_layer"] = cells_inside["cortical_layer"].astype("category")
@@ -118,10 +119,9 @@ def plot_all_rv_cells(
         ax_flatmap.invert_xaxis()
         ax_coronal.invert_xaxis()
 
-    # Filter out unwanted categories
     legend_patches = [
-        mpatches.Patch(color=area_colors[area], label=area)
-        for area in areas
+        mpatches.Patch(color=area_color, label=area_name)
+        for area_name, area_color in area_colors.items()
     ]
 
     # Modify the legend placement and format
@@ -151,9 +151,9 @@ def plot_example_barcodes(
     starter_marker="o",
     invert_xaxis=True,
 ):
-    cells_df = cells_df[
-        cells_df["cortical_area"].apply(lambda area: not pd.isnull(area))
-    ]
+    # cells_df = cells_df[
+    #     cells_df["cortical_area"].apply(lambda area: not pd.isnull(area))
+    # ]
 
     ax_coronal.contour(
         bin_image, 
@@ -328,12 +328,13 @@ def plot_flat_ml_rv_cells(
     ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
 
 
-def plot_rabies_cells(
+def plot_layer_distribution(
     ax_interest,
     ax_density,
     cells_df,
     label_fontsize=10,
     tick_fontsize=8,
+    show_cells=True,
 ):
     layer_tops = {
         "1": 0.0,
@@ -348,34 +349,35 @@ def plot_rabies_cells(
     current_max = 2000.0
     target_max = layer_tops["wm"]
     norm_factor = target_max / current_max
-    x_min, x_max = 19800, 21800
     y_min, y_max = 1000, 0
-
     cells_df = cells_df[cells_df["cortical_area"] == "VISp"]
-    ax_interest.scatter(
-        cells_df["flatmap_dorsal_x"],
-        cells_df["normalised_layers"] * norm_factor,
-        s=2,
-        edgecolors="none",
-        c="gray",
-        alpha=0.5,
-        label="Presynaptic cells",
-    )
-    ax_interest.scatter(
-        cells_df[cells_df["is_starter"]]["flatmap_dorsal_x"],
-        cells_df[cells_df["is_starter"]]["normalised_layers"] * norm_factor,
-        s=3, 
-        edgecolors="none", 
-        c="black", 
-        label="Starter cells",
-    )
-    ax_interest.set_xticks((18750, 19750, 20750, 21750, 22750), labels=[-2, -1, 0, 1, 2])
-    ax_interest.set_xlim(18750, 22750)
-    ax_interest.set_ylim(y_min, y_max)
-    ax_interest.set_xlabel("Medio-lateral\nlocation (mm)", fontsize=label_fontsize)
-    ax_interest.set_ylabel("Cortical depth (µm)", fontsize=label_fontsize)
-    for layer, z in layer_tops.items():
-        ax_interest.axhline(z, c="black", lw=0.5, linestyle="--")
+
+    if show_cells:
+        ax_interest.scatter(
+            cells_df["flatmap_dorsal_x"],
+            cells_df["normalised_layers"] * norm_factor,
+            s=2,
+            edgecolors="none",
+            c="gray",
+            alpha=0.5,
+            label="Presynaptic cells",
+        )
+        ax_interest.scatter(
+            cells_df[cells_df["is_starter"]]["flatmap_dorsal_x"],
+            cells_df[cells_df["is_starter"]]["normalised_layers"] * norm_factor,
+            s=3, 
+            edgecolors="none", 
+            c="black", 
+            label="Starter cells",
+        )
+        ax_interest.set_xlim(18750, 22750)
+        ax_interest.set_ylim(y_min, y_max)
+        ax_interest.set_xlabel("Medio-lateral\nlocation (mm)", fontsize=label_fontsize)
+        ax_interest.set_ylabel("Cortical depth (µm)", fontsize=label_fontsize)
+        for layer, z in layer_tops.items():
+            ax_interest.axhline(z, c="black", lw=0.5, linestyle="--")
+        ax_interest.set_xticks((18750, 19750, 20750, 21750, 22750), labels=[-2, -1, 0, 1, 2])
+        ax_interest.tick_params(axis="both", labelsize=tick_fontsize)
 
     sns.violinplot(
         y=cells_df["normalised_layers"] * norm_factor, 
@@ -392,29 +394,31 @@ def plot_rabies_cells(
     )
     ax_density.legend(
         labels=["Starter cells", "Presynaptic cells"],
-        loc="lower center",
+        loc="lower left",
         fontsize=tick_fontsize,
-        bbox_to_anchor=(-0.2, 1.0),
+        bbox_to_anchor=(-0.3, 1.0),
         frameon=False,
         handlelength=1,
-        ncol=2,
+        ncol=2 if show_cells else 1,
     )
-    ax_density.set_xlabel("Cell density", fontsize=label_fontsize)
-    ax_density.set_yticks([])
-    ax_density.set_xticks([])
-
-    ax_density.set_ylim(y_min, y_max)
-    ax_density.set_ylabel("")
-    ax_interest.tick_params(axis="both", labelsize=tick_fontsize)
+    ax_density.set_xlabel("Cell\ndensity", fontsize=label_fontsize)
+    ax_density.set_ylim(y_min, y_max)    
     ax_density.tick_params(axis="both", labelsize=tick_fontsize)
     for layer, z in layer_tops.items():
         ax_density.axhline(z, c="black", lw=0.5, linestyle="--")
     # Combine handles and labels from both plots
     # add yticks on the right
-    ax_density.yaxis.tick_right()
-    ax_density.yaxis.set_label_position("right")
+    if show_cells:
+        ax_density.set_ylabel("")
+    else:
+        ax_density.set_ylabel("Cortical depth (µm)", fontsize=label_fontsize)
+
     # prepend a 0 to layer tops and find layer centres
+    ax_right = ax_density.twinx()
+    ax_right.set_ylim(y_min, y_max)    
     layer_edges = np.array(list(layer_tops.values()))
     layer_centres = (layer_edges[1:] + layer_edges[:-1]) / 2
-    ax_density.set_yticks(layer_centres, labels=list(layer_tops.keys())[:-1])
+    ax_right.set_yticks(layer_centres, labels=list(layer_tops.keys())[:-1])
+    ax_right.tick_params(axis="both", labelsize=tick_fontsize, length=0)
+
     

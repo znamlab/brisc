@@ -71,12 +71,12 @@ def compute_connectivity_matrix(
         counts_df (pd.DataFrame): DataFrame of counts of presynaptic cells in each area for each starter
         mean_input_frac_df (pd.DataFrame): DataFrame of mean fraction of presynaptic cells in each area for each starter
         fractions_df (pd.DataFrame): DataFrame of fractions of presynaptic cells in each area for each starter
+
     """
-    # 1) Separate starters and presynaptic cells
+    # Separate starters and presynaptic cells
     starter_cells = cell_barcode_df[cell_barcode_df["is_starter"]].copy()
     presyn_cells = cell_barcode_df[cell_barcode_df["is_starter"] == False].copy()
-
-    # 2) Apply the function to each starter cell to get a table of fractions
+    # Apply the function to each starter cell to get a table of fractions
     fractions_counts_dfs = starter_cells.apply(
         compute_input_fractions, axis=1, args=(presyn_cells, presyn_grouping)
     )
@@ -86,25 +86,22 @@ def compute_connectivity_matrix(
     counts_df = pd.DataFrame(
         [t[1] for t in fractions_counts_dfs], index=starter_cells.index
     )
-
-    # 3) Add a column for a property to group the starter on
+    # Add a column for a property to group the starter on
     fractions_df[starter_grouping] = starter_cells[starter_grouping].values
     counts_df[starter_grouping] = starter_cells[starter_grouping].values
     # remove rows that sum to 0 (starters with no presynaptic cells)
     fractions_df = fractions_df.loc[
         fractions_df.select_dtypes(include="number").sum(axis=1) > 0
     ]
-
     # Grouping by starter property, find the mean fraction of each presynaptic grouping
-    mean_input_frac_df = fractions_df.groupby(starter_grouping).mean().T
     counts_df = counts_df.groupby(starter_grouping).sum().T
-
     if output_fraction:
         # For each presyn area (each row), divide by the row sum so it sums to 1
-        # We reuse mean_input_frac_df just to keep the same return signature
-        mean_input_frac_df = counts_df.div(counts_df.sum(axis=1), axis=0)
+        mean_frac_df = counts_df.div(counts_df.sum(axis=1), axis=0)
+    else:
+        mean_frac_df = fractions_df.groupby(starter_grouping).mean().T
 
-    return counts_df, mean_input_frac_df, fractions_df
+    return counts_df, mean_frac_df, fractions_df
 
 
 def compute_odds_ratio(p_matrix, starter_counts):
@@ -150,35 +147,16 @@ def compute_odds_ratio(p_matrix, starter_counts):
     return or_matrix
 
 
-def filter_matrix(
+def reorganise_matrix(
     matrix,
-    presyn_groups_of_interest=[
-        "VISp1",
-        "VISp2/3",
-        "VISp4",
-        "VISp5",
-        "VISp6a",
-        "VISp6b",
-        "VISal",
-        "VISl",
-        "VISli",
-        "VISpm",
-        "RSP",
-        "AUD",
-        "TEa",
-        "TH",
-    ],
-    starter_groups_of_interest=[
-        "VISp1",
-        "VISp2/3",
-        "VISp4",
-        "VISp5",
-        "VISp6a",
-        "VISp6b",
-        "VISal",
-        "VISl",
-        "VISpm",
-    ],
+    areas={
+        "VISp1": "1",
+        "VISp2/3": "2/3",
+        "VISp4": "4",
+        "VISp5": "5",
+        "VISp6a": "6a",
+        "VISp6b": "6b",
+    },
 ):
     """
     Filter the confusion matrix to include only areas of interest and remove rows and columns with all zeros.
@@ -191,241 +169,139 @@ def filter_matrix(
     """
 
     matrix = matrix.reindex(
-        index=presyn_groups_of_interest,
-        columns=starter_groups_of_interest,
+        index=areas.keys(),
+        columns=areas.keys(),
         fill_value=0,
     )
 
     # Drop rows or columns with only 0s
-    matrix = matrix.loc[matrix.any(axis=1), matrix.any(axis=0)]
+    matrix = matrix.rename(index=areas, columns=areas)
     return matrix
 
 
 def plot_area_by_area_connectivity(
-    average_df,
-    counts_df,
-    fractions_df,
+    connectivity_matrix,
+    starter_counts,
+    presynaptic_counts,
+    ax,
+    cbax=None,
     input_fraction=False,
-    sum_fraction=False,
-    mask_zeros=False,
-    ax=None,
-    transpose=True,
     odds_ratio=False,
     label_fontsize=12,
     tick_fontsize=12,
     line_width=1,
+    show_counts=True,
+    cbar_label="Input fraction"
 ):
-    if input_fraction:
-        # Sort the confusion matrix by index and columns alphabetically
-        filtered_confusion_matrix = filter_matrix(average_df)
-        counts_matrix = filter_matrix(counts_df)
-        if sum_fraction:
-            filtered_confusion_matrix = filter_matrix(counts_df)
-            filtered_confusion_matrix = (
-                filtered_confusion_matrix / filtered_confusion_matrix.sum(axis=0)
-            )
-    else:
-        filtered_confusion_matrix = filter_matrix(counts_df)
-    if transpose:
-        filtered_confusion_matrix = filtered_confusion_matrix.T
-
-    # Define a mask to hide zero values
-    if mask_zeros:
-        mask = filtered_confusion_matrix == 0
-    else:
-        mask = pd.DataFrame(
-            False,
-            index=filtered_confusion_matrix.index,
-            columns=filtered_confusion_matrix.columns,
-        )
-    # Calculate odds ratio
-    starter_counts = fractions_df.iloc[:, -1].value_counts()
-    if odds_ratio:
-        filtered_confusion_matrix = compute_odds_ratio(
-            filtered_confusion_matrix, starter_counts
-        )
-        filtered_confusion_matrix = np.log(filtered_confusion_matrix)
-    vmin = np.min(filtered_confusion_matrix[filtered_confusion_matrix != -np.inf]) * 0.7
-    vmax = -vmin if odds_ratio else filtered_confusion_matrix.max(axis=None)
+    vmin = np.min(connectivity_matrix[connectivity_matrix != -np.inf]) * 0.7
+    vmax = -vmin if odds_ratio else connectivity_matrix.max(axis=None)
+    cmap = "RdBu_r" if odds_ratio else "inferno"
     # Plot the heatmap
     sns.heatmap(
-        filtered_confusion_matrix,
-        cmap="RdBu_r" if odds_ratio else "inferno",
-        cbar=False,
+        connectivity_matrix,
+        cmap=cmap,
+        cbar=True if cbax else False,
+        cbar_ax=cbax,
         yticklabels=True,
         square=True,
         linewidths=line_width,
         linecolor="white",
-        mask=mask,
         annot=False,
         vmin=vmin,
         vmax=vmax,
         ax=ax,
     )
+    if cbax:
+        cbax.tick_params(labelsize=tick_fontsize)
+        cbax.patch.set_edgecolor('black')
+        cbax.patch.set_linewidth(1.5)
+        cbax.set_title(cbar_label, fontsize=tick_fontsize, loc="left")     
 
     # Annotate with appropriate color based on background
-    for (i, j), val in np.ndenumerate(filtered_confusion_matrix):
-        if input_fraction:
-            if odds_ratio:
-                q1 = np.percentile(filtered_confusion_matrix, 15)
-                q3 = np.percentile(filtered_confusion_matrix, 85)
-                text_color = "white" if val <= q1 or val >= q3 else "black"
-            else:
-                text_color = (
-                    "white"
-                    if val < filtered_confusion_matrix.max(axis=None) / 2
-                    else "black"
-                )
-            ax.text(
-                j + 0.5,
-                i + 0.5,
-                f"{val:.2f}" if input_fraction else f"{int(val)}",
-                ha="center",
-                va="center",
-                color=text_color,
-                fontsize=tick_fontsize,
-            )
+    for (i, j), val in np.ndenumerate(connectivity_matrix):
+        if odds_ratio:
+            q1 = np.percentile(connectivity_matrix, 15)
+            q3 = np.percentile(connectivity_matrix, 85)
+            text_color = "white" if val <= q1 or val >= q3 else "black"
         else:
             text_color = (
                 "white"
-                if val < filtered_confusion_matrix.max(axis=None) / 2
+                if val < connectivity_matrix.max(axis=None) / 2
                 else "black"
             )
-            if not mask.iloc[i, j]:
-                ax.text(
-                    j + 0.5,
-                    i + 0.5,
-                    f"{val:.2f}" if input_fraction else f"{int(val)}",
-                    ha="center",
-                    va="center",
-                    color=text_color,
-                    fontsize=tick_fontsize,
-                )
-
+        ax.text(
+            j + 0.5,
+            i + 0.5,
+            f"{val:.2f}" if input_fraction else f"{int(val)}",
+            ha="center",
+            va="center",
+            color=text_color,
+            fontsize=tick_fontsize,
+        )
     ax.xaxis.set_ticks_position("top")
     ax.xaxis.set_label_position("top")
-
-    # # Highlight the diagonal with a black outline
-    # for i in range(filtered_confusion_matrix.shape[1]):
-    #     ax.add_patch(plt.Rectangle((i, i), 1, 1, fill=False, edgecolor="black", lw=3))
-
-    # Adjust the limits of the x and y axes to avoid cutting off the outer edges
-    # ax.set_xlim(-0.5, filtered_confusion_matrix.shape[1] - 0.5 + 1)
-    # ax.set_ylim(filtered_confusion_matrix.shape[0] - 0.5 + 1, -0.5)
-
-    # add a red vertical line at the 9th column
-    # ax.axvline(x=6, ymin=0.04, ymax=0.96, color="red", lw=3)
-    # add a red horizontal line at the 10th row
-    # ax.axhline(y=6, xmin=0.05, xmax=0.95, color="red", lw=3)
-
     ax.add_patch(
         plt.Rectangle(
             (0, 0),
-            filtered_confusion_matrix.shape[1],
-            filtered_confusion_matrix.shape[0],
+            connectivity_matrix.shape[1],
+            connectivity_matrix.shape[0],
             fill=False,
             edgecolor="black",
             lw=line_width,
         )
     )
-
-    ax.tick_params(axis="both", width=0)
     ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
     ax.tick_params(axis="y", rotation=0)
+    ax.set_xlabel("Starter layer", fontsize=label_fontsize)
+    ax.set_ylabel("Presynaptic layer", fontsize=label_fontsize)
 
-    # for label in ax.get_yticklabels():
-    #     x, y = label.get_position()
-    #     label.set_position((x + 0.025, y))
-    # for label in ax.get_xticklabels():
-    #     x, y = label.get_position()
-    #     label.set_position((x, y - 0.025))
-
+    if not show_counts:
+        return
     # Add number of starter cells in each area per column on the bottom of the heatmap
-    for i, area in enumerate(filtered_confusion_matrix.columns):
-        # if area in starter_counts else put 0
-        if odds_ratio:
-            ax.text(
-                filtered_confusion_matrix.shape[1] + 0.5 if transpose else i + 0.5,
-                i + 0.5 if transpose else filtered_confusion_matrix.shape[0] + 0.5,
-                f"{(starter_counts.get(area, 0)/starter_counts.sum()):.2f}",
-                ha="center",
-                va="center",
-                color="black",
-                fontsize=tick_fontsize,
-            )
-        else:
-            ax.text(
-                filtered_confusion_matrix.shape[0] + 0.5 if transpose else i + 0.5,
-                i + 0.5 if transpose else filtered_confusion_matrix.shape[0] + 0.5,
-                f"{starter_counts.get(area, 0)}",
-                ha="center",
-                va="center",
-                color="black",
-                fontsize=tick_fontsize,
-            )
-    # add a label saying what the sum is
-    ax.text(
-        filtered_confusion_matrix.shape[1] / 2,
-        filtered_confusion_matrix.shape[0] + 1,
-        (
-            "Proportion of starter cells per area"
-            if odds_ratio and not transpose
-            else (
-                "Total presynaptic cells per area"
-                if transpose
-                else "Total starter cells per area"
-            )
-        ),
-        ha="center",
-        va="center",
-        color="black",
-        fontsize=label_fontsize,
-    )
-
-    # Add number of non-starter cells in each area per row on the right of the heatmap
-    if not input_fraction:
-        non_starter_counts = filtered_confusion_matrix.sum(axis=1)
-    else:
-        non_starter_counts = counts_matrix.sum(axis=1)
-
-    for i, area in enumerate(filtered_confusion_matrix.index):
+    for i, area in enumerate(connectivity_matrix.columns):
         # if area in starter_counts else put 0
         ax.text(
-            x=i + 0.5 if transpose else filtered_confusion_matrix.shape[1] + 0.5,
-            y=filtered_confusion_matrix.shape[0] + 0.5 if transpose else i + 0.5,
-            s=f"{non_starter_counts.get(area, 0)}",
+            i + 0.5,
+            connectivity_matrix.shape[0] + 0.5,
+            starter_counts.get(area, 0),
             ha="center",
+            va="center",
+            color="black",
+            fontsize=tick_fontsize,
+        )
+
+    # add a label saying what the sum is
+    ax.text(
+        -.15,
+        connectivity_matrix.shape[0] + 0.5,
+        "N starters:",
+        ha="right",
+        va="center",
+        color="black",
+        fontsize=tick_fontsize,
+    )
+
+    for i, area in enumerate(connectivity_matrix.index):
+        # if area in starter_counts else put 0
+        ax.text(
+            x=connectivity_matrix.shape[1] + 0.25,
+            y=i + 0.5,
+            s=f"{presynaptic_counts.get(area, 0)}",
+            ha="left",
             va="center",
             color="black",
             fontsize=tick_fontsize,
         )
     # add a label saying what the sum is
     ax.text(
-        filtered_confusion_matrix.shape[1] + 1,
-        filtered_confusion_matrix.shape[0] / 2,
-        rotation=270,
-        s=(
-            "Proportion of starter cells per area"
-            if transpose and odds_ratio
-            else (
-                "Total starter cells per area"
-                if transpose
-                else "Total presynaptic cells per area"
-            )
-        ),
-        ha="center",
+        connectivity_matrix.shape[1] + 0.25,
+        -0.6,
+        s="Total\npresynaptic\ncells:",
+        ha="left",
         va="center",
         color="black",
-        fontsize=label_fontsize,
+        fontsize=tick_fontsize,
     )
-    if transpose:
-        ax.set_xlabel("Presynaptic cell location", fontsize=label_fontsize)
-        ax.set_ylabel("Starter cell location", fontsize=label_fontsize)
-    else:
-        ax.set_xlabel("Starter cell location", fontsize=label_fontsize)
-        ax.set_ylabel("Presynaptic cell location", fontsize=label_fontsize)
-
-    return filtered_confusion_matrix
 
 
 def make_minimal_df(
@@ -525,6 +401,27 @@ def shuffle_wrapper(arg):
     )
 
 
+def compare_to_shuffle(observed_matrix, shuffled_matrices, alpha=0.05):
+    subset_observed_cm, subset_null_array = filter_matrices(
+            observed_matrix, 
+            np.array(shuffled_matrices)
+    )
+    # Compute p-values and log ratio of observed connectivity vs mean for bubble plots
+    mean_null = subset_null_array.mean(axis=0)
+    ratio_matrix = subset_observed_cm.values / (mean_null + 1e-9)
+    ratio_matrix = pd.DataFrame(
+        ratio_matrix, index=subset_observed_cm.index, columns=subset_observed_cm.columns
+    )
+    log_ratio_matrix = np.log10(ratio_matrix)
+    pval_df = compute_empirical_pvalues(
+        subset_observed_cm, subset_null_array, two_sided=True
+    )
+    pval_df = pval_df.loc[log_ratio_matrix.index, log_ratio_matrix.columns]
+    # FDR correction
+    _, pval_corrected_df = benjamini_hochberg(pval_df, alpha=alpha)
+    return log_ratio_matrix, pval_corrected_df
+
+
 def shuffle_and_compute_connectivity(
     minimal_cell_barcode_df,
     n_permutations=10000,
@@ -591,6 +488,56 @@ def shuffle_and_compute_connectivity(
     else:
         return shuffled_cell_barcode_dfs
 
+def filter_matrices(
+        observed_cm, 
+        all_null_matrices,
+        row_order=[
+            "VISp1",
+            "VISp2/3",
+            "VISp4",
+            "VISp5",
+            "VISp6a",
+            "VISp6b",
+            "VISal",
+            "VISl",
+            "VISli",
+            "VISpm",
+            "RSP",
+            "AUD",
+            "TEa",
+            "TH",
+        ],
+        col_order=[
+            "VISp1",
+            "VISp2/3",
+            "VISp4",
+            "VISp5",
+            "VISp6a",
+            "VISp6b",
+            "VISl",
+            "VISpm",
+        ],
+    ):
+    # Determine row/column order
+    if row_order is None:
+        row_order = list(observed_cm.index)
+    if col_order is None:
+        col_order = list(observed_cm.columns)
+    # If you want to ensure only valid areas are used (i.e., ignoring any that
+    # don't exist in observed_cm), you can filter them here:
+    row_order = [r for r in row_order if r in observed_cm.index]
+    col_order = [c for c in col_order if c in observed_cm.columns]
+    # Subset the observed_cm
+    subset_observed_cm = observed_cm.loc[row_order, col_order]
+    # find the integer row/col indices that correspond to row_order/col_order
+    row_indices = [observed_cm.index.get_loc(r) for r in row_order]
+    col_indices = [observed_cm.columns.get_loc(c) for c in col_order]
+    # Reindex the null distribution:
+    #   first index permutations (:), then row_indices, then col_indices
+    # null_array[:, row_indices, col_indices] => shape: (N, n_rows, n_cols)
+    subset_null_array = all_null_matrices[:, row_indices][:, :, col_indices]
+    return subset_observed_cm, subset_null_array
+
 
 def plot_null_histograms_square(
     observed_cm,
@@ -598,32 +545,6 @@ def plot_null_histograms_square(
     bins=30,
     row_label_fontsize=14,
     col_label_fontsize=14,
-    row_order=[
-        "VISp1",
-        "VISp2/3",
-        "VISp4",
-        "VISp5",
-        "VISp6a",
-        "VISp6b",
-        "VISal",
-        "VISl",
-        "VISli",
-        "VISpm",
-        "RSP",
-        "AUD",
-        "TEa",
-        "TH",
-    ],
-    col_order=[
-        "VISp1",
-        "VISp2/3",
-        "VISp4",
-        "VISp5",
-        "VISp6a",
-        "VISp6b",
-        "VISl",
-        "VISpm",
-    ],
     x_axis_lims=None,
 ):
     """
@@ -650,41 +571,14 @@ def plot_null_histograms_square(
             If None, use observed_cm.columns as-is.
     Returns:
         subset_null_array:
+
     """
-
-    # Determine row/column order
-    if row_order is None:
-        row_order = list(observed_cm.index)
-    if col_order is None:
-        col_order = list(observed_cm.columns)
-
-    # If you want to ensure only valid areas are used (i.e., ignoring any that
-    # don't exist in observed_cm), you can filter them here:
-    row_order = [r for r in row_order if r in observed_cm.index]
-    col_order = [c for c in col_order if c in observed_cm.columns]
-
-    # Subset the observed_cm
-    subset_observed_cm = observed_cm.loc[row_order, col_order]
-    n_rows, n_cols = subset_observed_cm.shape
-
-    # Subset the null distributions
-    null_array = np.array(all_null_matrices)  # shape: (N, orig_n_rows, orig_n_cols)
-
-    # find the integer row/col indices that correspond to row_order/col_order
-    row_indices = [observed_cm.index.get_loc(r) for r in row_order]
-    col_indices = [observed_cm.columns.get_loc(c) for c in col_order]
-
-    # Reindex the null distribution:
-    #   first index permutations (:), then row_indices, then col_indices
-    # null_array[:, row_indices, col_indices] => shape: (N, n_rows, n_cols)
-    subset_null_array = null_array[:, row_indices][:, :, col_indices]
-
     # Create the figure and axes grid
     # Decide figure size so each subplot can be roughly square
+    n_rows, n_cols = observed_cm.shape
     fig, axes = plt.subplots(
         n_rows, n_cols, figsize=(n_cols * 2.0, n_rows * 2.0), sharex=False, sharey=False
     )
-
     # Helper to handle 1D/2D indexing of axes
     def get_ax(i, j):
         if n_rows == 1 and n_cols == 1:
@@ -695,28 +589,21 @@ def plot_null_histograms_square(
             return axes[i]
         else:
             return axes[i, j]
-
     # Plot each histogram
-    for i, row_label in enumerate(row_order):
-        for j, col_label in enumerate(col_order):
+    for i, row_label in enumerate(observed_cm.index):
+        for j, col_label in enumerate(observed_cm.columns):
             ax = get_ax(i, j)
-
             # Extract the null distribution for this subset cell
-            cell_values = subset_null_array[:, i, j]
-
+            cell_values = all_null_matrices[:, i, j]
             # Observed value
-            observed_val = subset_observed_cm.iloc[i, j]
-
+            observed_val = observed_cm.iloc[i, j]
             # Plot the histogram
             ax.hist(cell_values, bins=bins, density=True, alpha=0.5, color="black")
-
             # Vertical red line at observed
             ax.axvline(observed_val, color="red", linewidth=2)
-
             # Remove y-axis ticks
             ax.set_yticks([])
             ax.set_yticklabels([])
-
             # Put the row label on the left edge for the first column in each row
             if j == 0:
                 ax.text(
@@ -744,7 +631,6 @@ def plot_null_histograms_square(
             # Set x-axis limits
             if x_axis_lims is not None:
                 ax.set_xlim(x_axis_lims)
-
     # Add global labels (optional)
     plt.suptitle("Starter cell area", fontsize=16, y=0.93)
     plt.text(
@@ -757,11 +643,8 @@ def plot_null_histograms_square(
         va="center",
         transform=fig.transFigure,
     )
-
     plt.tight_layout()
     plt.show()
-
-    return subset_null_array, subset_observed_cm
 
 
 def compute_empirical_pvalues(observed_cm, null_array, two_sided=True):
@@ -793,7 +676,6 @@ def compute_empirical_pvalues(observed_cm, null_array, two_sided=True):
     # null_array = np.array(all_null_matrices)  # shape: (N, n_rows, n_cols)
     n_permutations = null_array.shape[0]
     n_rows, n_cols = observed_cm.shape
-
     # Prepare an output DataFrame for p-values
     pval_df = pd.DataFrame(
         np.zeros((n_rows, n_cols)),
@@ -801,27 +683,21 @@ def compute_empirical_pvalues(observed_cm, null_array, two_sided=True):
         columns=observed_cm.columns,
         dtype=float,
     )
-
     for i in range(n_rows):
         for j in range(n_cols):
             observed_val = observed_cm.iat[i, j]
-
             # If there's no observed value (NaN), set p-value to NaN and continue
             if pd.isna(observed_val):
                 pval_df.iat[i, j] = np.nan
                 continue
-
             # Extract the null distribution for this cell across permutations
             cell_null_vals = null_array[:, i, j]
-
             # Count how many are >= and <= the observed
             count_ge = np.sum(cell_null_vals >= observed_val)
             count_le = np.sum(cell_null_vals <= observed_val)
-
             # Small-sample correction uses (count + 1)/(N + 1)
             p_right = (count_ge + 1) / (n_permutations + 1)
             p_left = (count_le + 1) / (n_permutations + 1)
-
             if two_sided:
                 # Two-sided p-value
                 p_2sided = 2.0 * min(p_left, p_right)
@@ -830,9 +706,7 @@ def compute_empirical_pvalues(observed_cm, null_array, two_sided=True):
             else:
                 # One-sided (right-tailed)
                 p_val = p_right
-
             pval_df.iat[i, j] = p_val
-
     return pval_df
 
 
@@ -855,35 +729,28 @@ def benjamini_hochberg(pval_df, alpha=0.05):
     pval_corrected_df : pd.DataFrame (float)
         The BH-adjusted p-values in the same shape as pval_df.
     """
-
     # Flatten all p-values into a 1D array (excluding NaNs)
     pvals = pval_df.values.flatten()
     not_nan_mask = ~np.isnan(pvals)
     pvals_nonan = pvals[not_nan_mask]
     m = pvals_nonan.size
-
     # Sort the p-values in ascending order; keep track of their original indices
     sort_idx = np.argsort(pvals_nonan)
     pvals_sorted = pvals_nonan[sort_idx]
     pvals_bh_sorted = np.empty_like(pvals_sorted)
-
     # BH procedure:
     # pBH(i) = p_sorted(i) * (m / i)
     factor = m / np.arange(1, m + 1)
     pvals_bh_sorted = pvals_sorted * factor
-
     # Now enforce monotonicity from largest to smallest
     for i in range(m - 2, -1, -1):
         pvals_bh_sorted[i] = min(pvals_bh_sorted[i], pvals_bh_sorted[i + 1])
-
     # Create an array for the BH-corrected p-values in their *original* order
     pvals_bh = np.full_like(pvals, np.nan, dtype=float)
     idx_non_nan = np.where(not_nan_mask)[0]
     pvals_bh[idx_non_nan[sort_idx]] = pvals_bh_sorted
-
     # Determine significance:  pBH(i) <= alpha
     rejected = pvals_bh <= alpha
-
     # Reshape everything back into the original DataFrame shape
     pval_corrected_df = pd.DataFrame(
         pvals_bh.reshape(pval_df.shape), index=pval_df.index, columns=pval_df.columns
@@ -899,29 +766,23 @@ def plot_log_ratio_matrix(subset_observed_cm, subset_null_array):
     pval_df = compute_empirical_pvalues(
         subset_observed_cm, subset_null_array, two_sided=True
     )
-
     mean_null = subset_null_array.mean(axis=0)
     std_null = subset_null_array.std(axis=0)
     z_matrix = (subset_observed_cm.values - mean_null) / (std_null + 1e-9)
     z_matrix = pd.DataFrame(
         z_matrix, index=subset_observed_cm.index, columns=subset_observed_cm.columns
     )
-
     # Calculate the ratio matrix
     ratio_matrix = subset_observed_cm.values / (mean_null + 1e-9)
     ratio_matrix = pd.DataFrame(
         ratio_matrix, index=subset_observed_cm.index, columns=subset_observed_cm.columns
     )
-
     # Calculate the log ratio matrix
     log_ratio_matrix = np.log10(ratio_matrix)
-
     # Mask for zero values (log(1) = 0)
     mask = np.isclose(log_ratio_matrix, 0)
-
     # Ensure pval_df has the same index/columns as log_ratio_matrix
     pval_df = pval_df.loc[log_ratio_matrix.index, log_ratio_matrix.columns]
-
     # Function to format p-values in scientific notation (1 decimal before 'e')
     def format_pval(x):
         if x == 0:
@@ -932,7 +793,6 @@ def plot_log_ratio_matrix(subset_observed_cm, subset_null_array):
 
     # Identify significant cells where p-value < 0.05
     significant_cells = pval_df < 0.05
-
     plt.figure(figsize=(12, 10))
     ax = sns.heatmap(
         log_ratio_matrix,
@@ -945,14 +805,12 @@ def plot_log_ratio_matrix(subset_observed_cm, subset_null_array):
         vmax=0.30,
         vmin=-0.30,
     )
-
     # Manually add text annotations
     for i in range(log_ratio_matrix.shape[0]):
         for j in range(log_ratio_matrix.shape[1]):
             log_ratio = log_ratio_matrix.iloc[i, j]
             p_val = pval_df.iloc[i, j]
             p_val_text = format_pval(p_val)
-
             # If log_ratio is finite (not -inf), display it
             if np.isfinite(log_ratio):
                 ax.text(
@@ -964,7 +822,6 @@ def plot_log_ratio_matrix(subset_observed_cm, subset_null_array):
                     fontsize=12,
                     fontweight="bold",
                 )
-
             # Always display the p-value in smaller text
             ax.text(
                 j + 0.5,
@@ -975,7 +832,6 @@ def plot_log_ratio_matrix(subset_observed_cm, subset_null_array):
                 fontsize=8,
                 color="black",
             )
-
             # Add black outline if significant (p < 0.05)
             if significant_cells.iloc[i, j]:
                 rect = plt.Rectangle((j, i), 1, 1, fill=False, edgecolor="black", lw=2)
@@ -986,15 +842,9 @@ def plot_log_ratio_matrix(subset_observed_cm, subset_null_array):
     ax.axhline(y=log_ratio_matrix.shape[0], color="grey", linewidth=5)
     ax.axvline(x=0, color="grey", linewidth=5)
     ax.axvline(x=log_ratio_matrix.shape[1], color="grey", linewidth=5)
-
     # Set the limits to ensure the borders are fully visible
     ax.set_xlim(0, log_ratio_matrix.shape[1])
     ax.set_ylim(log_ratio_matrix.shape[0], 0)
-
-    # Make x and y area labels bold
-    # ax.set_xticklabels(ax.get_xticklabels(), fontweight='bold')
-    # ax.set_yticklabels(ax.get_yticklabels(), fontweight='bold')
-
     plt.title(
         "Log Ratio of Observed vs. Shuffled Null with P-values",
         fontsize=16,
@@ -1002,7 +852,6 @@ def plot_log_ratio_matrix(subset_observed_cm, subset_null_array):
     )
     plt.xlabel("Starter area", fontsize=14, fontweight="bold")
     plt.ylabel("Presynaptic area", fontsize=14, fontweight="bold")
-
     plt.show()
 
 
@@ -1014,6 +863,8 @@ def bubble_plot(
     label_fontsize=12,
     tick_fontsize=12,
     ax=None,
+    cbax=None,
+    show_legend=True,
 ):
     """
     Create a bubble plot to visualize log-ratios with p-values.
@@ -1044,7 +895,6 @@ def bubble_plot(
     ).codes
     x_categories = log_ratio_matrix.columns
     y_categories = log_ratio_matrix.index
-
     # Calculate bubble size & color value
     # Bubble size: absolute log ratio * size_scale
     df_plot["bubble_size"] = df_plot["log_ratio"].abs() * size_scale
@@ -1053,7 +903,6 @@ def bubble_plot(
     df_plot["color_value"] = np.sign(df_plot["log_ratio"]) * -np.log10(
         df_plot["p_value"].clip(lower=1e-300)
     )
-
     # Main scatter
     sc = ax.scatter(
         x=df_plot["x"],
@@ -1061,8 +910,8 @@ def bubble_plot(
         s=df_plot["bubble_size"],
         c=df_plot["color_value"],
         cmap="coolwarm",
-        vmin=df_plot["color_value"].min(),
-        vmax=df_plot["color_value"].max(),
+        vmin=np.log10(alpha),
+        vmax=-np.log10(alpha),
         edgecolors="none",
     )
 
@@ -1076,51 +925,53 @@ def bubble_plot(
         s=df_signif["bubble_size"],
         facecolors="none",
         edgecolors="black",
-        linewidths=1.2,
+        linewidths=0.5,
     )
-
-    from mpl_toolkits.axes_grid1 import make_axes_locatable
-
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size="5%", pad=0.1)
-    cbar = plt.colorbar(sc, cax=cax)
-
-    cbar.set_label("Sign(log₁₀(ratio)) × -log₁₀(p-value)", fontsize=label_fontsize)
-    cbar.ax.tick_params(
-        axis="both",
-        which="both",
-        length=0,  # removes tick lines
-        pad=2,  # brings tick labels closer
-        labelsize=tick_fontsize,
-    )
-
-    # Bubble-size legend
-    legend_values = [0.1, 0.3, 0.6]
-    legend_handles = []
-    for val in legend_values:
-        size_val = val * size_scale
-        h = ax.scatter(
-            [], [], s=size_val, c="gray", alpha=0.5, label=f"|log₁₀(ratio)| = {val}"
+    if cbax:
+        plt.colorbar(sc, cax=cbax, ax=ax)
+        cbax.set_title("Signed\n$\log_{10}$ p-value", fontsize=tick_fontsize, loc="left")
+        cbax.tick_params(
+            axis="both",
+            which="both",
+            pad=2,  # brings tick labels closer
+            labelsize=tick_fontsize,
         )
-        legend_handles.append(h)
 
-    ax.legend(
-        handles=legend_handles,
-        loc="upper left",
-        bbox_to_anchor=(1.05, -0.05),
-        borderaxespad=0.0,
-        frameon=True,
-        handleheight=4.0,
-        fontsize=tick_fontsize,
-    )
+    if show_legend:
+        legend_values = [0.2, 0.4, 0.6]
+        legend_handles = []
+        for val in legend_values:
+            size_val = val * size_scale
+            h = ax.scatter(
+                [], [], s=size_val, c="gray", alpha=0.5, label=val
+            )
+            legend_handles.append(h)
+
+        legend = ax.legend(
+            handles=legend_handles,
+            loc="lower left",
+            bbox_to_anchor=(1.05, 0),
+            borderaxespad=0.0,
+            frameon=False,
+            handleheight=3.0,
+            fontsize=tick_fontsize,
+            title="$|\log_{10}\\frac{\mathrm{observed}}{\mathrm{shuffled}}|$"
+        )
+        legend.get_title().set_fontsize('6') 
+    ax.set_xlim([-.5, len(x_categories)-.5])
+    ax.set_ylim([-.5, len(y_categories)-.5])
 
     ax.set_xticks(range(len(x_categories)))
     ax.set_yticks(range(len(y_categories)))
-    ax.set_xticklabels(x_categories, rotation=90)
+    ax.set_xticklabels(x_categories)
     ax.set_yticklabels(y_categories)
     ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
+    # ax.tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position("top")
+
     # Invert y-axis so top row is y=0
     ax.invert_yaxis()
     ax.set_aspect("equal", adjustable="box")
-    ax.set_xlabel("Starter area", fontsize=label_fontsize)
-    ax.set_ylabel("Presynaptic area", fontsize=label_fontsize)
+    ax.set_xlabel("Starter layer", fontsize=label_fontsize, )
+    ax.set_ylabel("Presynaptic layer", fontsize=label_fontsize)

@@ -205,7 +205,7 @@ def repeated_hierarchical_bootstrap_in_parallel(
         return bootstrapped_results
 
 
-def unify_dfs(observed_cm, dfs):
+def reorder_dfs(dfs, target):
     """
     Given an observed_cm (DataFrame) and a list of DataFrames, reindex each
     DataFrame so they share the same rows and columns (in the same order) as
@@ -219,8 +219,8 @@ def unify_dfs(observed_cm, dfs):
     Returns:
         list of pd.DataFrame: Each reindexed to match observed_cm rows/columns.
     """
-    row_order = observed_cm.index
-    col_order = observed_cm.columns
+    row_order = target.index
+    col_order = target.columns
     reindexed_dfs = [
         df.reindex(index=row_order, columns=col_order, fill_value=0) for df in dfs
     ]
@@ -260,6 +260,7 @@ def plot_confidence_intervals(
     label_fontsize=12,
     tick_fontsize=12,
     line_width=1,
+    orientation="vertical",
 ):
     """
     Plot confidence intervals in multiple stacked Axes created via make_axes_locatable.
@@ -280,9 +281,6 @@ def plot_confidence_intervals(
     (fig, axes) : (matplotlib.figure.Figure, list of matplotlib.axes.Axes)
         The figure and list of axes (one per column in mean_input_frac_df).
     """
-
-    fig = ax.get_figure()
-
     # Determine the presynaptic areas (rows) and target areas (columns)
     presyn_area_order = sorted(mean_input_frac_df.index)
     areas = sorted(mean_input_frac_df.columns)
@@ -291,72 +289,99 @@ def plot_confidence_intervals(
     # Create a divider on the initial Axes
     divider = make_axes_locatable(ax)
     axes = [ax]
+    direction = "bottom" if orientation == "vertical" else "right"
     for _ in range(num_subplots - 1):
-        ax_new = divider.append_axes("bottom", size="100%", pad=0.1)
+        ax_new = divider.append_axes(direction, size="100%", pad=0.05)
         axes.append(ax_new)
 
     for i, area in enumerate(areas):
         ax_curr = axes[i]
         m = np.array(mean_input_frac_df.loc[presyn_area_order, area])
-
-        ax_curr.axhline(0.2, color="grey", linestyle="--", linewidth=0.5)
-        ax_curr.axhline(0.4, color="grey", linestyle="--", linewidth=0.5)
-        ax_curr.axhline(0.6, color="grey", linestyle="--", linewidth=0.5)
-
-        # Bar plot of means
-        ax_curr.bar(
-            np.arange(len(m)),
-            m,
-            color="mediumorchid",
-            alpha=0.8,
-            edgecolor="darkorchid",
-            linewidth=line_width,
-        )
-
-        # Error bars
-        ax_curr.errorbar(
-            np.arange(len(m)),
-            m,
-            np.abs(
-                np.vstack(
-                    [
-                        lower_df.loc[presyn_area_order, area],
-                        upper_df.loc[presyn_area_order, area],
-                    ]
-                )
-                - m[None, :]
-            ),
-            fmt="none",
-            markerfacecolor="mediumorchid",
-            markeredgecolor="darkorchid",
-            markersize=5,
-            ecolor="darkorchid",
-            elinewidth=2,
-        )
-
-        ax_curr.set_ylim(0, 0.6)
-        ax_curr.set_yticks([0, 0.6])
-        ax_curr.set_ylabel(area, fontsize=tick_fontsize)
-        ax_curr.set_xticks([])
+        for line in [0.3, 0.6]:
+            if orientation == "vertical":
+                ax_curr.axhline(line, color="black", linestyle=":", linewidth=0.5)
+            else:
+                ax_curr.axvline(line, color="black", linestyle=":", linewidth=0.5)
+        if orientation == "vertical":
+            ax_curr.bar(
+                np.arange(len(m)),
+                m,
+                color="mediumorchid",
+                alpha=0.8,
+                edgecolor="darkorchid",
+                linewidth=line_width,
+            )
+            # Error bars
+            ax_curr.errorbar(
+                np.arange(len(m)),
+                m,
+                np.abs(
+                    np.vstack(
+                        [
+                            lower_df.loc[presyn_area_order, area],
+                            upper_df.loc[presyn_area_order, area],
+                        ]
+                    )
+                    - m[None, :]
+                ),
+                fmt="none",
+                markerfacecolor="mediumorchid",
+                markeredgecolor="darkorchid",
+                markersize=5,
+                ecolor="darkorchid",
+                elinewidth=line_width,
+            )
+            ax_curr.set_ylim(0, 0.6)
+            ax_curr.set_yticks([0, 0.6])
+            ax_curr.set_ylabel(area, fontsize=tick_fontsize)
+            ax_curr.set_xticks([])
+        else:
+            ax_curr.barh(
+                np.arange(len(m)),
+                m,
+                xerr=np.abs(
+                    np.vstack(
+                        [
+                            lower_df.loc[presyn_area_order, area],
+                            upper_df.loc[presyn_area_order, area],
+                        ]
+                    )
+                    - m[None, :]
+                ),
+                color="mediumorchid",
+                alpha=0.8,
+                edgecolor="darkorchid",
+                linewidth=line_width,
+            )
+            ax_curr.set_xlim(0, 0.6)
+            ax_curr.set_xticks([0.0, 0.6])
+            for label, x in zip(ax_curr.get_xticklabels(), [0.0, 0.6]):
+                if x == 0.0:
+                    label.set_ha('left')   # left-align the label
+                elif x == 0.6:
+                    label.set_ha('right')  # right-align the label
+            if i>0:
+                ax_curr.set_yticks([])
+            ax_curr.invert_yaxis()
+            ax_curr.text(
+                0.3,
+                -1.0,
+                s=area,
+                ha="center",
+                va="center",
+                color="black",
+                fontsize=tick_fontsize,
+            )        
         ax_curr.spines["top"].set_visible(False)
         ax_curr.spines["right"].set_visible(False)
         ax_curr.tick_params(axis="both", which="major", labelsize=tick_fontsize)
-
-    axes[-1].set_xticks(np.arange(len(presyn_area_order)))
-    axes[-1].set_xticklabels(presyn_area_order, rotation=0)
-    axes[-1].spines["bottom"].set_visible(True)
-    axes[-1].set_xlabel("Presynaptic area", fontsize=tick_fontsize, labelpad=10)
-
-    fig.text(
-        0.0,
-        0.5,
-        "Input fraction to starter area",
-        va="center",
-        rotation="vertical",
-        fontsize=tick_fontsize,
-        transform=fig.transFigure,
-    )
-
-    fig.subplots_adjust(hspace=0.2)
-
-    return fig, axes
+    if orientation == "vertical":
+        axes[-1].set_xticks(np.arange(len(presyn_area_order)))
+        axes[-1].set_xticklabels(presyn_area_order, rotation=0)
+        axes[-1].spines["bottom"].set_visible(True)
+        axes[-1].set_xlabel("Presynaptic layer", fontsize=label_fontsize)
+    else:
+        axes[0].set_yticks(np.arange(len(presyn_area_order)), labels=presyn_area_order)
+        axes[0].set_ylabel("Presynaptic layer", fontsize=label_fontsize)
+        axes[2].set_title("Starter layer", fontsize=label_fontsize, loc="left", pad=15)      
+        axes[2].set_xlabel("Input fraction", fontsize=label_fontsize, loc="left")  

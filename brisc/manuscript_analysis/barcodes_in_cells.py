@@ -250,7 +250,7 @@ def plot_multibarcoded_starters(
     if barcode_proportion:
         ax.set_ylabel("Proportion of presynaptic cells", fontsize=label_fontsize)
     else:
-        ax.set_ylabel("Number of presynaptic cells", fontsize=label_fontsize)
+        ax.set_ylabel("# presynaptic cells", fontsize=label_fontsize)
     ax.set_xlabel(
         "Starter cell",
         fontsize=label_fontsize,
