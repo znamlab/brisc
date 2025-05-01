@@ -6,5 +6,5 @@ __pycache__
 *.err
 legacy
 build
-.vscode/BRISCo.code-workspace
+.vscode
 *.pkl
