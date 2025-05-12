@@ -180,8 +180,19 @@ def plot_background(
     cor_ax.set_ylim(500, -10)
 
 
-def compute_flatmap_coors(df):
-    flat_coors = df[["ara_x", "ara_y", "ara_z"]].values
+def compute_flatmap_coors(df, col_prefix="ara_", col_suffix=""):
+    """Compute coordinates on ARA flatmap
+
+    Args:
+        df: dataframe with coordinates
+        col_prefix: prefix for column names. Default: "ara_".
+        col_suffix: suffix for column names. Default: "".
+
+    Returns:
+        flat_coors: coordinates on ARA flatmap
+    """
+    columns = [f"{col_prefix}{i}{col_suffix}" for i in ["x", "y", "z"]]
+    flat_coors = df[columns].values
     bad = np.any(flat_coors < 0, axis=1)
     # also remove NaN
     bad = np.logical_or(bad, np.any(np.isnan(flat_coors), axis=1))
@@ -195,7 +206,7 @@ def compute_flatmap_coors(df):
         view_space_for_other_hemisphere=ARA_PROJECTION,
         hemisphere="right",
     )
-    return flat_coors  
+    return flat_coors
 
 
 def plot_spots(cor_ax, flat_ax, df, **kwargs):
@@ -205,10 +216,10 @@ def plot_spots(cor_ax, flat_ax, df, **kwargs):
             df["ara_z"].values * 1000 / ATLAS_SIZE - midline,
             df["ara_y"].values * 1000 / ATLAS_SIZE,
         ]
-    )    
+    )
     if cor_ax is not None:
-        cor_ax.scatter(*cor_coors, **kwargs)    
-    flat_coors = compute_flatmap_coors(df)        
+        cor_ax.scatter(*cor_coors, **kwargs)
+    flat_coors = compute_flatmap_coors(df)
     flat_ax.scatter(flat_coors[:, 0], flat_coors[:, 1], **kwargs)
     return cor_coors, flat_coors
 
