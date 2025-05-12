@@ -267,12 +267,18 @@ def plot_dist_between_starters(
     ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
 
 
-def determine_presynaptic_distances(cells_df, col_prefix="ara_"):
+def determine_presynaptic_distances(
+    cells_df, col_prefix="ara_", col_suffix="", subtract_z=True
+):
     """Determine the distances between starter and presynaptic cells.
+
+    cells_df must contain 'is_starter' and 'unique_barcodes' columns.
 
     Args:
         cell_barcode_df (pd.DataFrame): DataFrame with cell properties,
             including 'starter' (boolean) and 'unique_barcodes' (set) for each cell.
+        col_prefix (str): Prefix for column names. Default: "ara_".
+        col_suffix (str): Suffix for column names. Default: "".
 
     Returns:
         relative_presyn_coords (numpy.ndarray): 2D array (N x 3) with x, y, z
@@ -286,24 +292,28 @@ def determine_presynaptic_distances(cells_df, col_prefix="ara_"):
     starters_df["n_presynaptic"] = 0
     # build a list of coordinates of presynaptic cells relative to starter position
     starters_df["presynaptic_coors"] = None
-    starters_df["presynaptic_coors_relative"] = None   
-    xcol = col_prefix + "x"
-    ycol = col_prefix + "y"
-    zcol = col_prefix + "z" 
+    starters_df["presynaptic_coors_relative"] = None
+    xcol = col_prefix + "x" + col_suffix
+    ycol = col_prefix + "y" + col_suffix
+    zcol = col_prefix + "z" + col_suffix
     for i, starter in starters_df.iterrows():
         matches = presynaptic_df["unique_barcodes"].apply(
-            lambda bcs: len(bcs.intersection(starter["unique_barcodes"])) > 0 
+            lambda bcs: len(bcs.intersection(starter["unique_barcodes"])) > 0
         )
         presynaptic_matches = presynaptic_df[matches]
         starters_df.loc[i, "n_presynaptic"] = presynaptic_matches.shape[0]
         starter_coors = starter[[xcol, ycol, zcol]].values
         presynaptic_coors = presynaptic_matches[[xcol, ycol, zcol]].values
+        if not subtract_z:
+            starter_coors[2] = 0
         relative_coors = presynaptic_coors - starter_coors
-        starters_df.loc[i, "presynaptic_coors_relative"] = [ relative_coors ]
-        starters_df.loc[i, "presynaptic_coors"] = [ presynaptic_coors ]
+        starters_df.loc[i, "presynaptic_coors_relative"] = [relative_coors]
+        starters_df.loc[i, "presynaptic_coors"] = [presynaptic_coors]
 
     pres = starters_df[starters_df.n_presynaptic > 0]
-    presynaptic_coors_relative = np.hstack(pres["presynaptic_coors_relative"].values)[0].astype(float)
+    presynaptic_coors_relative = np.hstack(pres["presynaptic_coors_relative"].values)[
+        0
+    ].astype(float)
     distances = np.linalg.norm(presynaptic_coors_relative, axis=1) * 1000
 
     return presynaptic_coors_relative, distances
@@ -334,11 +344,13 @@ def select_unique_barcodes(
         .value_counts()
     )
     # Identify barcodes that are unique to a single starter cell
-    unique_starter_barcodes = set(starter_barcodes_counts[
-        starter_barcodes_counts == 1
-    ].index)
+    unique_starter_barcodes = set(
+        starter_barcodes_counts[starter_barcodes_counts == 1].index
+    )
     # Filter starter cells where all their barcodes are unique among starter cells
-    cells_df["unique_barcodes"] = cells_df["all_barcodes"].apply(lambda bcs: unique_starter_barcodes.intersection(set(bcs)))
+    cells_df["unique_barcodes"] = cells_df["all_barcodes"].apply(
+        lambda bcs: unique_starter_barcodes.intersection(set(bcs))
+    )
     cells_df = cells_df[cells_df["unique_barcodes"].apply(len) > 0]
     return cells_df
 
@@ -353,7 +365,7 @@ def plot_relative_coors(
     color="black",
     label_fontsize=12,
     tick_fontsize=10,
-    labels = [ "Medio-lateral location (μm)",  "Antero-posterior (μm)" ]
+    labels=["Medio-lateral location (μm)", "Antero-posterior (μm)"],
 ):
     """
     Plot the distribution of presynaptic cells relative to starter cells in the
@@ -372,7 +384,7 @@ def plot_relative_coors(
     """
     ax.scatter(
         relative_presyn_coors[:, coors_to_plot[0]],
-        relative_presyn_coors[:, coors_to_plot[1]], 
+        relative_presyn_coors[:, coors_to_plot[1]],
         s=s,
         alpha=alpha,
         color=color,
@@ -404,9 +416,9 @@ def shuffle_iteration(args):
     Returns:
         iteration_distances (np.array): 2D array with distances between starter and presynaptic cells.
         starter_coords_shuffle (np.array): 2D array with x, y, z coordinates of starter cells.
-    
+
     """
-    seed, cells_df, col_prefix = args
+    seed, cells_df, col_prefix, col_suffix = args
     np.random.seed(seed)
     starters_df = cells_df[cells_df["is_starter"] == True]
     # Shuffle barcodes among non-starters
@@ -415,19 +427,23 @@ def shuffle_iteration(args):
         shuffled_non_starters["unique_barcodes"].values
     )
     # Re-combine into one DataFrame
-    shuffled_data = pd.concat(
-        [starters_df, shuffled_non_starters], ignore_index=True
+    shuffled_data = pd.concat([starters_df, shuffled_non_starters], ignore_index=True)
+    return determine_presynaptic_distances(
+        shuffled_data, col_prefix=col_prefix, col_suffix=col_suffix
     )
-    return determine_presynaptic_distances(shuffled_data, col_prefix=col_prefix)
 
 
-def create_barcode_shuffled_nulls_parallel(cells_df, N_iter=1000, col_prefix="ara_"):
+def create_barcode_shuffled_nulls_parallel(
+    cells_df, N_iter=1000, col_prefix="ara_", col_suffix=""
+):
     """
     Parallelized version of barcode shuffling with live tqdm updates.
 
     Args:
         rabies_cell_properties (pd.DataFrame): DataFrame with cell properties.
         N_iter (int): Number of iterations to perform.
+        col_prefix (str): Prefix for column names. Default: "ara_".
+        col_suffix (str): Suffix for column names. Default: "".
 
     Returns:
         all_shuffled_distances (list): List of 2D arrays with distances between
@@ -435,9 +451,9 @@ def create_barcode_shuffled_nulls_parallel(cells_df, N_iter=1000, col_prefix="ar
         all_starter_coords (list): List of 2D arrays with x, y, z coordinates ofd
         starter cells for each iteration.
     """
-    args = [(i, cells_df, col_prefix) for i in range(N_iter)]
+    args = [(i, cells_df, col_prefix, col_suffix) for i in range(N_iter)]
     # Use process_map for parallel processing with tqdm
-    results = process_map(shuffle_iteration, args, max_workers=cpu_count())
+    results = process_map(shuffle_iteration, args, max_workers=cpu_count() - 1)
 
     all_shuffled_distances, all_starter_coords = zip(*results)
     all_shuffled_distances = list(all_shuffled_distances)
