@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.ticker as mticker
 from brisc.manuscript_analysis.utils import despine
 
+
 def plasmid_sequencing_data(seq_path):
     """Create array holding the frequency of each barcode in the sequenced library.
     Input data should be stored in tabbed rows, with the first column being
@@ -267,11 +268,14 @@ def plot_unique_label_fraction(
         "Proportion of uniquely\n labeled cells",
         fontsize=label_fontsize,
     )
-    yticks = np.linspace(
+    pad = 0.02
+    ax.set_ylim(min_max_percent_unique_range[0], min_max_percent_unique_range[1] + pad)
+
+    # explicitly reset yticks to the "nice" ones
+    orig_ticks = np.linspace(
         min_max_percent_unique_range[0], min_max_percent_unique_range[1], 3
     )
-    ax.set_yticks(yticks)
-    ax.set_ylim(min_max_percent_unique_range[0], min_max_percent_unique_range[1])
+    ax.set_yticks(orig_ticks)
     ax.tick_params(
         axis="both",
         which="major",
@@ -279,4 +283,5 @@ def plot_unique_label_fraction(
     )
     if show_legend:
         ax.legend(loc="best", fontsize=tick_fontsize, frameon=False)
+
     despine(ax)
