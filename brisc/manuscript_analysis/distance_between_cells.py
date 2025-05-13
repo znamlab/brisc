@@ -344,9 +344,7 @@ def determine_presynaptic_distances(
     return presynaptic_coors_relative, distances, starters_df
 
 
-def select_unique_barcodes(
-    cells_df,
-):
+def select_unique_barcodes(cells_df):
     """
     Load unique starter cells and presynaptic cells that share barcodes with starter cells.
 
