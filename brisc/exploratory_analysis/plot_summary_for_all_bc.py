@@ -180,13 +180,17 @@ def plot_background(
     cor_ax.set_ylim(500, -10)
 
 
-def compute_flatmap_coors(df, col_prefix="ara_", col_suffix=""):
+def compute_flatmap_coors(
+    df, col_prefix="ara_", col_suffix="", projection="flatmap_dorsal"
+):
     """Compute coordinates on ARA flatmap
 
     Args:
         df: dataframe with coordinates
         col_prefix: prefix for column names. Default: "ara_".
         col_suffix: suffix for column names. Default: "".
+        projection: projection to use. Default: "flatmap_dorsal"
+
 
     Returns:
         flat_coors: coordinates on ARA flatmap
@@ -199,11 +203,18 @@ def compute_flatmap_coors(df, col_prefix="ara_", col_suffix=""):
     if np.any(bad):
         print(f"Found {np.sum(bad)} bad coordinates")
         flat_coors[bad, :] = np.nan
-    ccf_coord_proj = get_projector()
+    ccf_coord_proj = get_projector(projection)
+    if projection == "flatmap_dorsal":
+        view_space = "flatmap_dorsal"
+    elif projection == "top":
+        view_space = False
+    else:
+        print(f"Warning unknown projections: {projection}.")
+        view_space = False
     flat_coors[~bad, :] = ccf_coord_proj.project_coordinates(
         flat_coors[~bad, :] * 1000,
         drop_voxels_outside_view_streamlines=False,
-        view_space_for_other_hemisphere=ARA_PROJECTION,
+        view_space_for_other_hemisphere=view_space,
         hemisphere="right",
     )
     return flat_coors
