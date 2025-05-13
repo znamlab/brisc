@@ -1,4 +1,4 @@
-from iss_preprocess.vis import plot_single_overview
+from iss_preprocess.diagnostics.diag_stitching import plot_single_overview
 from iss_preprocess.vis import round_to_rgb
 from iss_preprocess.vis import add_bases_legend
 from iss_preprocess.vis.utils import get_stack_part
@@ -138,7 +138,8 @@ def plot_selected_rounds(
             vmax=vmax,
         )
         ax.imshow(rgb_stack)
-        ax.set_title(f"Round {iround}", fontsize=fontsize)
+        # put title on bottom
+        ax.set_title(f"Round {iround}", fontsize=fontsize, y=-0.45)
         if iround == 1:
             add_bases_legend(channel_colors, ax.transAxes, fontsize=fontsize)
 
