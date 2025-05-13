@@ -193,7 +193,7 @@ def repeated_hierarchical_bootstrap_in_parallel(
             total=n_permutations,
         )
 
-        shuffled_matrices, mean_input_fractions, starter_input_fractions = zip(*results)
+        shuffled_matrices, mean_input_fractions, starter_input_fractions, _ = zip(*results)
 
         return (
             bootstrapped_results,
@@ -291,7 +291,7 @@ def plot_confidence_intervals(
     axes = [ax]
     direction = "bottom" if orientation == "vertical" else "right"
     for _ in range(num_subplots - 1):
-        ax_new = divider.append_axes(direction, size="100%", pad=0.05)
+        ax_new = divider.append_axes(direction, size="100%", pad=0.025)
         axes.append(ax_new)
 
     for i, area in enumerate(areas):
@@ -354,7 +354,7 @@ def plot_confidence_intervals(
                 linewidth=line_width,
             )
             ax_curr.set_xlim(0, 0.6)
-            ax_curr.set_xticks([0.0, 0.6])
+            ax_curr.set_xticks([0.0, 0.6], labels=["0", "0.6"])
             for label, x in zip(ax_curr.get_xticklabels(), [0.0, 0.6]):
                 if x == 0.0:
                     label.set_ha('left')   # left-align the label

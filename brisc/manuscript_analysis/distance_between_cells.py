@@ -267,6 +267,32 @@ def plot_dist_between_starters(
     ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
 
 
+def add_connection_distances(cells_df, cols=["ara_x", "ara_y", "ara_z"]):
+    def calculate_distances(cell, starters):
+        distances = []
+        for starter in cell["starters"]:
+            dist_sq = np.sum((cell[cols] - starters.loc[starter, cols]) ** 2)
+            distances.append(np.sqrt(dist_sq))
+        return distances
+    
+    starters_df = cells_df[cells_df["is_starter"] == True]
+    cells_df["distances"] = cells_df.apply(lambda cell: calculate_distances(cell, starters_df), axis=1)
+
+
+
+def add_connection_distances(cells_df, cols=["ara_x", "ara_y", "ara_z"]):
+    def calculate_distances(cell, starters):
+        distances = []
+        for starter in cell["starters"]:
+            dist_sq = np.sum((cell[cols] - starters.loc[starter, cols]) ** 2)
+            distances.append(np.sqrt(dist_sq))
+        return distances
+    
+    starters_df = cells_df[cells_df["is_starter"] == True]
+    cells_df["distances"] = cells_df.apply(lambda cell: calculate_distances(cell, starters_df), axis=1)
+
+
+
 def determine_presynaptic_distances(
     cells_df, col_prefix="ara_", col_suffix="", subtract_z=True
 ):
@@ -290,7 +316,6 @@ def determine_presynaptic_distances(
     starters_df = cells_df[cells_df["is_starter"] == True].copy()
     presynaptic_df = cells_df[cells_df["is_starter"] == False]
     starters_df["n_presynaptic"] = 0
-    # build a list of coordinates of presynaptic cells relative to starter position
     starters_df["presynaptic_coors"] = None
     starters_df["presynaptic_coors_relative"] = None
     xcol = col_prefix + "x" + col_suffix
@@ -316,7 +341,7 @@ def determine_presynaptic_distances(
     ].astype(float)
     distances = np.linalg.norm(presynaptic_coors_relative, axis=1) * 1000
 
-    return presynaptic_coors_relative, distances
+    return presynaptic_coors_relative, distances, starters_df
 
 
 def select_unique_barcodes(

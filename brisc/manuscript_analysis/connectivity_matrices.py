@@ -7,6 +7,16 @@ from multiprocessing import cpu_count
 from functools import partial
 
 
+def match_barcodes(cells_df):
+    def match_barcodes_(series, barcodes):
+        return series.apply(lambda bcs: len(bcs.intersection(barcodes)) > 0)
+
+    starters = cells_df[cells_df["is_starter"] == True]
+    connectivity_matrix = cells_df["unique_barcodes"].apply(lambda bcs: match_barcodes_(starters["unique_barcodes"], bcs))
+    cells_df["starters"] = connectivity_matrix.apply(lambda row: set(row.index[row]), axis=1)
+    cells_df["n_starters"] = cells_df["starters"].apply(len)
+
+
 def compute_input_fractions(starter_row, presyn_cells, presyn_grouping):
     """
     For a single starter cell row, find all presynaptic cells sharing at least one barcode,
@@ -94,14 +104,14 @@ def compute_connectivity_matrix(
         fractions_df.select_dtypes(include="number").sum(axis=1) > 0
     ]
     # Grouping by starter property, find the mean fraction of each presynaptic grouping
-    counts_df = counts_df.groupby(starter_grouping).sum().T
+    total_counts_df = counts_df.groupby(starter_grouping).sum().T
     if output_fraction:
         # For each presyn area (each row), divide by the row sum so it sums to 1
-        mean_frac_df = counts_df.div(counts_df.sum(axis=1), axis=0)
+        mean_frac_df = total_counts_df.div(total_counts_df.sum(axis=1), axis=0)
     else:
         mean_frac_df = fractions_df.groupby(starter_grouping).mean().T
 
-    return counts_df, mean_frac_df, fractions_df
+    return total_counts_df, mean_frac_df, fractions_df, counts_df
 
 
 def compute_odds_ratio(p_matrix, starter_counts):
@@ -281,28 +291,6 @@ def plot_area_by_area_connectivity(
         fontsize=tick_fontsize,
     )
 
-    for i, area in enumerate(connectivity_matrix.index):
-        # if area in starter_counts else put 0
-        ax.text(
-            x=connectivity_matrix.shape[1] + 0.25,
-            y=i + 0.5,
-            s=f"{presynaptic_counts.get(area, 0)}",
-            ha="left",
-            va="center",
-            color="black",
-            fontsize=tick_fontsize,
-        )
-    # add a label saying what the sum is
-    ax.text(
-        connectivity_matrix.shape[1] + 0.25,
-        -0.6,
-        s="Total\npresynaptic\ncells:",
-        ha="left",
-        va="center",
-        color="black",
-        fontsize=tick_fontsize,
-    )
-
 
 def make_minimal_df(
     cell_barcode_df,
@@ -373,6 +361,7 @@ def shuffle_barcodes(
 
     Returns:
         shuffled_cell_barcode_df (pd.DataFrame): DataFrame of shuffled ARA starters data
+        
     """
     np.random.seed(seed + 1)
     shuffled_cell_barcode_df = cell_barcode_df.copy()
@@ -402,19 +391,15 @@ def shuffle_wrapper(arg):
 
 
 def compare_to_shuffle(observed_matrix, shuffled_matrices, alpha=0.05):
-    subset_observed_cm, subset_null_array = filter_matrices(
-            observed_matrix, 
-            np.array(shuffled_matrices)
-    )
     # Compute p-values and log ratio of observed connectivity vs mean for bubble plots
-    mean_null = subset_null_array.mean(axis=0)
-    ratio_matrix = subset_observed_cm.values / (mean_null + 1e-9)
+    mean_null = shuffled_matrices.mean(axis=0)
+    ratio_matrix = observed_matrix.values / (mean_null + 1e-9)
     ratio_matrix = pd.DataFrame(
-        ratio_matrix, index=subset_observed_cm.index, columns=subset_observed_cm.columns
+        ratio_matrix, index=observed_matrix.index, columns=observed_matrix.columns
     )
     log_ratio_matrix = np.log10(ratio_matrix)
     pval_df = compute_empirical_pvalues(
-        subset_observed_cm, subset_null_array, two_sided=True
+        observed_matrix, shuffled_matrices, two_sided=True
     )
     pval_df = pval_df.loc[log_ratio_matrix.index, log_ratio_matrix.columns]
     # FDR correction
@@ -459,34 +444,32 @@ def shuffle_and_compute_connectivity(
         total=n_permutations,
     )
 
-    if compute_connectivity:
-        # Create a partial function that fixes the extra arguments
-        partial_func = partial(
-            compute_connectivity_matrix,
-            starter_grouping=starter_grouping,
-            presyn_grouping=presyn_grouping,
-            output_fraction=output_fraction,
-        )
-
-        # Run it in parallel
-        results = process_map(
-            partial_func,
-            shuffled_cell_barcode_dfs,
-            max_workers=33,
-            desc="Computing connectivity",
-            total=n_permutations,
-        )
-
-        shuffled_matrices, mean_input_fractions, starter_input_fractions = zip(*results)
-
-        return (
-            shuffled_cell_barcode_dfs,
-            shuffled_matrices,
-            mean_input_fractions,
-            starter_input_fractions,
-        )
-    else:
+    if not compute_connectivity:
         return shuffled_cell_barcode_dfs
+    # Create a partial function that fixes the extra arguments
+    compute_connectivity_matrix_ = partial(
+        compute_connectivity_matrix,
+        starter_grouping=starter_grouping,
+        presyn_grouping=presyn_grouping,
+        output_fraction=output_fraction,
+    )
+    results = process_map(
+        compute_connectivity_matrix_,
+        shuffled_cell_barcode_dfs,
+        max_workers=33,
+        desc="Computing connectivity",
+        total=n_permutations,
+    )
+    shuffled_matrices, mean_input_fractions, starter_input_fractions, count_matrices = zip(*results)
+    return (
+        shuffled_cell_barcode_dfs,
+        shuffled_matrices,
+        mean_input_fractions,
+        starter_input_fractions,
+        count_matrices
+    )
+    
+        
 
 def filter_matrices(
         observed_cm, 
