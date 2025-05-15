@@ -8,10 +8,13 @@ from cricksaw_analysis import atlas_utils
 from cricksaw_analysis.io import load_cellfinder_results
 from cricksaw_analysis.atlas_utils import cell_density_by_areas
 from iss_preprocess import vis
+from scipy.stats import gaussian_kde
 from brisc.manuscript_analysis.utils import despine
-
+import tifffile as tf
+import flexiznam as flz
 import cv2
 from czifile import CziFile
+from xml.etree import ElementTree
 
 
 def plot_starter_dilution_densities(
@@ -68,9 +71,7 @@ def plot_starter_dilution_densities(
 
         if need_data:
             try:
-                cells, _, atlas = load_cellfinder_results(
-                    mouse_cellfinder_folder
-                )
+                cells, _, atlas = load_cellfinder_results(mouse_cellfinder_folder)
             except IOError or FileNotFoundError as err:
                 print("Failed to load data: %s" % err)
                 continue
@@ -171,6 +172,7 @@ def plot_starter_dilution_densities(
     )
     despine(ax)
 
+
 def load_confocal_image(image_fname):
     with CziFile(image_fname) as czi:
         metadata = czi.metadata(raw=False)
@@ -178,9 +180,7 @@ def load_confocal_image(image_fname):
     return metadata, img
 
 
-def plot_starter_confocal(
-    ax, img, metadata
-):
+def plot_starter_confocal(ax, img, metadata):
     """
     Plot the two inset images inside the given axis, one above the other.
 
@@ -214,16 +214,14 @@ def plot_starter_confocal(
     # Create two sub-axes within the given ax
     # inset_axes = [ax.inset_axes([0, 0.5, 1, 0.5]), ax.inset_axes([0, 0, 1, 0.5])]
     zplanes = [3, 4, 5]
-    
+
     img = np.mean(img[:, zplanes, :, :], axis=1)
 
     # for sub_ax, z in zip(inset_axes, zplanes):
     lim = np.array(INSET)
     stack = np.dstack(
         [
-            rotate(i, ROTATION)[
-                lim[0] : lim[2], lim[1] : lim[3]
-            ]
+            rotate(i, ROTATION)[lim[0] : lim[2], lim[1] : lim[3]]
             for i in [
                 img[1, :, :],
                 img[1, :, :],
@@ -280,3 +278,154 @@ def plot_starter_confocal(
     # ax.figure.subplots_adjust(top=1, bottom=0, left=0, right=1, wspace=0, hspace=0)
     ax.axis("off")
     return ax
+
+
+def plot_tail_vs_local_images(
+    ax_local, ax_tail, vmin, vmax, xl=[400, 1600], yl=[100, 1300], scale_size=250
+):
+    """Plots max projection images of tail vein vs local injection.
+
+    Args:
+        ax_local (matplotlib.axes._axes.Axes): Axis for the local injection image.
+        ax_tail (matplotlib.axes._axes.Axes): Axis for the tail vein injection image.
+        vmin (int, int): Minimum value for the red and cyan channels.
+        vmax (int, int): Maximum value for the red and cyan channels.
+        xl (list, optional): x limits for the image crop. Defaults to [400,1600].
+        yl (list, optional): y limits for the image crop. Defaults to [100, 1300].
+        scale_size (int, optional): Size of the scale bar in micrometers. Defaults to
+            250.
+    """
+    taillocal_projections = flz.get_processed_path(
+        "becalia_rabies_barseq/tail_vs_local"
+    )
+    tail_img = tf.imread(taillocal_projections / "MAX_BRAC10946.1f_injection_site.tif")
+    local_img = tf.imread(taillocal_projections / "MAX_BRAC10946.1c_injection_site.tif")
+    tail_img = np.moveaxis(tail_img, 0, 2)
+    local_img = np.moveaxis(local_img, 0, 2)
+
+    # the two injections are not exactly centered. Keep same image dimension but shift one
+    shift_tail = [0, 80]
+
+    rgb = vis.to_rgb(
+        local_img[yl[0] : yl[1], xl[0] : xl[1]],
+        colors=[(1, 0, 0), (0, 1, 1)],
+        vmax=vmax,
+        vmin=vmin,
+    )
+    ax_local.imshow(rgb)
+
+    xl = np.array(xl) + shift_tail[0]
+    yl = np.array(yl) + shift_tail[1]
+    rgb = vis.to_rgb(
+        tail_img[yl[0] : yl[1], xl[0] : xl[1]],
+        colors=[(1, 0, 0), (0, 1, 1)],
+        vmax=vmax,
+        vmin=vmin,
+    )
+    ax_tail.imshow(rgb)
+    for ax in [ax_tail, ax_local]:
+        ax.set_axis_off()
+
+    # scale bar
+    um_per_px = 0.977
+    length = scale_size / um_per_px
+    scale = plt.Rectangle(
+        (np.diff(xl) - length - 70, np.diff(yl) - 70), length, 40, color="w"
+    )
+    ax_tail.add_artist(scale)
+
+
+def plot_tailvein_vs_local_cells(
+    ax_scatter, ax_dist, fontsize_dict, linewidth=2, kde_bw=1
+):
+    taillocal_projections = flz.get_processed_path(
+        "becalia_rabies_barseq/tail_vs_local"
+    )
+
+    def load_xml_data(path2xml):
+        tree = ElementTree.parse(path2xml)
+        root = tree.getroot()
+        marker_data = root[1]
+        marker_1 = marker_data[1]
+        cells = []
+        for marker in marker_1:
+            if marker.tag != "Marker":
+                continue
+            assert marker[0].tag == "MarkerX"
+            assert marker[1].tag == "MarkerY"
+            assert marker[2].tag == "MarkerZ"
+            cells.append([int(marker[i].text) for i in range(3)])
+        cells = np.array(cells)
+        return cells
+
+    # cell counting on full resolution dataset
+    scale = np.array([1, 1, 5]) / 1000.0
+    mouse_names = dict(tail="BRAC10946.1f", local="BRAC10946.1c")
+    clicked_cells = {}
+    for where, mouse in mouse_names.items():
+        clicked_cells[where] = (
+            load_xml_data(taillocal_projections / f"{mouse}_manual_click_full_res.xml")
+            * scale
+        )
+
+    color = dict(
+        local="forestgreen",
+        tail="slateblue",
+    )
+    max_val = 0
+    label = dict(local="Intracortical", tail="Tail vein")
+    for where in ["local", "tail"]:
+        cells = clicked_cells[where]
+        center = np.nanmean(cells, axis=0)
+        rel_cells = cells - center
+        ax_scatter.scatter(
+            rel_cells[:, 0],
+            rel_cells[:, 2],
+            color=color[where],
+            marker="o",
+            edgecolor="w",
+            alpha=0.7,
+            s=10,
+            linewidths=0.5,
+            label=label[where],
+        )
+        max_val = max(max_val, np.nanmax(np.abs(rel_cells[:, 2])))
+        kde = gaussian_kde(rel_cells[:, 2], bw_method=kde_bw)
+        bins = np.arange(-0.4, 0.4, 0.01)
+        ax_dist.plot(
+            bins,
+            kde(bins),
+            color=color[where],
+            linewidth=linewidth,
+        )
+    ax_dist.set_xticks(
+        [-0.4, 0, 0.4], labels=[-0.4, 0, 0.4], fontsize=fontsize_dict["tick"]
+    )
+    ax_dist.set_xlabel(
+        "ML distance to\ninjection site (mm)", fontsize=fontsize_dict["label"]
+    )
+    ax_dist.set_ylabel("Density (mm$^{-1}$)", fontsize=fontsize_dict["label"])
+    ax_dist.set_yticks([0, 2, 4], labels=[0, 2, 4], fontsize=fontsize_dict["tick"])
+    ax_scatter.legend(
+        title="Injection site",
+        fontsize=fontsize_dict["legend"],
+        title_fontsize=fontsize_dict["legend"],
+        frameon=False,
+        loc="upper left",
+        bbox_to_anchor=(1.0, 1.1),
+        handlelength=1,
+        alignment="left",
+    )
+
+    ax_scatter.set_xticks(
+        [-0.4, 0, 0.4], labels=[-0.4, 0, 0.4], fontsize=fontsize_dict["tick"]
+    )
+    ax_scatter.set_yticks(
+        [-0.4, 0, 0.4], labels=[-0.4, 0, 0.4], fontsize=fontsize_dict["tick"]
+    )
+    ax_scatter.set_xlabel(
+        "ML distance to\ninjection site (mm)", fontsize=fontsize_dict["label"]
+    )
+    ax_scatter.set_ylabel(
+        "AP distance to\ninjection site (mm)", fontsize=fontsize_dict["label"]
+    )
