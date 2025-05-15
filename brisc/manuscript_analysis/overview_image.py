@@ -1,11 +1,14 @@
 from iss_preprocess.diagnostics.diag_stitching import plot_single_overview
-from iss_preprocess.vis import round_to_rgb
-from iss_preprocess.vis import add_bases_legend
+from iss_preprocess.vis import round_to_rgb, to_rgb, add_bases_legend
 from iss_preprocess.vis.utils import get_stack_part
 from iss_preprocess.pipeline.sequencing import basecall_tile
-import matplotlib.image as mpimg
+from iss_preprocess.io import load_stack
 
+import matplotlib.image as mpimg
+import matplotlib.patches as patches
+from skimage.measure import block_reduce
 import numpy as np
+from pathlib import Path
 
 
 def run_plot_overview(
@@ -128,6 +131,7 @@ def plot_selected_rounds(
     Here `axes` is an array/list of Axes, one for each round you want to plot.
     """
     channel_colors = ([1, 0, 0], [0, 1, 0], [1, 0, 1], [0, 1, 1])
+
     for ax, iround in zip(axes, selected_rounds):
         rgb_stack = round_to_rgb(
             stack_part,
@@ -137,6 +141,8 @@ def plot_selected_rounds(
             vmin=vmin,
             vmax=vmax,
         )
+        # rotate stack 90 degrees left
+        rgb_stack = np.rot90(rgb_stack, 1, (0, 1))
         ax.imshow(rgb_stack)
         # put title on bottom
         ax.set_title(f"Round {iround}", fontsize=fontsize, y=-0.45)
@@ -147,3 +153,95 @@ def plot_selected_rounds(
         ax.set_facecolor("black")
         ax.set_xticks([])
         ax.set_yticks([])
+
+
+def make_downsampled_rgb(
+    processed_path: Path,
+    downsample_factor: int = 20,
+    channel_colors: list = ([0, 1, 1], [1, 0, 1], [0, 1, 0], [1, 0, 0]),
+    vmax: tuple = (15000, 6000, 6000, 6000),
+    vmin: tuple = (700, 200, 200, 200),
+):
+    """
+    Create a downsampled RGB image from the processed data.
+
+    Args:
+        processed_path (Path): path to processed data.
+        downsample_factor (int, optional): Downsampling factor. Defaults to 20.
+        channel_colors (list, optional): RGB colors. Defaults to ([0, 1, 1], [1, 0, 1], [0, 1, 0], [1, 0, 0]).
+        vmax (tuple, optional): vmax per channel. Defaults to (15000,6000,6000,6000).
+        vmin (tuple, optional): vmin per channel. Defaults to (700,200,200,200).
+
+    Returns:
+        rgb: Downsampled RGB image.
+    """
+    stack = load_stack(processed_path)
+    small_stack = None
+    for ch in range(stack.shape[-1]):
+        small_stack_ch = block_reduce(stack[:, :, ch], downsample_factor, np.max)
+        if small_stack is None:
+            small_stack = np.zeros(
+                small_stack_ch.shape + (stack.shape[-1],), dtype="uint16"
+            )
+        small_stack[:, :, ch] = small_stack_ch.astype("uint16")
+
+    rgb = to_rgb(
+        small_stack,
+        colors=channel_colors,
+        vmax=vmax,
+        vmin=vmin,
+    )
+    # rotate 90 degrees left
+    rgb = np.rot90(rgb, 1, (0, 1))
+
+    return rgb
+
+
+def add_scalebar(
+    ax,
+    downsample_factor,
+    length_um,
+    *,
+    pixel_size_um=0.231,  # µm per raw pixel
+    bar_height_px=10,  # bar thickness in display pixels
+    margin_px=15,  # margin from right & bottom in display pixels
+    color="white",
+):
+    """
+    Draw a horizontal scalebar of a fixed pixel-thickness and margin,
+    of length `length_um`, in the lower-right corner of `ax`.
+    """
+    # 1) how many display‐pixels long the bar should be
+    disp_px_size_um = pixel_size_um * downsample_factor  # µm per displayed pixel
+    length_px = length_um / disp_px_size_um
+
+    # 2) force a draw so we can query the renderer for actual axes size
+    fig = ax.figure
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    bbox = ax.get_window_extent(renderer)
+    ax_w = bbox.width  # axes width in display‐pixels
+    ax_h = bbox.height  # axes height in display‐pixels
+
+    # 3) convert px → axes‐fraction coordinates
+    length_frac = length_px / ax_w
+    height_frac = bar_height_px / ax_h
+    margin_x_frac = margin_px / ax_w
+    margin_y_frac = margin_px / ax_h
+
+    # 4) position the rectangle in Axes coords (0,0 lower‐left; 1,1 upper‐right)
+    x0 = 1.0 - margin_x_frac - length_frac
+    y0 = margin_y_frac
+
+    rect = patches.Rectangle(
+        (x0, y0),
+        length_frac,
+        height_frac,
+        transform=ax.transAxes,
+        linewidth=0,
+        facecolor=color,
+        edgecolor=color,
+        clip_on=False,
+        zorder=10,
+    )
+    ax.add_patch(rect)
