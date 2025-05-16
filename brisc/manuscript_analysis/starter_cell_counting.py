@@ -281,11 +281,21 @@ def plot_starter_confocal(ax, img, metadata):
 
 
 def plot_tail_vs_local_images(
-    ax_local, ax_tail, vmin, vmax, xl=[400, 1600], yl=[100, 1300], scale_size=250
+    local_img,
+    tail_img,
+    ax_local,
+    ax_tail,
+    vmin,
+    vmax,
+    xl=None,
+    yl=None,
+    scale_size=250,
 ):
     """Plots max projection images of tail vein vs local injection.
 
     Args:
+        local_img (np.ndarray): Max projection image of local injection.
+        tail_img (np.ndarray): Max projection image of tail vein injection.
         ax_local (matplotlib.axes._axes.Axes): Axis for the local injection image.
         ax_tail (matplotlib.axes._axes.Axes): Axis for the tail vein injection image.
         vmin (int, int): Minimum value for the red and cyan channels.
@@ -295,29 +305,22 @@ def plot_tail_vs_local_images(
         scale_size (int, optional): Size of the scale bar in micrometers. Defaults to
             250.
     """
-    taillocal_projections = flz.get_processed_path(
-        "becalia_rabies_barseq/tail_vs_local"
-    )
-    tail_img = tf.imread(taillocal_projections / "MAX_BRAC10946.1f_injection_site.tif")
-    local_img = tf.imread(taillocal_projections / "MAX_BRAC10946.1c_injection_site.tif")
-    tail_img = np.moveaxis(tail_img, 0, 2)
-    local_img = np.moveaxis(local_img, 0, 2)
-
-    # the two injections are not exactly centered. Keep same image dimension but shift one
-    shift_tail = [0, 80]
+    if xl is not None:
+        local_img = local_img[:, xl[0] : xl[1]]
+        tail_img = tail_img[:, xl[0] : xl[1]]
+    if yl is not None:
+        local_img = local_img[yl[0] : yl[1], :]
+        tail_img = tail_img[yl[0] : yl[1], :]
 
     rgb = vis.to_rgb(
-        local_img[yl[0] : yl[1], xl[0] : xl[1]],
+        local_img,
         colors=[(1, 0, 0), (0, 1, 1)],
         vmax=vmax,
         vmin=vmin,
     )
     ax_local.imshow(rgb)
-
-    xl = np.array(xl) + shift_tail[0]
-    yl = np.array(yl) + shift_tail[1]
     rgb = vis.to_rgb(
-        tail_img[yl[0] : yl[1], xl[0] : xl[1]],
+        tail_img,
         colors=[(1, 0, 0), (0, 1, 1)],
         vmax=vmax,
         vmin=vmin,
@@ -330,14 +333,23 @@ def plot_tail_vs_local_images(
     um_per_px = 0.977
     length = scale_size / um_per_px
     scale = plt.Rectangle(
-        (np.diff(xl) - length - 70, np.diff(yl) - 70), length, 40, color="w"
+        (tail_img.shape[1] - length - 70, tail_img.shape[0] - 70), length, 20, color="w"
     )
     ax_tail.add_artist(scale)
 
 
-def plot_tailvein_vs_local_cells(
-    ax_scatter, ax_dist, fontsize_dict, linewidth=2, kde_bw=1
-):
+def load_tail_vs_local_images():
+    taillocal_projections = flz.get_processed_path(
+        "becalia_rabies_barseq/tail_vs_local"
+    )
+    tail_img = tf.imread(taillocal_projections / "MAX_BRAC10946.1f_injection_site.tif")
+    local_img = tf.imread(taillocal_projections / "MAX_BRAC10946.1c_injection_site.tif")
+    tail_img = np.moveaxis(tail_img, 0, 2)
+    local_img = np.moveaxis(local_img, 0, 2)
+    return local_img, tail_img
+
+
+def load_cell_click_data(relative=False, return_px=False):
     taillocal_projections = flz.get_processed_path(
         "becalia_rabies_barseq/tail_vs_local"
     )
@@ -355,32 +367,89 @@ def plot_tailvein_vs_local_cells(
             assert marker[1].tag == "MarkerY"
             assert marker[2].tag == "MarkerZ"
             cells.append([int(marker[i].text) for i in range(3)])
-        cells = np.array(cells)
+        cells = np.array(cells, dtype=float)
         return cells
 
     # cell counting on full resolution dataset
-    scale = np.array([1, 1, 5]) / 1000.0
+    if return_px:
+        scale = 1
+    else:
+        scale = np.array([1, 1, 5]) / 1000.0
     mouse_names = dict(tail="BRAC10946.1f", local="BRAC10946.1c")
     clicked_cells = {}
     for where, mouse in mouse_names.items():
-        clicked_cells[where] = (
-            load_xml_data(taillocal_projections / f"{mouse}_manual_click_full_res.xml")
-            * scale
+        cells = load_xml_data(
+            taillocal_projections / f"{mouse}_manual_click_full_res.xml"
         )
+        if relative:
+            center = np.nanmedian(cells, axis=0)
+            cells -= center
 
+        clicked_cells[where] = cells * scale
+
+    return clicked_cells
+
+
+def plot_3d_scatters(ax_local, ax_tail, fontsize_dict, colors, **kwargs):
+    # NOT USED
+    clicked_cells = load_cell_click_data(relative=True)
+    axes = dict(
+        local=ax_local,
+        tail=ax_tail,
+    )
+    colors = dict(
+        local=colors[0],
+        tail=colors[1],
+    )
+    for where, ax in axes.items():
+        coords = [clicked_cells[where][:, i] for i in [0, 2, 1]]
+        ax.scatter(*coords, color=colors[where], **kwargs)
+        ax.set_xlabel("M/L (mm)", fontsize=fontsize_dict["label"], labelpad=-8)
+        ax.set_zlabel("D/V (mm)", fontsize=fontsize_dict["label"], labelpad=-8)
+        ax.set_ylabel("A/P (mm)", fontsize=fontsize_dict["label"], labelpad=-8)
+        # First remove fill
+        ax.xaxis.pane.fill = False
+        ax.yaxis.pane.fill = False
+        ax.zaxis.pane.fill = False
+
+        # Now set color to white (or whatever is "invisible")
+        ax.xaxis.pane.set_edgecolor("w")
+        ax.yaxis.pane.set_edgecolor("w")
+        ax.zaxis.pane.set_edgecolor("w")
+        ax.set_xlim([-0.4, 0.4])
+        ax.set_ylim([-0.4, 0.4])
+        ax.set_zlim([-0.4, 0.4])
+        ax.set_xticks(
+            [-0.4, 0, 0.4], labels=[-0.4, 0, 0.4], fontsize=fontsize_dict["tick"]
+        )
+        ax.set_yticks(
+            [-0.4, 0, 0.4], labels=["", 0, ""], fontsize=fontsize_dict["tick"]
+        )
+        ax.set_zticks(
+            [-0.4, 0, 0.4], labels=[-0.4, 0, 0.4], fontsize=fontsize_dict["tick"]
+        )
+        ax.view_init(elev=20, azim=35, roll=0)
+        [t.set_va("center") for t in ax.get_yticklabels()]
+        [t.set_ha("right") for t in ax.get_yticklabels()]
+        ax.tick_params(pad=-4)
+
+
+def plot_tailvein_vs_local_cells(
+    ax_transverse, ax_distri, fontsize_dict, linewidth=2, kde_bw=1
+):
     color = dict(
         local="forestgreen",
         tail="slateblue",
     )
-    max_val = 0
+
+    clicked_cells = load_cell_click_data(relative=True)
+
     label = dict(local="Intracortical", tail="Tail vein")
     for where in ["local", "tail"]:
         cells = clicked_cells[where]
-        center = np.nanmean(cells, axis=0)
-        rel_cells = cells - center
-        ax_scatter.scatter(
-            rel_cells[:, 0],
-            rel_cells[:, 2],
+        ax_transverse.scatter(
+            cells[:, 0],
+            cells[:, 2],
             color=color[where],
             marker="o",
             edgecolor="w",
@@ -389,24 +458,21 @@ def plot_tailvein_vs_local_cells(
             linewidths=0.5,
             label=label[where],
         )
-        max_val = max(max_val, np.nanmax(np.abs(rel_cells[:, 2])))
-        kde = gaussian_kde(rel_cells[:, 2], bw_method=kde_bw)
+        kde = gaussian_kde(cells[:, 2], bw_method=kde_bw)
         bins = np.arange(-0.4, 0.4, 0.01)
-        ax_dist.plot(
+        ax_distri.plot(
             bins,
             kde(bins),
             color=color[where],
             linewidth=linewidth,
         )
-    ax_dist.set_xticks(
+    ax_distri.set_xticks(
         [-0.4, 0, 0.4], labels=[-0.4, 0, 0.4], fontsize=fontsize_dict["tick"]
     )
-    ax_dist.set_xlabel(
-        "ML distance to\ninjection site (mm)", fontsize=fontsize_dict["label"]
-    )
-    ax_dist.set_ylabel("Density (mm$^{-1}$)", fontsize=fontsize_dict["label"])
-    ax_dist.set_yticks([0, 2, 4], labels=[0, 2, 4], fontsize=fontsize_dict["tick"])
-    ax_scatter.legend(
+    ax_distri.set_xlabel("ML position (mm)", fontsize=fontsize_dict["label"])
+    ax_distri.set_ylabel("Density (mm$^{-1}$)", fontsize=fontsize_dict["label"])
+    ax_distri.set_yticks([0, 2, 4], labels=[0, 2, 4], fontsize=fontsize_dict["tick"])
+    ax_transverse.legend(
         title="Injection site",
         fontsize=fontsize_dict["legend"],
         title_fontsize=fontsize_dict["legend"],
@@ -417,15 +483,97 @@ def plot_tailvein_vs_local_cells(
         alignment="left",
     )
 
-    ax_scatter.set_xticks(
+    ax_transverse.set_xticks(
         [-0.4, 0, 0.4], labels=[-0.4, 0, 0.4], fontsize=fontsize_dict["tick"]
     )
-    ax_scatter.set_yticks(
+    ax_transverse.set_yticks(
         [-0.4, 0, 0.4], labels=[-0.4, 0, 0.4], fontsize=fontsize_dict["tick"]
     )
-    ax_scatter.set_xlabel(
-        "ML distance to\ninjection site (mm)", fontsize=fontsize_dict["label"]
+    ax_transverse.set_xlabel("ML position (mm)", fontsize=fontsize_dict["label"])
+    ax_transverse.set_ylabel("AP position (mm)", fontsize=fontsize_dict["label"])
+    for ax in [ax_transverse, ax_distri]:
+        despine(ax)
+
+
+def plot_taillocal_ml_distribution(ax, colors, fontsize_dict, **kwargs):
+    """"""
+    clicked_cells = load_cell_click_data(relative=True)
+    colors = dict(
+        local=colors[0],
+        tail=colors[1],
     )
-    ax_scatter.set_ylabel(
-        "AP distance to\ninjection site (mm)", fontsize=fontsize_dict["label"]
+    bins = np.arange(-0.5, 0.5, 0.01)
+    lines = []
+    for where in ["local", "tail"]:
+        cells = clicked_cells[where]
+        kde = gaussian_kde(cells[:, 0], bw_method=0.3)(bins)
+        line = ax.plot(bins, kde / kde.max(), color=colors[where], **kwargs)
+        lines.append(line[0])
+    ax.set_xticks([-0.5, 0, 0.5], labels=[-0.5, 0, 0.5], fontsize=fontsize_dict["tick"])
+    ax.set_yticks([0, 1], labels=[0, 1], fontsize=fontsize_dict["tick"])
+    ax.set_xlabel("ML position (mm)", fontsize=fontsize_dict["label"])
+    ax.set_ylabel(
+        "Normalised cell\ndensity (mm$^{-1}$)", fontsize=fontsize_dict["label"]
     )
+    ax.set_xlim(-0.5, 0.5)
+    ax.set_ylim(0, 1)
+    despine(ax)
+    return lines
+
+
+def plot_taillocal_scatter(ax, colors, fontsize_dict, **kwargs):
+    """"""
+    clicked_cells = load_cell_click_data(relative=True)
+    colors = dict(
+        local=colors[0],
+        tail=colors[1],
+    )
+    zorder = dict(tail=5, local=1)
+    scatters = []
+    for where in ["local", "tail"]:
+        cells = clicked_cells[where]
+        sc = ax.scatter(
+            cells[:, 0],
+            cells[:, 2],
+            color=colors[where],
+            zorder=zorder[where],
+            **kwargs,
+        )
+        scatters.append(sc)
+
+    ax.set_aspect("equal")
+    ax.set_xticks([-0.4, 0, 0.4], labels=[-0.4, 0, 0.4], fontsize=fontsize_dict["tick"])
+    ax.set_yticks([-0.4, 0, 0.4], labels=[-0.4, 0, 0.4], fontsize=fontsize_dict["tick"])
+    ax.set_xlim(-0.4, 0.4)
+    ax.set_ylim(-0.4, 0.4)
+    despine(ax)
+    ax.set_xlabel("ML position (mm)", fontsize=fontsize_dict["label"])
+    ax.set_ylabel("AP position (mm)", fontsize=fontsize_dict["label"])
+    return scatters
+
+
+def plot_pairwise_dist_distri(ax, colors, fontsize_dict, **kwargs):
+    """"""
+    clicked_cells = load_cell_click_data(relative=False)
+    pairwise = {}
+    bins = np.arange(0, 1, 0.01)
+    colors = dict(
+        local=colors[0],
+        tail=colors[1],
+    )
+    for where in ["local", "tail"]:
+        cells = clicked_cells[where]
+        dst = np.linalg.norm(cells[:, None] - cells[None, :], axis=2)
+        pairwise[where] = dst[~np.eye(dst.shape[0], dtype=bool)]
+        kde = gaussian_kde(pairwise[where], bw_method=0.1)(bins)
+
+        ax.plot(bins, kde / kde.max(), color=colors[where], **kwargs)
+    ax.set_xticks([0, 0.5, 1], labels=[0, 0.5, 1], fontsize=fontsize_dict["tick"])
+    ax.set_yticks([0, 1], labels=[0, 1], fontsize=fontsize_dict["tick"])
+    ax.set_xlabel("Pairwise distance (mm)", fontsize=fontsize_dict["label"])
+    ax.set_ylabel(
+        "Normalised cell\ndensity (mm$^{-1})$", fontsize=fontsize_dict["label"]
+    )
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    despine(ax)
