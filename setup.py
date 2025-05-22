@@ -14,10 +14,11 @@ setup(
         "Pillow",
         "ccf_streamlines",
         "iss_preprocess @ git+ssh://git@github.com/znamlab/iss-preprocess.git",
-        "iss_analysis @ git+ssh://git@github.com/znamlab/iss-analysis.git",        
+        "iss_analysis @ git+ssh://git@github.com/znamlab/iss-analysis.git",
         "cricksaw_analysis @ git+ssh://git@github.com/znamlab/cricksaw-analysis.git",
         "flexiznam @ git+ssh://git@github.com/znamlab/flexiznam.git",
         "scanpy",
         "tables",
+        "graphviz",
     ],
 )

@@ -5,6 +5,7 @@ import seaborn as sns
 from tqdm.contrib.concurrent import process_map
 from multiprocessing import cpu_count
 from functools import partial
+import graphviz
 
 
 def match_barcodes(cells_df):
@@ -970,3 +971,51 @@ def bubble_plot(
         fontsize=label_fontsize,
     )
     ax.set_ylabel("Presynaptic layer", fontsize=label_fontsize)
+
+
+def connectivity_diagram(
+    mean_input_fraction, lower_df, upper_df, node_names, matx_names, positions
+):
+    dot = graphviz.Digraph(
+        "connection_matrix",
+        comment="The cortical microcircuit",
+        engine="fdp",
+        graph_attr=dict(bgcolor="#ffffff"),
+    )
+    for i_layer, (name, pos) in enumerate(zip(node_names, positions)):
+        dot.node(f"{i_layer+1}", name, pos=pos)
+
+    valid = mean_input_fraction > 0.2
+    max_alpha = np.nanmax(1 / (upper_df - lower_df)[valid])
+
+    for istart, starter_layer in enumerate(matx_names):
+        for ipres, pres_layer in enumerate(matx_names):
+            connection_strength = mean_input_fraction.loc[pres_layer, starter_layer]
+            if connection_strength < 0.20:
+                continue
+            conf_range = np.diff(
+                [
+                    lower_df.loc[pres_layer, starter_layer],
+                    upper_df.loc[pres_layer, starter_layer],
+                ]
+            )[0]
+            col = "#000000"
+            # Make strength into transparency
+            print(
+                f"{pres_layer} --> {starter_layer}: {1-conf_range:.2f} or {1/conf_range:.2f} "
+            )
+            scaled_alpha = np.clip((1 / conf_range) * 255 / max_alpha, 0, 255).astype(
+                int
+            )
+            hex_alpha = f"{scaled_alpha:02x}"
+            col += hex_alpha
+            dot.edge(
+                str(ipres + 1),
+                str(istart + 1),
+                penwidth=str(connection_strength * 40),
+                arrowsize=str(connection_strength),
+                color=col,
+                arrowhead="normal",
+            )
+
+    return dot
