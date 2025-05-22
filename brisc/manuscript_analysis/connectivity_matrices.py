@@ -12,8 +12,12 @@ def match_barcodes(cells_df):
         return series.apply(lambda bcs: len(bcs.intersection(barcodes)) > 0)
 
     starters = cells_df[cells_df["is_starter"] == True]
-    connectivity_matrix = cells_df["unique_barcodes"].apply(lambda bcs: match_barcodes_(starters["unique_barcodes"], bcs))
-    cells_df["starters"] = connectivity_matrix.apply(lambda row: set(row.index[row]), axis=1)
+    connectivity_matrix = cells_df["unique_barcodes"].apply(
+        lambda bcs: match_barcodes_(starters["unique_barcodes"], bcs)
+    )
+    cells_df["starters"] = connectivity_matrix.apply(
+        lambda row: set(row.index[row]), axis=1
+    )
     cells_df["n_starters"] = cells_df["starters"].apply(len)
 
 
@@ -201,7 +205,7 @@ def plot_area_by_area_connectivity(
     tick_fontsize=12,
     line_width=1,
     show_counts=True,
-    cbar_label="Input fraction"
+    cbar_label="Input fraction",
 ):
     vmin = np.min(connectivity_matrix[connectivity_matrix != -np.inf]) * 0.7
     vmax = -vmin if odds_ratio else connectivity_matrix.max(axis=None)
@@ -223,9 +227,9 @@ def plot_area_by_area_connectivity(
     )
     if cbax:
         cbax.tick_params(labelsize=tick_fontsize)
-        cbax.patch.set_edgecolor('black')
+        cbax.patch.set_edgecolor("black")
         cbax.patch.set_linewidth(1.5)
-        cbax.set_title(cbar_label, fontsize=tick_fontsize, loc="left")     
+        cbax.set_title(cbar_label, fontsize=tick_fontsize, loc="left")
 
     # Annotate with appropriate color based on background
     for (i, j), val in np.ndenumerate(connectivity_matrix):
@@ -235,9 +239,7 @@ def plot_area_by_area_connectivity(
             text_color = "white" if val <= q1 or val >= q3 else "black"
         else:
             text_color = (
-                "white"
-                if val < connectivity_matrix.max(axis=None) / 2
-                else "black"
+                "white" if val < connectivity_matrix.max(axis=None) / 2 else "black"
             )
         ax.text(
             j + 0.5,
@@ -282,7 +284,7 @@ def plot_area_by_area_connectivity(
 
     # add a label saying what the sum is
     ax.text(
-        -.15,
+        -0.15,
         connectivity_matrix.shape[0] + 0.5,
         "N starters:",
         ha="right",
@@ -361,7 +363,7 @@ def shuffle_barcodes(
 
     Returns:
         shuffled_cell_barcode_df (pd.DataFrame): DataFrame of shuffled ARA starters data
-        
+
     """
     np.random.seed(seed + 1)
     shuffled_cell_barcode_df = cell_barcode_df.copy()
@@ -439,7 +441,7 @@ def shuffle_and_compute_connectivity(
     shuffled_cell_barcode_dfs = process_map(
         shuffle_wrapper,
         args,
-        max_workers=round(cpu_count() / 3),
+        max_workers=round(min(cpu_count() / 3, cpu_count() - 2)),
         desc="Shuffling data",
         total=n_permutations,
     )
@@ -460,47 +462,51 @@ def shuffle_and_compute_connectivity(
         desc="Computing connectivity",
         total=n_permutations,
     )
-    shuffled_matrices, mean_input_fractions, starter_input_fractions, count_matrices = zip(*results)
+    (
+        shuffled_matrices,
+        mean_input_fractions,
+        starter_input_fractions,
+        count_matrices,
+    ) = zip(*results)
     return (
         shuffled_cell_barcode_dfs,
         shuffled_matrices,
         mean_input_fractions,
         starter_input_fractions,
-        count_matrices
+        count_matrices,
     )
-    
-        
+
 
 def filter_matrices(
-        observed_cm, 
-        all_null_matrices,
-        row_order=[
-            "VISp1",
-            "VISp2/3",
-            "VISp4",
-            "VISp5",
-            "VISp6a",
-            "VISp6b",
-            "VISal",
-            "VISl",
-            "VISli",
-            "VISpm",
-            "RSP",
-            "AUD",
-            "TEa",
-            "TH",
-        ],
-        col_order=[
-            "VISp1",
-            "VISp2/3",
-            "VISp4",
-            "VISp5",
-            "VISp6a",
-            "VISp6b",
-            "VISl",
-            "VISpm",
-        ],
-    ):
+    observed_cm,
+    all_null_matrices,
+    row_order=[
+        "VISp1",
+        "VISp2/3",
+        "VISp4",
+        "VISp5",
+        "VISp6a",
+        "VISp6b",
+        "VISal",
+        "VISl",
+        "VISli",
+        "VISpm",
+        "RSP",
+        "AUD",
+        "TEa",
+        "TH",
+    ],
+    col_order=[
+        "VISp1",
+        "VISp2/3",
+        "VISp4",
+        "VISp5",
+        "VISp6a",
+        "VISp6b",
+        "VISl",
+        "VISpm",
+    ],
+):
     # Determine row/column order
     if row_order is None:
         row_order = list(observed_cm.index)
@@ -562,6 +568,7 @@ def plot_null_histograms_square(
     fig, axes = plt.subplots(
         n_rows, n_cols, figsize=(n_cols * 2.0, n_rows * 2.0), sharex=False, sharey=False
     )
+
     # Helper to handle 1D/2D indexing of axes
     def get_ax(i, j):
         if n_rows == 1 and n_cols == 1:
@@ -572,6 +579,7 @@ def plot_null_histograms_square(
             return axes[i]
         else:
             return axes[i, j]
+
     # Plot each histogram
     for i, row_label in enumerate(observed_cm.index):
         for j, col_label in enumerate(observed_cm.columns):
@@ -766,6 +774,7 @@ def plot_log_ratio_matrix(subset_observed_cm, subset_null_array):
     mask = np.isclose(log_ratio_matrix, 0)
     # Ensure pval_df has the same index/columns as log_ratio_matrix
     pval_df = pval_df.loc[log_ratio_matrix.index, log_ratio_matrix.columns]
+
     # Function to format p-values in scientific notation (1 decimal before 'e')
     def format_pval(x):
         if x == 0:
@@ -912,7 +921,9 @@ def bubble_plot(
     )
     if cbax:
         plt.colorbar(sc, cax=cbax, ax=ax)
-        cbax.set_title("Signed\n$\log_{10}$ p-value", fontsize=tick_fontsize, loc="left")
+        cbax.set_title(
+            "Signed\n$\log_{10}$ p-value", fontsize=tick_fontsize, loc="left"
+        )
         cbax.tick_params(
             axis="both",
             which="both",
@@ -925,9 +936,7 @@ def bubble_plot(
         legend_handles = []
         for val in legend_values:
             size_val = val * size_scale
-            h = ax.scatter(
-                [], [], s=size_val, c="gray", alpha=0.5, label=val
-            )
+            h = ax.scatter([], [], s=size_val, c="gray", alpha=0.5, label=val)
             legend_handles.append(h)
 
         legend = ax.legend(
@@ -938,11 +947,11 @@ def bubble_plot(
             frameon=False,
             handleheight=3.0,
             fontsize=tick_fontsize,
-            title="$|\log_{10}\\frac{\mathrm{observed}}{\mathrm{shuffled}}|$"
+            title="$|\log_{10}\\frac{\mathrm{observed}}{\mathrm{shuffled}}|$",
         )
-        legend.get_title().set_fontsize('6') 
-    ax.set_xlim([-.5, len(x_categories)-.5])
-    ax.set_ylim([-.5, len(y_categories)-.5])
+        legend.get_title().set_fontsize("6")
+    ax.set_xlim([-0.5, len(x_categories) - 0.5])
+    ax.set_ylim([-0.5, len(y_categories) - 0.5])
 
     ax.set_xticks(range(len(x_categories)))
     ax.set_yticks(range(len(y_categories)))
@@ -956,5 +965,8 @@ def bubble_plot(
     # Invert y-axis so top row is y=0
     ax.invert_yaxis()
     ax.set_aspect("equal", adjustable="box")
-    ax.set_xlabel("Starter layer", fontsize=label_fontsize, )
+    ax.set_xlabel(
+        "Starter layer",
+        fontsize=label_fontsize,
+    )
     ax.set_ylabel("Presynaptic layer", fontsize=label_fontsize)
