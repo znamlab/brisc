@@ -9,6 +9,21 @@ import graphviz
 
 
 def match_barcodes(cells_df):
+    """Matches barcodes between starter cells and all other cells.
+
+    This function identifies which starter cells share 'unique_barcodes' with
+    any given cell in the `cells_df`. It modifies `cells_df` in place by
+    adding two columns:
+    - 'starters': A set of indices of starter cells that share at least one
+                  barcode with the cell in that row.
+    - 'n_starters': The number of such starter cells (length of the 'starters' set).
+
+    Args:
+        cells_df (pd.DataFrame): DataFrame containing cell data. Must include
+            'is_starter' (bool) and 'unique_barcodes' (set-like) columns.
+            This DataFrame is modified in place.
+    """
+
     def match_barcodes_(series, barcodes):
         return series.apply(lambda bcs: len(bcs.intersection(barcodes)) > 0)
 
@@ -208,6 +223,36 @@ def plot_area_by_area_connectivity(
     show_counts=True,
     cbar_label="Input fraction",
 ):
+    """Plots an area-by-area connectivity matrix as a heatmap.
+
+    This function visualizes a connectivity matrix using `seaborn.heatmap`.
+    It can display raw counts, input fractions, or odds ratios, and can
+    annotate cells with their values. Optionally, it shows total starter
+    cell counts per area.
+
+    Args:
+        connectivity_matrix (pd.DataFrame): The matrix to plot. Rows are
+            presynaptic areas, columns are starter areas.
+        starter_counts (pd.Series or dict): Counts of starter cells in each
+            starter area (corresponding to columns of `connectivity_matrix`).
+        presynaptic_counts (pd.Series or dict): Counts of presynaptic cells in
+            each presynaptic area (not directly used in current plotting logic but
+            kept for signature consistency).
+        ax (matplotlib.axes.Axes): The main axes to plot the heatmap on.
+        cbax (matplotlib.axes.Axes, optional): Axes for the colorbar.
+        input_fraction (bool, optional): If True, annotations are formatted as
+            fractions (e.g., "0.25"). Otherwise, as integers. Defaults to False.
+        odds_ratio (bool, optional): If True, adjusts colormap and normalization
+            for odds ratios. Defaults to False.
+        label_fontsize (int, optional): Font size for axis labels. Defaults to 12.
+        tick_fontsize (int, optional): Font size for tick labels and annotations.
+            Defaults to 12.
+        line_width (int or float, optional): Line width for cell borders in the
+            heatmap. Defaults to 1.
+        show_counts (bool, optional): If True, displays starter cell counts below
+            the heatmap. Defaults to True.
+        cbar_label (str, optional): Label for the colorbar. Defaults to "Input fraction".
+    """
     vmin = np.min(connectivity_matrix[connectivity_matrix != -np.inf]) * 0.7
     vmax = -vmin if odds_ratio else connectivity_matrix.max(axis=None)
     cmap = "RdBu_r" if odds_ratio else "inferno"
@@ -387,6 +432,16 @@ def shuffle_barcodes(
 
 
 def shuffle_wrapper(arg):
+    """Wrapper for `shuffle_barcodes` for parallel processing.
+
+    This function unpacks arguments and calls `shuffle_barcodes`. It is
+    designed to be used with `multiprocessing.Pool.map` or similar
+    parallel execution utilities.
+
+    Args:
+        arg (tuple): A tuple containing the arguments for `shuffle_barcodes`:
+            (seed, minimal_cell_barcode_df, shuffle_presyn, shuffle_starters).
+    """
     seed, minimal_cell_barcode_df, shuffle_presyn, shuffle_starters = arg
     return shuffle_barcodes(
         seed, minimal_cell_barcode_df, shuffle_presyn, shuffle_starters
@@ -394,6 +449,25 @@ def shuffle_wrapper(arg):
 
 
 def compare_to_shuffle(observed_matrix, shuffled_matrices, alpha=0.05):
+    """Compares an observed matrix to shuffled matrices to find significant differences.
+
+    This function calculates the log10 ratio of an observed connectivity matrix
+    to the mean of a distribution of shuffled (null) matrices. It also computes
+    empirical p-values and applies False Discovery Rate (FDR) correction.
+
+    Args:
+        observed_matrix (pd.DataFrame): The observed connectivity matrix.
+        shuffled_matrices (np.ndarray): A 3D numpy array where the first
+            dimension represents permutations, and the other two dimensions
+            correspond to the rows and columns of the `observed_matrix`.
+        alpha (float, optional): The significance level for FDR correction.
+            Defaults to 0.05.
+    Returns:
+        tuple[pd.DataFrame, pd.DataFrame]:
+            - log_ratio_matrix (pd.DataFrame): Matrix of log10 ratios of
+              observed values to the mean of the null distributions.
+            - pval_corrected_df (pd.DataFrame): Matrix of FDR-corrected p-values.
+    """
     # Compute p-values and log ratio of observed connectivity vs mean for bubble plots
     mean_null = shuffled_matrices.mean(axis=0)
     ratio_matrix = observed_matrix.values / (mean_null + 1e-9)
@@ -508,6 +582,28 @@ def filter_matrices(
         "VISpm",
     ],
 ):
+    """Filters observed and null connectivity matrices to a specified order and subset.
+
+    This function takes an observed connectivity matrix (`observed_cm`) and a
+    corresponding 3D array of null matrices (`all_null_matrices`) and filters
+    them based on `row_order` and `col_order`. This is useful for focusing
+    on specific areas of interest or standardizing matrix dimensions.
+
+    Args:
+        observed_cm (pd.DataFrame): The observed connectivity matrix, where
+            rows are presynaptic areas and columns are starter areas.
+        all_null_matrices (np.ndarray): A 3D numpy array representing the null
+            distribution of connectivity matrices (permutations x rows x columns).
+            The row and column order must match `observed_cm`.
+        row_order (list, optional): A list of row labels (presynaptic areas)
+            to include and their desired order. Defaults to a predefined list.
+        col_order (list, optional): A list of column labels (starter areas)
+            to include and their desired order. Defaults to a predefined list.
+    Returns:
+        tuple[pd.DataFrame, np.ndarray]:
+            - subset_observed_cm (pd.DataFrame): The filtered observed connectivity matrix.
+            - subset_null_array (np.ndarray): The filtered 3D array of null matrices.
+    """
     # Determine row/column order
     if row_order is None:
         row_order = list(observed_cm.index)
@@ -974,8 +1070,38 @@ def bubble_plot(
 
 
 def connectivity_diagram(
-    mean_input_fraction, lower_df, upper_df, node_names, matx_names, positions
+    mean_input_fraction,
+    lower_df,
+    upper_df,
+    node_names,
+    matx_names,
+    positions,
+    min_fraction_cutoff=0.2,
 ):
+    """Generates a Graphviz diagram representing neural connectivity.
+
+    This function creates a directed graph where nodes represent brain regions
+    (or layers) and edges represent connections between them. The width of an
+    edge is proportional to the `mean_input_fraction`, and its transparency
+    (alpha) is inversely related to the confidence interval range (narrower
+    range means less transparent/more confident).
+
+    Args:
+        mean_input_fraction (pd.DataFrame): Matrix of mean input fractions.
+            Rows are presynaptic regions, columns are starter regions.
+        lower_df (pd.DataFrame): Matrix of lower confidence bounds for
+            `mean_input_fraction`.
+        upper_df (pd.DataFrame): Matrix of upper confidence bounds for
+            `mean_input_fraction`.
+        node_names (list[str]): List of display names for the nodes in the graph.
+        matx_names (list[str]): List of names corresponding to the rows/columns
+            of the input DataFrames, used for lookup.
+        positions (list[str]): List of 'pos' attribute strings for Graphviz
+            nodes (e.g., "x,y!"), defining their layout.
+        min_fraction_cuoff (int): Minimum input fraction that is represented as edge
+    Returns:
+        graphviz.Digraph: The Graphviz object representing the connectivity diagram.
+    """
     dot = graphviz.Digraph(
         "connection_matrix",
         comment="The cortical microcircuit",
@@ -985,7 +1111,7 @@ def connectivity_diagram(
     for i_layer, (name, pos) in enumerate(zip(node_names, positions)):
         dot.node(f"{i_layer+1}", name, pos=pos)
 
-    valid = mean_input_fraction > 0.2
+    valid = mean_input_fraction > min_fraction_cutoff
     max_alpha = np.nanmax(1 / (upper_df - lower_df)[valid])
 
     for istart, starter_layer in enumerate(matx_names):
