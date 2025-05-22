@@ -8,9 +8,9 @@ from matplotlib import pyplot as plt
 import matplotlib
 from brisc.manuscript_analysis.utils import despine
 
-matplotlib.rcParams["pdf.fonttype"] = (
-    42  # Use Type 3 fonts (TrueType) for selectable text
-)
+matplotlib.rcParams[
+    "pdf.fonttype"
+] = 42  # Use Type 3 fonts (TrueType) for selectable text
 matplotlib.rcParams["ps.fonttype"] = 42  # For EPS, if relevant
 
 
@@ -41,9 +41,7 @@ def mask_points(pts, mask):
     return pts[interpolated_values > 0]
 
 
-def plot_rv_coronal_slice(
-    ax, mcherry, background
-):
+def plot_rv_coronal_slice(ax, mcherry, background):
     """
 
     Returns:
@@ -80,10 +78,10 @@ def plot_rv_coronal_slice(
     ax_zoom, ax_overview = ax
     ax_overview.imshow(rgb2)
     ax_overview.set_aspect("equal")
-    ax_overview.set_xticks([])   
+    ax_overview.set_xticks([])
     ax_overview.set_yticks([])
     for spine in ax_overview.spines.values():
-        spine.set_edgecolor('white')
+        spine.set_edgecolor("white")
     rgb2 = rgb2[75:600, 500:-50, :]
     ax_zoom.imshow(rgb2)
     # plot_cells = False
@@ -160,6 +158,8 @@ def plot_rabies_density(
     max_radius_mm=2.0,
     n_points=200,
     linewidth=0.5,
+    voxel_distances_sorted=None,
+    cell_distances_sorted=None,
 ):
     """
     Plots the cumulative density of labeled cells in isocortex as a function
@@ -191,46 +191,11 @@ def plot_rabies_density(
         fig, ax = plt.subplots(figsize=(5, 4))
 
     # -------------------------------------------------------------------------
-    # Load points and atlas
-    points_file = (
-        processed / project / mouse / "cellfinder_results_010/points/downsampled.points"
-    )
-    pts = pd.read_hdf(points_file).values  # Nx3
-    reg_folder = processed / project / mouse / "cellfinder_results_010/registration"
-    atlas = tf.imread(reg_folder / "registered_atlas.tiff")
-
-    # -------------------------------------------------------------------------
-    # BrainGlobe atlas and mask for isocortex
-    atlas_obj = BrainGlobeAtlas("allen_mouse_10um")
-    isocortex_regions = atlas_obj.get_structure_descendants("Isocortex")
-    isocortex_ids = [
-        atlas_obj.structures[acronym]["id"] for acronym in isocortex_regions
-    ]
-
-    # Create isocortex mask (same shape as atlas)
-    mask = np.isin(atlas, isocortex_ids).astype(np.uint8)
-
-    # -------------------------------------------------------------------------
-    # Get voxel coordinates in isocortex
-    # mask.shape = (Z, Y, X)
-    # voxel_coords: N_voxels x 3 (Z, Y, X)
-    voxel_coords = np.argwhere(mask > 0)
-
-    # Convert injection center to mm (1 voxel = 0.01 mm)
-    inj_center_mm = inj_center * 0.01
-
-    # Distances of each isocortex voxel to the injection center
-    voxel_coords_mm = voxel_coords * 0.01
-    voxel_distances = np.sqrt(np.sum((voxel_coords_mm - inj_center_mm) ** 2, axis=1))
-    voxel_distances_sorted = np.sort(voxel_distances)
-
-    # -------------------------------------------------------------------------
-    # Get only isocortex cells
-    cells_masked = mask_rounded_points(pts, mask)
-    # Distances of each isocortex cell to injection center
-    cells_masked_mm = cells_masked * 0.01
-    cell_distances = np.sqrt(np.sum((cells_masked_mm - inj_center_mm) ** 2, axis=1))
-    cell_distances_sorted = np.sort(cell_distances)
+    if voxel_distances_sorted is None or cell_distances_sorted is None:
+        # Load points and atlas
+        voxel_distances_sorted, cell_distances_sorted = rv_cortical_cell_distances(
+            inj_center, project, mouse, processed
+        )
 
     # -------------------------------------------------------------------------
     # Compute cumulative density in isocortex
@@ -275,3 +240,46 @@ def plot_rabies_density(
     # ax.legend(fontsize=tick_fontsize)
     ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
     despine(ax)
+
+
+def rv_cortical_cell_distances(inj_center, project, mouse, processed):
+    points_file = (
+        processed / project / mouse / "cellfinder_results_010/points/downsampled.points"
+    )
+    pts = pd.read_hdf(points_file).values  # Nx3
+    reg_folder = processed / project / mouse / "cellfinder_results_010/registration"
+    atlas = tf.imread(reg_folder / "registered_atlas.tiff")
+
+    # -------------------------------------------------------------------------
+    # BrainGlobe atlas and mask for isocortex
+    atlas_obj = BrainGlobeAtlas("allen_mouse_10um")
+    isocortex_regions = atlas_obj.get_structure_descendants("Isocortex")
+    isocortex_ids = [
+        atlas_obj.structures[acronym]["id"] for acronym in isocortex_regions
+    ]
+
+    # Create isocortex mask (same shape as atlas)
+    mask = np.isin(atlas, isocortex_ids).astype(np.uint8)
+
+    # -------------------------------------------------------------------------
+    # Get voxel coordinates in isocortex
+    # mask.shape = (Z, Y, X)
+    # voxel_coords: N_voxels x 3 (Z, Y, X)
+    voxel_coords = np.argwhere(mask > 0)
+
+    # Convert injection center to mm (1 voxel = 0.01 mm)
+    inj_center_mm = inj_center * 0.01
+
+    # Distances of each isocortex voxel to the injection center
+    voxel_coords_mm = voxel_coords * 0.01
+    voxel_distances = np.sqrt(np.sum((voxel_coords_mm - inj_center_mm) ** 2, axis=1))
+    voxel_distances_sorted = np.sort(voxel_distances)
+
+    # -------------------------------------------------------------------------
+    # Get only isocortex cells
+    cells_masked = mask_rounded_points(pts, mask)
+    # Distances of each isocortex cell to injection center
+    cells_masked_mm = cells_masked * 0.01
+    cell_distances = np.sqrt(np.sum((cells_masked_mm - inj_center_mm) ** 2, axis=1))
+    cell_distances_sorted = np.sort(cell_distances)
+    return voxel_distances_sorted, cell_distances_sorted

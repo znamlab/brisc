@@ -512,18 +512,17 @@ def plot_taillocal_ml_distribution(ax, colors, fontsize_dict, **kwargs):
     ax.set_xticks([-0.5, 0, 0.5], labels=[-0.5, 0, 0.5], fontsize=fontsize_dict["tick"])
     ax.set_yticks([0, 1], labels=[0, 1], fontsize=fontsize_dict["tick"])
     ax.set_xlabel("ML position (mm)", fontsize=fontsize_dict["label"])
-    ax.set_ylabel(
-        "Normalised cell\ndensity (mm$^{-1}$)", fontsize=fontsize_dict["label"]
-    )
+    ax.set_ylabel("Normalised cell density", fontsize=fontsize_dict["label"])
     ax.set_xlim(-0.5, 0.5)
     ax.set_ylim(0, 1)
     despine(ax)
     return lines
 
 
-def plot_taillocal_scatter(ax, colors, fontsize_dict, **kwargs):
+def plot_taillocal_scatter(ax, colors, fontsize_dict, clicked_cells=None, **kwargs):
     """"""
-    clicked_cells = load_cell_click_data(relative=True)
+    if clicked_cells is None:
+        clicked_cells = load_cell_click_data(relative=True)
     colors = dict(
         local=colors[0],
         tail=colors[1],
@@ -552,9 +551,11 @@ def plot_taillocal_scatter(ax, colors, fontsize_dict, **kwargs):
     return scatters
 
 
-def plot_pairwise_dist_distri(ax, colors, fontsize_dict, **kwargs):
+def plot_pairwise_dist_distri(ax, colors, fontsize_dict, clicked_cells=None, **kwargs):
     """"""
-    clicked_cells = load_cell_click_data(relative=False)
+    if clicked_cells is None:
+        clicked_cells = load_cell_click_data(relative=True)
+
     pairwise = {}
     bins = np.arange(0, 1, 0.01)
     colors = dict(
@@ -567,13 +568,13 @@ def plot_pairwise_dist_distri(ax, colors, fontsize_dict, **kwargs):
         pairwise[where] = dst[~np.eye(dst.shape[0], dtype=bool)]
         kde = gaussian_kde(pairwise[where], bw_method=0.1)(bins)
 
-        ax.plot(bins, kde / kde.max(), color=colors[where], **kwargs)
+        (line,) = ax.plot(bins, kde / kde.max(), color=colors[where], **kwargs)
+        line.set_clip_on(False)
+
     ax.set_xticks([0, 0.5, 1], labels=[0, 0.5, 1], fontsize=fontsize_dict["tick"])
     ax.set_yticks([0, 1], labels=[0, 1], fontsize=fontsize_dict["tick"])
     ax.set_xlabel("Pairwise distance (mm)", fontsize=fontsize_dict["label"])
-    ax.set_ylabel(
-        "Normalised cell\ndensity (mm$^{-1})$", fontsize=fontsize_dict["label"]
-    )
+    ax.set_ylabel("Normalised cell density", fontsize=fontsize_dict["label"])
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     despine(ax)
