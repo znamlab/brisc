@@ -124,12 +124,12 @@ def compute_connectivity_matrix(
         fractions_df.select_dtypes(include="number").sum(axis=1) > 0
     ]
     # Grouping by starter property, find the mean fraction of each presynaptic grouping
-    total_counts_df = counts_df.groupby(starter_grouping).sum().T
+    total_counts_df = counts_df.groupby(starter_grouping, observed=False).sum().T
     if output_fraction:
         # For each presyn area (each row), divide by the row sum so it sums to 1
         mean_frac_df = total_counts_df.div(total_counts_df.sum(axis=1), axis=0)
     else:
-        mean_frac_df = fractions_df.groupby(starter_grouping).mean().T
+        mean_frac_df = fractions_df.groupby(starter_grouping, observed=False).mean().T
 
     return total_counts_df, mean_frac_df, fractions_df, counts_df
 
