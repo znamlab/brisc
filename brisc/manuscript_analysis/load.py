@@ -1,5 +1,6 @@
 from cricksaw_analysis import atlas_utils
 from brainglobe_atlasapi import BrainGlobeAtlas
+import numpy as np
 import pandas as pd
 
 
@@ -268,7 +269,8 @@ def load_cell_barcode_data(
     cells_df = find_singleton_bcs(cells_df)
     cells_df = cells_df[cells_df["unique_barcodes"].apply(lambda x: len(x) > 0)]
 
-    # Define special-case parameters
+    # Define special-case parameters, one roi has a tear in the section. We don't want
+    # to move things that are "outside"
     chamber = "chamber_09"
     roi = 2
     special_query = f"chamber == '{chamber}' and roi == {roi}"
@@ -286,6 +288,7 @@ def load_cell_barcode_data(
 
     # Apply movement info to the full dataframe
     cells_df["was_in_wm"] = False
+    cells_df["moved_coords"] = [c for c in cells_df[["ara_x", "ara_y", "ara_z"]].values]
     full_actually_moved = full_moved.query("moved == True").copy()
     full_moved_indices = cells_df.iloc[full_actually_moved.pts_index].index
     not_outside_mask = cells_df.loc[full_moved_indices, "area_acronym"] != "outside"
@@ -295,10 +298,14 @@ def load_cell_barcode_data(
         full_moved_indices, "area_acronym"
     ] = full_actually_moved.new_area_acronym.values
     cells_df.loc[full_moved_indices, "area_id"] = full_actually_moved.new_area_id.values
+    cells_df.loc[full_moved_indices, "moved_coords"] = (
+        full_actually_moved.new_coords.values / 1000
+    )
 
     # Apply custom behavior for specific chamber and roi
     special_cells = cells_df.query(special_query).copy()
     if not special_cells.empty:
+        print(f"Moving {special_query} out of fiber tracts only")
         special_pts = special_cells[["ara_x", "ara_y", "ara_z"]].values * 1000
         special_moved = atlas_utils.move_out_of_area(
             pts=special_pts,
@@ -324,6 +331,9 @@ def load_cell_barcode_data(
         cells_df.loc[
             special_moved_indices, "area_id"
         ] = special_actually_moved.new_area_id.values
+        cells_df.loc[special_moved_indices, "moved_coords"] = (
+            special_actually_moved.new_coords.values / 1000
+        )
 
     # Assign areas and layers to each cell
     cells_df["area_acronym_ancestor_rank1"] = cells_df["area_acronym"].apply(
