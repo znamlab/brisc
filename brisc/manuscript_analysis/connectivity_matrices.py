@@ -5,7 +5,9 @@ import seaborn as sns
 from tqdm.contrib.concurrent import process_map
 from multiprocessing import cpu_count
 from functools import partial
-import graphviz
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+from matplotlib.patches import FancyArrowPatch  # For drawing arrows
 
 
 def match_barcodes(cells_df):
@@ -1069,79 +1071,312 @@ def bubble_plot(
     ax.set_ylabel("Presynaptic layer", fontsize=label_fontsize)
 
 
-def connectivity_diagram(
-    mean_input_fraction,
-    lower_df,
-    upper_df,
-    node_names,
-    matx_names,
-    positions,
-    min_fraction_cutoff=0.2,
+def connectivity_diagram_mpl(
+    mean_input_fraction: pd.DataFrame,
+    lower_df: pd.DataFrame,
+    upper_df: pd.DataFrame,
+    connection_names: list[str],
+    positions: dict[str, tuple[float, float]],
+    display_names: list[str] = None,
+    ax: plt.Axes = None,
+    min_fraction_cutoff: float = 0.2,
+    node_style: dict = None,
+    arrow_style: dict = None,
+    ci_to_alpha: bool = True,
+    ci_cmap: str = None,
+    edge_width_scale: float = 2.0,
+    arrow_head_scale: float = 20.0,
+    vmin: float = None,
+    vmax: float = None,
+    colorbar_fontsize=6,
+    cax=None,
 ):
-    """Generates a Graphviz diagram representing neural connectivity.
+    """
+    Generates a Matplotlib diagram representing neural connectivity.
 
-    This function creates a directed graph where nodes represent brain regions
-    (or layers) and edges represent connections between them. The width of an
-    edge is proportional to the `mean_input_fraction`, and its transparency
-    (alpha) is inversely related to the confidence interval range (narrower
-    range means less transparent/more confident).
+    Nodes are plotted as circles with labels. Edges are arrows whose width
+    is proportional to `mean_input_fraction`. Edge color and/or transparency
+    can be modulated by the confidence interval width (derived from `lower_df`,
+    `upper_df`).
 
     Args:
-        mean_input_fraction (pd.DataFrame): Matrix of mean input fractions.
+        mean_input_fraction: DataFrame of mean input fractions.
             Rows are presynaptic regions, columns are starter regions.
-        lower_df (pd.DataFrame): Matrix of lower confidence bounds for
-            `mean_input_fraction`.
-        upper_df (pd.DataFrame): Matrix of upper confidence bounds for
-            `mean_input_fraction`.
-        node_names (list[str]): List of display names for the nodes in the graph.
-        matx_names (list[str]): List of names corresponding to the rows/columns
-            of the input DataFrames, used for lookup.
-        positions (list[str]): List of 'pos' attribute strings for Graphviz
-            nodes (e.g., "x,y!"), defining their layout.
-        min_fraction_cuoff (int): Minimum input fraction that is represented as edge
+        lower_df: DataFrame of lower confidence bounds for `mean_input_fraction`.
+        upper_df: DataFrame of upper confidence bounds for `mean_input_fraction`.
+        connection_names: List of columns of `mean_input_fraction` to use to plot
+            connections. Must have corresponding entries in `positions`.
+        positions: Dictionary of x,y position for nodes, keys must correspond to
+            `connection_names`.
+        display_names: List of names for nodes, corresponding to `connection_names`. If
+            None, will use connection_names
+        ax: Matplotlib Axes to plot on. If None, a new figure and axes
+            are created.
+        min_fraction_cutoff: Minimum input fraction for an edge to be drawn.
+        node_style (dict, optional): Styling for nodes. Keys can include:
+            'radius' (float): Radius of node circles.
+            'facecolor' (str): Face color of node circles.
+            'edgecolor' (str): Edge color of node circles.
+            'fontsize' (int): Font size for node labels.
+            'fontcolor' (str): Color for node labels.
+        arrow_style (dict, optional): Styling for arrows.
+        ci_to_alpha (bool, optional): If True, edge transparency is inversely
+            related to the confidence interval width (narrower CI = more opaque).
+        ci_cmap (str | None, optional): Matplotlib colormap name to color edges
+            based on confidence interval width. If None, edges are black
+            (or colored by `ci_to_alpha` logic if active).
+        edge_width_scale (float, optional): Multiplier for connection_strength
+            to determine edge linewidth. (e.g., strength * scale = linewidth).
+        arrow_head_scale (float, optional): Multiplier for connection_strength
+            to determine arrow head size (mutation_scale for FancyArrowPatch).
+        vmin (float, optional): Minimum value for colormap normalization.
+        vmax (float, optional): Maximum value for colormap normalization.
+        colorbar_fontsize (int, optional): Font size for colormap legend.
+        cax (mpl.Axis, optional): Matplotlib axis for colorbar, default to None
+
+
     Returns:
-        graphviz.Digraph: The Graphviz object representing the connectivity diagram.
+        tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]:
+            The figure and axes used for plotting.
     """
-    dot = graphviz.Digraph(
-        "connection_matrix",
-        comment="The cortical microcircuit",
-        engine="fdp",
-        graph_attr=dict(bgcolor="#ffffff"),
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(12, 10))  # Adjust default size as needed
+    else:
+        fig = ax.get_figure()
+    if display_names is None:
+        display_names = {n: n for n in connection_names}
+    else:
+        display_names = {n: d for n, d in zip(connection_names, display_names)}
+    # Initialize styles with defaults
+    default_node_style = {
+        "radius": 0.5,
+        "facecolor": "LightGray",
+        "edgecolor": "black",
+        "fontsize": 7,
+        "fontcolor": "black",
+    }
+    current_node_style = default_node_style.copy()
+    if node_style:
+        current_node_style.update(node_style)
+    default_arrow_style = dict(
+        connectionstyle="arc3,rad=0.0",  # Straight line
     )
-    for i_layer, (name, pos) in enumerate(zip(node_names, positions)):
-        dot.node(f"{i_layer+1}", name, pos=pos)
 
-    valid = mean_input_fraction > min_fraction_cutoff
-    max_alpha = np.nanmax(1 / (upper_df - lower_df)[valid])
+    current_arrow_style = default_arrow_style.copy()
+    if arrow_style:
+        current_arrow_style.update(arrow_style)
 
-    for istart, starter_layer in enumerate(matx_names):
-        for ipres, pres_layer in enumerate(matx_names):
-            connection_strength = mean_input_fraction.loc[pres_layer, starter_layer]
-            if connection_strength < 0.20:
+    node_radius = current_node_style["radius"]
+
+    # Plot nodes
+    for name, pos_xy in positions.items():
+        circle = plt.Circle(
+            pos_xy,
+            radius=node_radius,
+            facecolor=current_node_style["facecolor"],
+            edgecolor=current_node_style["edgecolor"],
+            zorder=2,
+        )
+        ax.add_patch(circle)
+        ax.text(
+            pos_xy[0],
+            pos_xy[1],
+            display_names[name],
+            ha="center",
+            va="center",
+            fontsize=current_node_style["fontsize"],
+            color=current_node_style["fontcolor"],
+            zorder=3,
+        )
+
+    # --- Edge plotting preparation ---
+    # Calculate confidence interval ranges
+    conf_ranges_df = upper_df - lower_df
+    valid_mask = mean_input_fraction > min_fraction_cutoff
+    # Flatten valid confidence ranges, remove NaNs, ensure non-negative
+    valid_conf_values = conf_ranges_df[valid_mask].values.flatten()
+
+    inv_conf = valid_conf_values
+    if vmax is None:
+        vmax = np.nanmax(inv_conf) if len(valid_conf_values) > 0 else 1.0
+    if vmin is None:
+        vmin = np.nanmin(inv_conf)
+    if vmax < 1e-9:
+        print("Very low max inverse CI")
+        vmax = 1.0
+    if ci_cmap is not None:
+        cmap_obj = plt.get_cmap(ci_cmap)
+    # Plot edges
+    for starter_name in connection_names:  # Target of the connection
+        for presyn_name in connection_names:  # Source of the connection
+            # Ensure names are valid matrix keys and have positions
+            if not (
+                starter_name in mean_input_fraction.columns
+                and presyn_name in mean_input_fraction.index
+                and presyn_name in positions
+                and starter_name in positions
+            ):
                 continue
-            conf_range = np.diff(
-                [
-                    lower_df.loc[pres_layer, starter_layer],
-                    upper_df.loc[pres_layer, starter_layer],
-                ]
-            )[0]
-            col = "#000000"
-            # Make strength into transparency
-            print(
-                f"{pres_layer} --> {starter_layer}: {1-conf_range:.2f} or {1/conf_range:.2f} "
-            )
-            scaled_alpha = np.clip((1 / conf_range) * 255 / max_alpha, 0, 255).astype(
-                int
-            )
-            hex_alpha = f"{scaled_alpha:02x}"
-            col += hex_alpha
-            dot.edge(
-                str(ipres + 1),
-                str(istart + 1),
-                penwidth=str(connection_strength * 40),
-                arrowsize=str(connection_strength),
-                color=col,
-                arrowhead="normal",
+            connection_strength = mean_input_fraction.loc[presyn_name, starter_name]
+            if connection_strength < min_fraction_cutoff:
+                continue
+
+            conf_range = conf_ranges_df.loc[presyn_name, starter_name]
+            assert ~np.isnan(conf_range)
+
+            # --- Determine edge color and alpha ---
+            edge_plot_color_rgb = (0.0, 0.0, 0.0)  # Default: black
+            edge_plot_alpha = 1.0  # Default: opaque
+
+            if ci_cmap is not None:
+                norm_cr = (conf_range - vmin) / (vmax - vmin)
+                rgba_from_cmap = cmap_obj(norm_cr)
+                edge_plot_color_rgb = rgba_from_cmap[:3]  # RGB part
+                edge_plot_alpha = rgba_from_cmap[3]  # Alpha from colormap
+
+            if ci_to_alpha:
+                current_alpha_val = (
+                    0.1  # Default for large/invalid conf_range (mostly transparent)
+                )
+                if conf_range > 1e-9 and vmax > 1e-9:
+                    # Alpha is (1/conf_range) normalized by max(1/conf_range)
+                    # Higher alpha for smaller confidence interval
+                    current_alpha_val = np.clip(
+                        (1.0 / conf_range) / vmax,
+                        0.05,  # Minimum alpha to ensure visibility
+                        1.0,
+                    )
+                elif conf_range <= 1e-9:  # Very small (good) confidence range -> opaque
+                    current_alpha_val = 1.0
+
+                if (
+                    ci_cmap is None
+                ):  # If no colormap, base color for this alpha is black
+                    edge_plot_color_rgb = (0.0, 0.0, 0.0)
+                # If ci_cmap was used, edge_plot_color_rgb is already set.
+                edge_plot_alpha = current_alpha_val  # Override alpha
+
+            # --- Get node positions and adjust arrow for node radius ---
+            source_pos = positions[presyn_name]
+            target_pos = positions[starter_name]
+
+            # Handle self-loops (edge from a node to itself)
+            if source_pos == target_pos:
+                source_pos = (
+                    source_pos[0] - 0.5 * node_radius,
+                    source_pos[1] - 1.2 * node_radius,
+                )
+                target_pos = (
+                    target_pos[0] - 1 * node_radius,
+                    target_pos[1] + 0.8 * node_radius,
+                )
+                arrow_style = current_arrow_style.copy()
+                arrow_style["connectionstyle"] = "Arc3, rad=-1.5"
+                rad2use = 0
+            else:
+                arrow_style = current_arrow_style.copy()
+                rad2use = node_radius
+
+            _draw_arrow_mpl(
+                ax,
+                source_pos,
+                target_pos,
+                rad2use,
+                connection_strength,
+                edge_plot_color_rgb,
+                edge_plot_alpha,
+                edge_width_scale,
+                arrow_head_scale,
+                arrow_style,
             )
 
-    return dot
+    # --- Final plot adjustments ---
+    all_x_coords, all_y_coords = np.vstack(list(positions.values())).T
+    if len(all_x_coords):
+        x_min, x_max = min(all_x_coords), max(all_x_coords)
+        y_min, y_max = min(all_y_coords), max(all_y_coords)
+        # Add padding based on extent of nodes and node radius
+        x_padding = (x_max - x_min) * 0.1 + node_radius
+        y_padding = (y_max - y_min) * 0.1 + node_radius
+        ax.set_xlim(x_min - x_padding, x_max + x_padding)
+        ax.set_ylim(y_min - y_padding, y_max + y_padding)
+
+    ax.set_aspect("equal", adjustable="box")  # Ensure aspect ratio is equal
+    ax.axis("off")  # Turn off axis lines and ticks for a cleaner diagram
+
+    # Add colorbar if ci_cmap was used and a valid range was determined
+    if ci_cmap is not None and cmap_obj is not None:
+        if not np.isclose(
+            vmin, vmax
+        ):  # Only add colorbar if there's a meaningful range
+            norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+            sm = plt.cm.ScalarMappable(cmap=cmap_obj, norm=norm)
+
+            cbar = fig.colorbar(
+                sm,
+                ax=ax,
+                cax=cax,
+                orientation="vertical",
+                fraction=0.1,
+                pad=0.05,
+                shrink=0.4,
+            )
+            cbar.set_label("CI width", fontsize=colorbar_fontsize)
+            cbar.ax.tick_params(labelsize=colorbar_fontsize)
+        # else: No colorbar if min and max for normalization are the same (no range to show)
+
+    return fig, ax, cbar
+
+
+def _draw_arrow_mpl(
+    ax: plt.Axes,
+    source_pos: tuple[float, float],
+    target_pos: tuple[float, float],
+    node_radius: float,
+    connection_strength: float,
+    edge_plot_color_rgb: tuple[float, float, float],
+    edge_plot_alpha: float,
+    edge_width_scale: float,
+    arrow_head_scale: float,
+    arrow_style_kwargs: dict,
+):
+    """
+    Helper function to draw a directed arrow between two nodes.
+
+    The arrow starts and ends at the perimeters of the node circles.
+    Its appearance (width, head size, color, alpha) is determined by input parameters.
+
+    Args:
+        ax: Matplotlib Axes object.
+        source_pos: (x, y) coordinates of the source node center.
+        target_pos: (x, y) coordinates of the target node center.
+        node_radius: Radius of the node circles.
+        connection_strength: Strength of the connection, used to scale width/head.
+        edge_plot_color_rgb: RGB tuple for arrow color.
+        edge_plot_alpha: Alpha (transparency) for the arrow.
+        edge_width_scale: Scaling factor for linewidth (strength * scale).
+        arrow_head_scale: Scaling factor for arrow head size (strength * scale).
+        arrow_style_kwargs: Dictionary of base styling for FancyArrowPatch.
+    """
+    dx, dy = target_pos[0] - source_pos[0], target_pos[1] - source_pos[1]
+    dist = np.sqrt(dx**2 + dy**2)
+
+    # Adjust start/end points to originate/terminate at the edge of node circles
+    eff_start_x = source_pos[0] + (dx / dist) * node_radius
+    eff_start_y = source_pos[1] + (dy / dist) * node_radius
+    eff_end_x = target_pos[0] - (dx / dist) * node_radius
+    eff_end_y = target_pos[1] - (dy / dist) * node_radius
+    props = dict(
+        alpha=edge_plot_alpha,
+        fc=edge_plot_color_rgb,
+        width=connection_strength * edge_width_scale,
+        headwidth=connection_strength * arrow_head_scale,
+        headlength=connection_strength * arrow_head_scale,
+    )
+    props.update(arrow_style_kwargs)
+    ax.annotate(
+        "",
+        xytext=(eff_start_x, eff_start_y),
+        xy=(eff_end_x, eff_end_y),
+        arrowprops=props,
+    )
