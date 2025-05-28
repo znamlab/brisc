@@ -267,30 +267,49 @@ def plot_dist_between_starters(
     ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
 
 
-def add_connection_distances(cells_df, cols=["ara_x", "ara_y", "ara_z"]):
+def add_connection_distances(cells_df, cols=["ara_x", "ara_y", "ara_z"], skipna=False):
+    """Calculates and adds Euclidean distances to connected starter cells.
+
+    For each cell in `cells_df`, this function identifies its connected
+    starter cells via the `cells_df['starters']` column (which should
+    contain a list or set of indices/IDs of starter cells). It then
+    computes the Euclidean distance from the cell to each of these
+    connected starter cells using the coordinate columns specified by `cols`.
+
+    A new column named 'distances' is added to `cells_df` in-place.
+    Each entry in this 'distances' column is a list of floats, where each
+    float is the distance to one of the connected starter cells. If a cell
+    has no connected starters (i.e., `cell['starters']` is empty), its
+    'distances' entry will be an empty list.
+
+    Args:
+        cells_df (pd.DataFrame): DataFrame containing cell data.
+            Must include:
+            - 'is_starter' (bool): True if the cell is a starter cell.
+            - 'starters' (list or set): A collection of indices/IDs of
+              starter cells connected to the cell in the current row.
+              These indices should correspond to the index of `cells_df`.
+            - Coordinate columns as specified by the `cols` argument.
+        cols (list[str], optional): A list of three column names representing
+            the x, y, and z coordinates for distance calculation.
+            Defaults to ["ara_x", "ara_y", "ara_z"].
+        skipna (bool, optional): How to handle NaN values in coordinates.
+            Defaults to False.
+    """
+
     def calculate_distances(cell, starters):
         distances = []
         for starter in cell["starters"]:
-            dist_sq = np.sum((cell[cols] - starters.loc[starter, cols]) ** 2)
+            dist_sq = ((cell[cols] - starters.loc[starter, cols]) ** 2).sum(
+                skipna=skipna
+            )
             distances.append(np.sqrt(dist_sq))
         return distances
-    
+
     starters_df = cells_df[cells_df["is_starter"] == True]
-    cells_df["distances"] = cells_df.apply(lambda cell: calculate_distances(cell, starters_df), axis=1)
-
-
-
-def add_connection_distances(cells_df, cols=["ara_x", "ara_y", "ara_z"]):
-    def calculate_distances(cell, starters):
-        distances = []
-        for starter in cell["starters"]:
-            dist_sq = np.sum((cell[cols] - starters.loc[starter, cols]) ** 2)
-            distances.append(np.sqrt(dist_sq))
-        return distances
-    
-    starters_df = cells_df[cells_df["is_starter"] == True]
-    cells_df["distances"] = cells_df.apply(lambda cell: calculate_distances(cell, starters_df), axis=1)
-
+    cells_df["distances"] = cells_df.apply(
+        lambda cell: calculate_distances(cell, starters_df), axis=1
+    )
 
 
 def determine_presynaptic_distances(
