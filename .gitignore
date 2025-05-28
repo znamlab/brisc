@@ -10,3 +10,4 @@ legacy
 build
 .vscode
 *.pkl
+temp_*
