@@ -1,4 +1,5 @@
 pkgs/*
+.conda/*
 *.egg-info
 .idea
 .DS_Store
