@@ -223,6 +223,9 @@ def compute_flatmap_coors(
     Returns:
         flat_coors: coordinates on ARA flatmap
     """
+    if thickness_type not in ["unnormalized", "normalized_full", "normalized_layers"]:
+        raise ValueError(f"Unknown thickness_type: {thickness_type}")
+
     # make sure we do not change anything in place
     df = df.copy()
     columns = [f"{col_prefix}{i}{col_suffix}" for i in ["x", "y", "z"]]
