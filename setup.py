@@ -19,5 +19,6 @@ setup(
         "flexiznam @ git+ssh://git@github.com/znamlab/flexiznam.git",
         "scanpy",
         "tables",
+        "shapely",
     ],
 )
