@@ -1192,7 +1192,7 @@ def connectivity_diagram_mpl(
     # --- Edge plotting preparation ---
     # Calculate confidence interval ranges
     conf_ranges_df = upper_df - lower_df
-    valid_mask = mean_input_fraction > min_fraction_cutoff
+    valid_mask = mean_input_fraction >= min_fraction_cutoff
     # Flatten valid confidence ranges, remove NaNs, ensure non-negative
     valid_conf_values = conf_ranges_df[valid_mask].values.flatten()
 
