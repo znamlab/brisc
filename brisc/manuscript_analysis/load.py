@@ -183,6 +183,25 @@ for area in non_cortical_areas:
     BRAIN_LAYER_MAPPING[area] = "non_cortical"
 
 
+def assign_areas_layers(cells_df):
+    """
+    Assigns cortical areas and layers to cells based on area acronyms.
+    Args:
+        cells_df (pd.DataFrame): DataFrame of cells with 'area_acronym' column
+
+    Returns:
+        cells_df (pd.DataFrame): DataFrame of cells with 'cortical_area' and 'cortical_layer' columns
+    """
+    cells_df["cortical_area"] = (
+        cells_df["area_acronym"].map(BRAIN_AREA_MAPPING).astype("category")
+    )
+    cells_df["cortical_layer"] = (
+        cells_df["area_acronym"].map(BRAIN_LAYER_MAPPING).astype("category")
+    )
+
+    return cells_df
+
+
 def find_singleton_bcs(cells_df):
     """
     Find singleton barcodes that appear exactly once across all starter cells
@@ -363,11 +382,6 @@ def load_cell_barcode_data(
         get_ancestor_rank1
     )
 
-    cells_df["cortical_area"] = (
-        cells_df["area_acronym"].map(BRAIN_AREA_MAPPING).astype("category")
-    )
-    cells_df["cortical_layer"] = (
-        cells_df["area_acronym"].map(BRAIN_LAYER_MAPPING).astype("category")
-    )
+    cells_df = assign_areas_layers(cells_df)
 
     return cells_df
