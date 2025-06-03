@@ -4,13 +4,13 @@ import scanpy as sc
 import iss_preprocess as iss
 import flexiznam as flz
 from iss_preprocess.io import get_processed_path, get_roi_dimensions
-from iss_preprocess.segment import get_cell_masks
-from iss_analysis.pipeline import make_cell_dataframe, spots_ara_infos, segment_spots
+from iss_preprocess.pipeline.segment import get_cell_masks
+from iss_preprocess.pipeline import make_cell_dataframe, spots_ara_infos, segment_spots
 from iss_analysis.segment import get_barcode_in_cells, match_starter_to_barcodes
-from manuscript_analysis.load import get_ancestor_rank1, assign_areas_layers
 from pathlib import Path
 import multiprocessing as mp
 from tqdm import tqdm
+from .load import get_ancestor_rank1, assign_areas_layers
 
 
 def assign_cell_barcodes(
