@@ -112,7 +112,7 @@ def assign_cell_barcodes(
             - Potentially flatmap coordinates (if the relevant code section is enabled).
             The DataFrame is indexed by `mask_uid`.
     """
-    processed_path = get_processed_path(Path(project / mouse / "analysis"))
+    processed_path = get_processed_path(Path(project) / mouse / "analysis")
     # Barcode assignment takes about 30 mins with ara redo, shorter without
     target = processed_path / f"{error_correction_ds_name}_rabies_spots.csv"
     if redo_barcode_assignment or not target.exists():
