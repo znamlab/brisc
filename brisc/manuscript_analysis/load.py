@@ -301,6 +301,7 @@ def load_cell_barcode_data(
             redo_gene_assignment=False,
         )
         cells_df.to_pickle(df_path)
+        print("Saved {df_path}")
     else:
         print(f"Loading {df_path}")
     # Load dataframe

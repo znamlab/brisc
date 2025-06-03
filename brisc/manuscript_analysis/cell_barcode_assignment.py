@@ -129,17 +129,15 @@ def assign_cell_barcodes(
         )
         print("Saving rab spot and rab cell dataframes")
         rab_spot_df.to_pickle(target)
-        rab_cells_properties.to_csv(
-            processed_path / f"{error_correction_ds_name}_rabies_cells_properties.csv",
-            index=True,
+        rab_cells_properties.to_pickle(
+            processed_path / f"{error_correction_ds_name}_rabies_cells_properties.pkl",
         )
 
     else:
         print("Loading existing barcode assignments...")
         rab_spot_df = pd.read_pickle(target)
-        rab_cells_properties = pd.read_csv(
-            processed_path / f"{error_correction_ds_name}_rabies_cells_properties.csv",
-            index_col="mask_uid",
+        rab_cells_properties = pd.read_pickle(
+            processed_path / f"{error_correction_ds_name}_rabies_cells_properties.pkl",
         )
 
     # mcherry assignment
@@ -162,7 +160,7 @@ def assign_cell_barcodes(
         mcherry_prefix="mCherry_1",  # acquisition prefix for mCherry images
     )
 
-    if rabies_cell_properties.x.isna().sum() == 0:
+    if rabies_cell_properties.x.isna().sum() != 0:
         print("Error got an old rabies_cell_properties")
 
     # Perform gene assignments
