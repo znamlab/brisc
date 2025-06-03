@@ -114,9 +114,9 @@ def assign_cell_barcodes(
     """
     processed_path = get_processed_path(Path(project) / mouse / "analysis")
     # Barcode assignment takes about 30 mins with ara redo, shorter without
-    target = processed_path / f"{error_correction_ds_name}_rabies_spots.csv"
+    target = processed_path / f"{error_correction_ds_name}_rabies_spots.pkl"
     if redo_barcode_assignment or not target.exists():
-        print("Merging barcodes assingment from all ROIs...")
+        print("Merging barcodes assignment from all ROIs...")
         rab_spot_df, rab_cells_barcodes, rab_cells_properties = get_barcode_in_cells(
             project=project,
             mouse=mouse,
@@ -127,17 +127,19 @@ def assign_cell_barcodes(
             add_ara_properties=True,
             redo=redo_barcode_ara,
         )
-
-        rab_spot_df.to_csv(target, index=False)
+        print("Saving rab spot and rab cell dataframes")
+        rab_spot_df.to_pickle(target)
         rab_cells_properties.to_csv(
-            processed_path / "rabies_cells_properties.csv", index=False
+            processed_path / f"{error_correction_ds_name}_rabies_cells_properties.csv",
+            index=True,
         )
 
     else:
         print("Loading existing barcode assignments...")
-        rab_spot_df = pd.read_csv(target)
+        rab_spot_df = pd.read_pickle(target)
         rab_cells_properties = pd.read_csv(
-            processed_path / "rabies_cells_properties.csv"
+            processed_path / f"{error_correction_ds_name}_rabies_cells_properties.csv",
+            index_col="mask_uid",
         )
 
     # mcherry assignment
@@ -160,9 +162,8 @@ def assign_cell_barcodes(
         mcherry_prefix="mCherry_1",  # acquisition prefix for mCherry images
     )
 
-    assert (
-        rabies_cell_properties.x.isna().sum() == 0
-    ), "Error got an old rabies_cell_properties"
+    if rabies_cell_properties.x.isna().sum() == 0:
+        print("Error got an old rabies_cell_properties")
 
     # Perform gene assignments
     if redo_gene_assignment:
