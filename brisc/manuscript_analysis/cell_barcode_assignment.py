@@ -127,8 +127,9 @@ def assign_cell_barcodes(
 ):
     processed_path = get_processed_path(Path(project / mouse / "analysis"))
     # Barcode assignment takes about 30 mins with ara redo, shorter without
-    if redo_barcode_assignment:
-        print("Assigning barcodes to cells...")
+    target = processed_path / f"{error_correction_ds_name}_rabies_spots.csv"
+    if redo_barcode_assignment or not target.exists():
+        print("Merging barcodes assingment from all ROIs...")
         rab_spot_df, rab_cells_barcodes, rab_cells_properties = get_barcode_in_cells(
             project=project,
             mouse=mouse,
@@ -139,19 +140,18 @@ def assign_cell_barcodes(
             add_ara_properties=True,
             redo=redo_barcode_ara,
         )
+
+        rab_spot_df.to_csv(target, index=False)
+        rab_cells_properties.to_csv(
+            processed_path / "rabies_cells_properties.csv", index=False
+        )
+
     else:
         print("Loading existing barcode assignments...")
-        rab_spot_df = pd.read_csv(processed_path / "rabies_spots.csv")
+        rab_spot_df = pd.read_csv(target)
         rab_cells_properties = pd.read_csv(
             processed_path / "rabies_cells_properties.csv"
         )
-    # Load flexilims session and error correction dataset
-    project = project
-    flm_sess = flz.get_flexilims_session(project_id=project)
-    error_dataset = flz.Dataset.from_flexilims(
-        flexilims_session=flm_sess, name=error_correction_ds_name
-    )
-    error_dataset.extra_attributes
 
     # mcherry assignment
     (
@@ -159,8 +159,8 @@ def assign_cell_barcodes(
         rab_spot_df,
         rabies_cell_properties,
     ) = match_starter_to_barcodes(
-        project="becalia_rabies_barseq",
-        mouse="BRAC8498.3e",
+        project=project,
+        mouse=mouse,
         rabies_cell_properties=rab_cells_properties,
         rab_spot_df=rab_spot_df,
         mcherry_cells=None,  # USING CURATED MCHERRY CELLS BY DEFAULT AND USING MASK METHOD NOT SPOT
@@ -173,7 +173,9 @@ def assign_cell_barcodes(
         mcherry_prefix="mCherry_1",  # acquisition prefix for mCherry images
     )
 
-    rabies_cell_properties.dropna(subset=["x"], inplace=True)
+    assert (
+        rabies_cell_properties.x.isna().sum() == 0
+    ), "Error got an old rabies_cell_properties"
 
     # Perform gene assignments
     if redo_gene_assignment:
@@ -187,6 +189,7 @@ def assign_cell_barcodes(
         fused_df = pd.read_pickle(processed_path / "new_fused_df.pkl")
         cell_df = pd.read_pickle(processed_path / "new_cell_df.pkl")
 
+    # Fusing cell mask with gene assignment dataframes
     cell_index = cell_df.mask_uid
     fused_index = fused_df.mask_uid
     filtered_fused_df = fused_df[fused_df.mask_uid.isin(cell_index)]
@@ -236,21 +239,23 @@ def assign_cell_barcodes(
     adata = sc.read_h5ad(processed_path / "adata_annotated.h5ad")
     cell_barcode_df["Annotated_clusters"] = adata.obs.Annotated_clusters
 
-    # Add flatmap coordinates
-    coords_flatmap = pd.read_pickle(processed_path / "rab_cell_properties.pkl")
-    cell_barcode_df = cell_barcode_df.merge(
-        coords_flatmap[
-            [
-                "unnormalised_depth",
-                "normalised_depth",
-                "normalised_layers",
-                "flatmap_dorsal_x",
-                "flatmap_dorsal_y",
-            ]
-        ],
-        left_index=True,
-        right_index=True,
-        how="left",
-    )
+    if False:
+        # TODO: we might want to save flatmap coordinates
+        # Add flatmap coordinates
+        coords_flatmap = pd.read_pickle(processed_path / "rab_cell_properties.pkl")
+        cell_barcode_df = cell_barcode_df.merge(
+            coords_flatmap[
+                [
+                    "unnormalised_depth",
+                    "normalised_depth",
+                    "normalised_layers",
+                    "flatmap_dorsal_x",
+                    "flatmap_dorsal_y",
+                ]
+            ],
+            left_index=True,
+            right_index=True,
+            how="left",
+        )
 
     return cell_barcode_df
