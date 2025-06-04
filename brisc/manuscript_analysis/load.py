@@ -268,7 +268,7 @@ def load_cell_barcode_data(
     areas_to_empty=["fiber tracts", "outside"],
     valid_areas=["Isocortex", "TH"],
     distance_threshold=150,
-    error_corrected_ds_name="BRAC8498.3e_error_corrected_barcodes_26",
+    error_correction_ds_name="BRAC8498.3e_error_corrected_barcodes_26",
 ):
     """
     Load the cell barcode data and assign areas and layers to each cell,
@@ -278,7 +278,7 @@ def load_cell_barcode_data(
         processed_path (Path): Path to the processed data directory
         valid_areas (list): List of valid areas to move cells to
         distance_threshold (int): Maximum distance to move cells out of fiber tracts
-        error_corrected_ds_name (str): Name of the error corrected dataset
+        error_correction_ds_name (str): Name of the error corrected dataset
 
     Returns:
         cells_df (pd.DataFrame): DataFrame of barcoded cell data with areas and layers assigned
@@ -287,7 +287,7 @@ def load_cell_barcode_data(
     if not processed_path.is_dir():
         print("WARNING load_cell_barcode_data expects the path to analysis folder")
         processed_path = processed_path.parent
-    df_path = processed_path / f"{error_corrected_ds_name}_cell_barcode_df.pkl"
+    df_path = processed_path / f"{error_correction_ds_name}_cell_barcode_df.pkl"
 
     if not df_path.exists():
         print(f"{df_path} does not exist, trying to recompute")
@@ -295,7 +295,7 @@ def load_cell_barcode_data(
 
         # note that this uses default project and mouse
         cells_df = assign_cell_barcodes(
-            error_correction_ds_name=error_corrected_ds_name,
+            error_correction_ds_name=error_correction_ds_name,
             redo_barcode_assignment=False,
             redo_barcode_ara=False,
             redo_gene_assignment=False,
