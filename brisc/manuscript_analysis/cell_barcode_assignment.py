@@ -4,8 +4,12 @@ import scanpy as sc
 import iss_preprocess as iss
 import flexiznam as flz
 from iss_preprocess.io import get_processed_path, get_roi_dimensions
-from iss_preprocess.pipeline.segment import get_cell_masks
-from iss_preprocess.pipeline import make_cell_dataframe, spots_ara_infos, segment_spots
+from iss_preprocess.pipeline.segment import (
+    get_cell_masks,
+    make_cell_dataframe,
+    spots_ara_infos,
+    segment_spots,
+)
 from iss_analysis.segment import get_barcode_in_cells, match_starter_to_barcodes
 from pathlib import Path
 import multiprocessing as mp
@@ -212,7 +216,7 @@ def assign_cell_barcodes(
         ],
         left_index=True,
         right_index=True,
-        how="left",  # Keep all rows from the first DataFrame
+        how="outer",  # Keep rows that are in either dataframe
     )
 
     # Assign areas and layers to each cell
