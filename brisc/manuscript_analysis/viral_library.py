@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.ticker as mticker
 from brisc.manuscript_analysis.utils import despine
+from scipy.optimize import minimize_scalar
 
 
 def plasmid_sequencing_data(seq_path):
@@ -182,7 +183,7 @@ def plot_barcode_counts_and_percentage(
         loc="upper right",
         frameon=False,
         handlelength=1,
-        bbox_to_anchor=(1.2, 1.0),
+        bbox_to_anchor=(1.2, 1.05),
         borderpad=0.0,
     )
     despine(ax)
@@ -241,6 +242,20 @@ def plot_unique_label_fraction(
         fractions = [
             fraction_unique(barcode_probability, num) for num in evaluation_points
         ]
+        # We want to print the number of cells that can be picked to have 95% unique
+        # barcodes
+        closest_id = len(fractions) - np.searchsorted(fractions[::-1], 0.95) - 1
+
+        def cost(x):
+            return ((fraction_unique(barcode_probability, x) - 0.95)) ** 2
+
+        max_95cells = evaluation_points[closest_id]
+        res = minimize_scalar(cost)
+        max_95cells = int(np.round(res.x))
+        print(
+            f"For {library_label}, 95% unique at {max_95cells:.0f} cells ({fraction_unique(barcode_probability,max_95cells)*100:.2f}%)"
+        )
+
         if not log_scale:
             ax.plot(
                 evaluation_points,
