@@ -5,12 +5,14 @@ import pandas as pd
 import flexiznam as flz
 import seaborn as sns
 
+
 def load_mcherry_data(
     project="becalia_rabies_barseq",
     mouse="BRAC8498.3e",
+    error_correction_ds_name="BRAC8498.3e_error_corrected_barcodes_10",
 ):
     df_file = flz.get_processed_path(
-        "becalia_rabies_barseq/BRAC8498.3e/analysis/cell_barcode_df.pkl"
+        f"becalia_rabies_barseq/BRAC8498.3e/analysis/{error_correction_ds_name}_cell_barcode_df.pkl"
     )
 
     full_df = pd.read_pickle(df_file)
@@ -64,15 +66,20 @@ def plot_mcherry_intensity_presyn(
 ):
     # ax.set(xscale="log", yscale="log")
     sns.regplot(
-        x=np.log(valid["intensity_mean-0"]), 
+        x=np.log(valid["intensity_mean-0"]),
         y=np.log(valid["n_presynaptic"]),
-        scatter_kws={"s": marker_size, "color": "darkslategray", "edgecolor": "black", "alpha": 0.5},
+        scatter_kws={
+            "s": marker_size,
+            "color": "darkslategray",
+            "edgecolor": "black",
+            "alpha": 0.5,
+        },
         line_kws={"color": "darkslategray"},
         robust=True,
     )
-    
+
     # ax.scatter(
-        
+
     #     valid["n_presynaptic"],
     #     alpha=0.5,
     #     s=spot_size,
@@ -87,7 +94,7 @@ def plot_mcherry_intensity_presyn(
     )
     ax.set_yticks(np.log([1, 10, 100]), labels=[1, 10, 100])
     ax.set_xticks(np.log([100, 1000]), labels=[100, 1000])
-   
+
     ax.tick_params(
         axis="both",
         which="major",

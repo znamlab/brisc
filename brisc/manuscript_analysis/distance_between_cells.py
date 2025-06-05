@@ -10,6 +10,7 @@ import iss_preprocess as iss
 
 def pairwise_barcode_distances_with_nearest_diff(
     data_path="becalia_rabies_barseq/BRAC8498.3e/chamber_07/",
+    error_correction_ds_name="BRAC8498.3e_error_corrected_barcodes_10",
 ):
     """
     Compute pairwise distances among starter cells that share at least one barcode,
@@ -40,7 +41,9 @@ def pairwise_barcode_distances_with_nearest_diff(
     }
     processed_path = iss.io.load.get_processed_path(data_path)
     rabies_cell_properties = pd.read_pickle(
-        processed_path.parent / "analysis" / "cell_barcode_df.pkl"
+        processed_path.parent
+        / "analysis"
+        / f"{error_correction_ds_name}_cell_barcode_df.pkl"
     )
     rabies_cell_properties = rabies_cell_properties[
         rabies_cell_properties["all_barcodes"].notnull()
