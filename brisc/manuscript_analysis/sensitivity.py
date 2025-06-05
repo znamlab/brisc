@@ -1,4 +1,8 @@
 import iss_preprocess as issp
+import iss_preprocess.pipeline.segment
+import iss_preprocess.pipeline.register
+import iss_preprocess.io
+import warnings
 import numpy as np
 import pandas as pd
 from skimage.segmentation import expand_labels
@@ -52,14 +56,17 @@ def load_data(
     rabies_stack = None
     labeled_images = None
     for roi in tqdm(roi_dims[:, 0], total=len(roi_dims)):
-        stack, _ = issp.pipeline.load_and_register_tile(
-            data_path,
-            prefix=prefix,
-            tile_coors=(roi, 0, 0),
-            projection="max-median",
-            correct_illumination=False,
-            filter_r=False,
-        )
+        # We changed where registration info is saved. Remove the warning for old data
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            stack, _ = issp.pipeline.register.load_and_register_tile(
+                data_path,
+                prefix=prefix,
+                tile_coors=(roi, 0, 0),
+                projection="max-median",
+                correct_illumination=False,
+                filter_r=False,
+            )
         stack = stack[..., 0]
         labeled_image, props_df = detect_rab_cells(
             stack,
