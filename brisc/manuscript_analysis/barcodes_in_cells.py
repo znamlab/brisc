@@ -13,7 +13,21 @@ def plot_hist(
     max_val=None,
     show_zero=False,
     show_counts=True,
+    linewidth=0.5,
 ):
+    """Plots a histogram of the number of unique barcodes.
+
+    Args:
+        data_df (pd.DataFrame): DataFrame containing the data.
+        ax (matplotlib.axes.Axes): Axes object to plot on.
+        col (str, optional): Column to plot. Defaults to "n_unique_barcodes".
+        tick_fontsize (int, optional): Fontsize for the tick labels. Defaults to 12.
+        y_offset (float, optional): Offset for the text annotations. Defaults to 0.05.
+        max_val (int, optional): Maximum value for the x-axis. Defaults to None.
+        show_zero (bool, optional): Whether to show zero values. Defaults to False.
+        show_counts (bool, optional): Whether to show counts on the bars. Defaults to True.
+        linewidth (float, optional): Linewidth for the bars. Defaults to 0.5.
+    """
     if max_val is None:
         max_val = data_df[col].max() + 1
     if show_zero:
@@ -30,7 +44,7 @@ def plot_hist(
         fill=True,
         edgecolor="black",
         facecolor="slategray",
-        linewidth=0.5,
+        linewidth=linewidth,
     )
     if show_counts:
         for i, (count, prop) in enumerate(zip(counts, props)):
@@ -65,7 +79,22 @@ def plot_presyn_per_barcode(
     tick_fontsize=12,
     max_val=50,
     colors=("darkorange", "dodgerblue"),
+    linewidth=0.5,
 ):
+    """Plots histograms of presynaptic cells per barcode, distinguishing
+    between orphan and non-orphan barcodes.
+
+    Args:
+        barcodes_df (pd.DataFrame): DataFrame containing barcode data.
+            Must include 'n_starters' and 'n_presynaptic' columns.
+        ax (plt.Axes, optional): Matplotlib axes object to plot on.
+            Defaults to None.
+        label_fontsize (int, optional): Font size for axis labels. Defaults to 12.
+        tick_fontsize (int, optional): Font size for tick labels. Defaults to 12.
+        max_val (int, optional): Maximum value for the x-axis. Defaults to 50.
+        colors (tuple, optional): Colors for the two histograms
+            (orphan and non-orphan barcodes). Defaults to ("darkorange", "dodgerblue").
+    """
     cells_with_starter = barcodes_df[barcodes_df["n_starters"] > 0][
         "n_presynaptic"
     ].values
@@ -85,7 +114,7 @@ def plot_presyn_per_barcode(
             props,
             bin_edges,
             fill=False,
-            linewidth=0.5,
+            linewidth=linewidth,
             color=color,
         )
 
@@ -93,7 +122,7 @@ def plot_presyn_per_barcode(
     ax.set_xticks(np.arange(0, max_val + 10, 10))
 
     ax.set_xlabel(
-        "mCherry- cells per barcode",
+        "Presynaptic cells per barcode",
         fontsize=label_fontsize,
     )
     ax.set_ylabel(
@@ -145,22 +174,30 @@ def analyze_multibarcoded_starters(
     for i, row in double_barcoded_starters.iterrows():
         starter_id = row["cell_id"]
         barcodes = row["unique_barcodes"]
-        n_presyn_per_barcode = [ presyn_cells["unique_barcodes"].apply(
-                lambda x: len(x.intersection(barcodes)) == 1 and barcode in x
-            ).sum() for barcode in barcodes]
-        n_presyn = presyn_cells["unique_barcodes"].apply(
-            lambda x: len(x.intersection(barcodes)) > 0
-        ).sum()
-        barcode_counts = presyn_cells["unique_barcodes"].apply(
-            lambda x: len(x.intersection(barcodes))
-        ).value_counts().values
+        n_presyn_per_barcode = [
+            presyn_cells["unique_barcodes"]
+            .apply(lambda x: len(x.intersection(barcodes)) == 1 and barcode in x)
+            .sum()
+            for barcode in barcodes
+        ]
+        n_presyn = (
+            presyn_cells["unique_barcodes"]
+            .apply(lambda x: len(x.intersection(barcodes)) > 0)
+            .sum()
+        )
+        barcode_counts = (
+            presyn_cells["unique_barcodes"]
+            .apply(lambda x: len(x.intersection(barcodes)))
+            .value_counts()
+            .values
+        )
         results.append(
             {
                 "starter_cell_id": starter_id,
                 "barcodes": barcodes,
                 "n_presyn_per_barcode": n_presyn_per_barcode,
                 "barcode_counts": barcode_counts,
-                "n_presyn": n_presyn
+                "n_presyn": n_presyn,
             }
         )
     result_df = pd.DataFrame(results)
@@ -174,7 +211,7 @@ def plot_multibarcoded_starters(
     label_fontsize=12,
     tick_fontsize=12,
     barcode_proportion=True,
-    legend_fontsize=8
+    legend_fontsize=8,
 ):
     """
     Plot a barstack and violin plot of the number of presynaptic cells with each barcode
@@ -192,27 +229,53 @@ def plot_multibarcoded_starters(
     """
     max_bc = multibarcoded_starters["n_presyn_per_barcode"].apply(len).max().astype(int)
     multibarcoded_starters["n_barcodes"] = multibarcoded_starters["barcodes"].apply(len)
-    multibarcoded_starters["n_presyn_per_barcode"] = multibarcoded_starters["n_presyn_per_barcode"].apply(
-        lambda x: sorted(x, reverse=True)
-    )
+    multibarcoded_starters["n_presyn_per_barcode"] = multibarcoded_starters[
+        "n_presyn_per_barcode"
+    ].apply(lambda x: sorted(x, reverse=True))
     multibarcoded_starters["top_barcode_prop"] = multibarcoded_starters.apply(
         lambda x: x["n_presyn_per_barcode"][0] / x["n_presyn"],
         axis=1,
     )
     if barcode_proportion:
-        multibarcoded_starters = multibarcoded_starters.sort_values(["top_barcode_prop",], ascending=False)
+        multibarcoded_starters = multibarcoded_starters.sort_values(
+            [
+                "top_barcode_prop",
+            ],
+            ascending=False,
+        )
     else:
-        multibarcoded_starters = multibarcoded_starters.sort_values(["n_presyn",], ascending=False)
+        multibarcoded_starters = multibarcoded_starters.sort_values(
+            [
+                "n_presyn",
+            ],
+            ascending=False,
+        )
     # pad barcode_counts to max_bc+1
     barcode_counts = np.stack(
-        multibarcoded_starters["barcode_counts"].apply(
-            lambda x: np.append(x, [0,] * (max_bc - len(x) + 1))
-        ).values
+        multibarcoded_starters["barcode_counts"]
+        .apply(
+            lambda x: np.append(
+                x,
+                [
+                    0,
+                ]
+                * (max_bc - len(x) + 1),
+            )
+        )
+        .values
     )
     n_presyn_per_barcode = np.stack(
-        multibarcoded_starters["n_presyn_per_barcode"].apply(
-            lambda x: np.append(x, [0,] * (max_bc - len(x)))
-        ).values
+        multibarcoded_starters["n_presyn_per_barcode"]
+        .apply(
+            lambda x: np.append(
+                x,
+                [
+                    0,
+                ]
+                * (max_bc - len(x)),
+            )
+        )
+        .values
     )
 
     bar_data = np.hstack([n_presyn_per_barcode, barcode_counts[:, 2:]])
@@ -246,7 +309,7 @@ def plot_multibarcoded_starters(
             label=label,
             width=1,
         )
-        bottom += bar_data[:, i]        
+        bottom += bar_data[:, i]
     if barcode_proportion:
         ax.set_ylabel("Proportion of presynaptic cells", fontsize=label_fontsize)
     else:
@@ -269,4 +332,3 @@ def plot_multibarcoded_starters(
     )
     ax.set_xticks([1, bar_data.shape[0]])
     despine(ax)
-
