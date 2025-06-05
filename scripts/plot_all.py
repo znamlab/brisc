@@ -9,7 +9,10 @@ from brisc.exploratory_analysis.plot_summary_for_all_bc import (
     plot_barcode,
 )
 
-df_file = flz.get_processed_path(f"{project}/{mouse}/analysis/cell_barcode_df.pkl")
+error_correction_ds_name = "BRAC8498.3e_error_corrected_barcodes_10"
+df_file = flz.get_processed_path(
+    f"{project}/{mouse}/analysis/{error_correction_ds_name}_cell_barcode_df.pkl"
+)
 
 full_df = pd.read_pickle(df_file)
 print(f"Loaded {len(full_df)} cells")
