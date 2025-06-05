@@ -176,31 +176,17 @@ def assign_cell_barcodes(
         )
     else:
         print("Loading existing gene assignments...")
-        fused_df = pd.read_pickle(processed_path / "new_fused_df.pkl")
         cell_df = pd.read_pickle(processed_path / "new_cell_df.pkl")
 
     # Fusing cell mask with gene assignment dataframes
-    cell_index = cell_df.mask_uid
-    fused_index = fused_df.mask_uid
-    filtered_fused_df = fused_df[fused_df.mask_uid.isin(cell_index)]
-    filtered_cell_df = cell_df[cell_df.mask_uid.isin(fused_index)]
-    filtered_fused_df.index = filtered_fused_df.mask_uid
-    filtered_cell_df.index = filtered_cell_df.mask_uid
-    filtered_fused_df = filtered_fused_df.drop(columns=["mask_uid"])
-    filtered_cell_df = filtered_cell_df.drop(columns=["mask_uid"])
-    filtered_fused_df = filtered_fused_df.drop(
-        columns=[
-            "unassigned1",
-            "unassigned2",
-            "unassigned3",
-            "unassigned4",
-            "unassigned5",
-            "chamber",
-            "roi",
-        ]
-    )
+    cell_index = set(cell_df.mask_uid)
+    missing = set(rabies_cell_properties.index) - cell_index
+    if len(missing):
+        print(f"Warning: {len(missing)} rabies cells are not in cell df: {missing}")
+    cell_df.index = cell_df.mask_uid
+    cell_df = cell_df.drop(columns=["mask_uid"])
 
-    cell_barcode_df = filtered_cell_df.merge(
+    cell_barcode_df = cell_df.merge(
         rabies_cell_properties[
             [
                 "cell_id",
@@ -216,8 +202,17 @@ def assign_cell_barcodes(
         ],
         left_index=True,
         right_index=True,
-        how="outer",  # Keep rows that are in either dataframe
+        how="left",  # Keep rows that are in either dataframe
     )
+    if len(missing):
+        print("keep rabies info for cells not in cell_df")
+        common_col = [
+            col for col in cell_df.columns if col in rabies_cell_properties.columns
+        ]
+        for cell in missing:
+            cell_barcode_df.loc[cell, common_col] = rabies_cell_properties.loc[
+                cell, common_col
+            ]
 
     # Assign areas and layers to each cell
     cell_barcode_df["area_acronym_ancestor_rank1"] = cell_barcode_df[
