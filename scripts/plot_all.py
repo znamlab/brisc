@@ -9,7 +9,7 @@ from brisc.exploratory_analysis.plot_summary_for_all_bc import (
     plot_barcode,
 )
 
-error_correction_ds_name = "BRAC8498.3e_error_corrected_barcodes_10"
+error_correction_ds_name = "BRAC8498.3e_error_corrected_barcodes_26"
 df_file = flz.get_processed_path(
     f"{project}/{mouse}/analysis/{error_correction_ds_name}_cell_barcode_df.pkl"
 )

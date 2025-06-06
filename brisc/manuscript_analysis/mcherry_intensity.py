@@ -89,7 +89,7 @@ def plot_mcherry_intensity_presyn(
         fontsize=label_fontsize,
     )
     ax.set_ylabel(
-        "Number of labelled cellss",
+        "Number of presynaptic cells + 1",
         fontsize=label_fontsize,
     )
     ax.set_yticks(np.log([1, 10, 100]), labels=[1, 10, 100])
