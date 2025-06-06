@@ -253,6 +253,13 @@ def compute_flatmap_coors(
         thickness_type=thickness_type,
     )
     if distance_cutoff is None or distance_cutoff <= 0:
+        if thickness_type == "normalized_layers":
+            # Until https://github.com/AllenInstitute/ccf_streamlines/issues/10 is fixed
+            # we need to renormalise
+            layer_tops = get_avg_layer_depth()
+            norm_factor = layer_tops["wm"] / 2000.00
+            flat_coors[:, 2] *= norm_factor
+
         return flat_coors
 
     # Not in streamlines, the point is below the bottom of the cortex
@@ -311,6 +318,12 @@ def compute_flatmap_coors(
     )
     flat_coors[to_move, :] = reprojected
 
+    if thickness_type == "normalized_layers":
+        # Until https://github.com/AllenInstitute/ccf_streamlines/issues/10 is fixed
+        # we need to renormalise by the longest path, which 200 voxels
+        layer_tops = get_avg_layer_depth()
+        norm_factor = layer_tops["wm"] / 2000.0
+        flat_coors[:, 2] *= norm_factor
     return flat_coors
 
 

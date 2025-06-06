@@ -6,6 +6,7 @@ import brainglobe_atlasapi as bga
 import pandas as pd
 import seaborn as sns
 from cricksaw_analysis import atlas_utils
+from ..exploratory_analysis.plot_summary_for_all_bc import get_avg_layer_depth
 
 
 def prepare_area_labels(
@@ -360,26 +361,16 @@ def plot_layer_distribution(
     tick_fontsize=8,
     show_cells=True,
 ):
-    layer_tops = {
-        "1": 0.0,
-        "2/3": 116.8406715462,
-        "4": 349.9050202564,
-        "5": 477.8605504893,
-        "6a": 717.1835081307,
-        "6b": 909.8772394508,
-        "wm": 957.0592130899,
-    }
+    layer_tops = get_avg_layer_depth()
+    layer_tops["1"] = 0.0
 
-    current_max = 2000.0
-    target_max = layer_tops["wm"]
-    norm_factor = target_max / current_max
     y_min, y_max = 1000, 0
     cells_df = cells_df[cells_df["cortical_area"] == "VISp"]
-
+    scale = 10  # micron per px
     if show_cells:
         ax_interest.scatter(
-            cells_df["flatmap_dorsal_x"],
-            cells_df["normalised_layers"] * norm_factor,
+            cells_df["flatmap_x"] * scale,
+            cells_df["normalised_layers"] * scale,
             s=2,
             edgecolors="none",
             c="gray",
@@ -387,8 +378,8 @@ def plot_layer_distribution(
             label="Presynaptic cells",
         )
         ax_interest.scatter(
-            cells_df[cells_df["is_starter"]]["flatmap_dorsal_x"],
-            cells_df[cells_df["is_starter"]]["normalised_layers"] * norm_factor,
+            cells_df[cells_df["is_starter"]]["flatmap_x"] * scale,
+            cells_df[cells_df["is_starter"]]["normalised_layers"] * scale,
             s=3,
             edgecolors="none",
             c="black",
@@ -406,7 +397,7 @@ def plot_layer_distribution(
         ax_interest.tick_params(axis="both", labelsize=tick_fontsize)
 
     sns.violinplot(
-        y=cells_df["normalised_layers"] * norm_factor,
+        y=cells_df["normalised_layers"] * scale,
         hue=cells_df["is_starter"],
         split=True,
         fill=True,
