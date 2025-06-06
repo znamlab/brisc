@@ -1,5 +1,3 @@
-
-
 def despine(ax):
     """
     Remove right and top spines from a matplotlib axis.

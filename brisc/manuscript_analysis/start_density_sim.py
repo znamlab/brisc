@@ -12,7 +12,7 @@ def plot_starter_spread_sim(
     label_fontsize=12,
     tick_fontsize=10,
     line_width=0.5,
-    colors=("lightsalmon", "tomato", "red")
+    colors=("lightsalmon", "tomato", "red"),
 ):
     """Plot the probability of starter-to-starter spread on a single figure,
     using fraction on the bottom x-axis and absolute density (mm^{-3}) on a
@@ -44,7 +44,7 @@ def plot_starter_spread_sim(
         x_range[1],
         linestyles="dashed",
         colors="black",
-        lw=line_width
+        lw=line_width,
     )
 
     ax.set_xlim(x_range[0], x_range[1])
@@ -74,9 +74,10 @@ def plot_starter_spread_sim(
         loc="upper left",
         bbox_to_anchor=(1.0, 1.0),
         handlelength=1,
-        alignment="left"
+        alignment="left",
     )
     despine(ax)
+
     # Define forward and inverse transforms:
     # fraction -> absolute density, and absolute density -> fraction
     def fraction_to_density(x):

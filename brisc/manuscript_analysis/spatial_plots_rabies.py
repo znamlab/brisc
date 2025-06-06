@@ -10,10 +10,28 @@ from cricksaw_analysis import atlas_utils
 
 def prepare_area_labels(
     xpos=860,
-    structures=[ "root", "CTX", "MB", "DG", "DG-mo", "DG-sg", "SCdg", "SCdw", "SCig", "SCiw", "SCop", "SCsg", "SCzo", "PAG", "MRN", "TH", "RN",],
-    atlas_size=10
+    structures=[
+        "root",
+        "CTX",
+        "MB",
+        "DG",
+        "DG-mo",
+        "DG-sg",
+        "SCdg",
+        "SCdw",
+        "SCig",
+        "SCiw",
+        "SCop",
+        "SCsg",
+        "SCzo",
+        "PAG",
+        "MRN",
+        "TH",
+        "RN",
+    ],
+    atlas_size=10,
 ):
-    atlas = bga.bg_atlas.BrainGlobeAtlas(f"allen_mouse_{atlas_size}um")    
+    atlas = bga.bg_atlas.BrainGlobeAtlas(f"allen_mouse_{atlas_size}um")
     bin_image = atlas.get_structure_mask(atlas.structures["root"]["id"])[xpos, :, :]
     for i, structure in enumerate(structures):
         mask = atlas.get_structure_mask(atlas.structures[structure]["id"])[xpos, :, :]
@@ -29,41 +47,45 @@ def plot_all_rv_cells(
     legend_fontsize=6,
     atlas_size=10,
     area_colors={
-        'AUDp': "limegreen", 
-        'AUDpo': "mediumseagreen", 
-        'AUDv': "springgreen", 
-        'RSP': "darkorchid", 
-        'TEa': "forestgreen", 
-        'TH': "orangered", 
-        'VISal': "aquamarine", 
-        'VISl': "darkturquoise", 
-        'VISli': "mediumaquamarine",
-        'VISp': "deepskyblue", 
-        'VISpm': "royalblue", 
-        'fiber_tract': "gray",
+        "AUDp": "limegreen",
+        "AUDpo": "mediumseagreen",
+        "AUDv": "springgreen",
+        "RSP": "darkorchid",
+        "TEa": "forestgreen",
+        "TH": "orangered",
+        "VISal": "aquamarine",
+        "VISl": "darkturquoise",
+        "VISli": "mediumaquamarine",
+        "VISp": "deepskyblue",
+        "VISpm": "royalblue",
+        "fiber_tract": "gray",
     },
     presynaptic_marker_size=1,
     starter_marker_size=2,
     invert_xaxis=True,
-    drop_areas=("hippocampal", "fiber_tract")
+    drop_areas=("hippocampal", "fiber_tract"),
 ):
     ax_coronal.contour(
-        bin_image, 
-        levels=np.arange(0.5, np.max(bin_image) + 1, 0.5), 
-        colors="black", 
+        bin_image,
+        levels=np.arange(0.5, np.max(bin_image) + 1, 0.5),
+        colors="black",
         linewidths=0.5,
         zorder=0,
     )
-    cells_df["inside"] = cells_df["cortical_area"].apply(lambda area: area not in drop_areas and not pd.isnull(area))
-    cells_inside = cells_df[(cells_df["inside"] == True) & (cells_df["area"] != "outside")]
+    cells_df["inside"] = cells_df["cortical_area"].apply(
+        lambda area: area not in drop_areas and not pd.isnull(area)
+    )
+    cells_inside = cells_df[
+        (cells_df["inside"] == True) & (cells_df["area"] != "outside")
+    ]
     cells_inside["cortical_area"] = cells_inside["cortical_area"].astype("category")
     cells_inside["cortical_layer"] = cells_inside["cortical_layer"].astype("category")
     starters = cells_inside[cells_inside["is_starter"] == True]
 
     areas = cells_inside["cortical_area"].cat.categories
     ax_coronal.scatter(
-        cells_inside["ara_z"]  * 1000 / atlas_size, 
-        cells_inside["ara_y"] * 1000 / atlas_size, 
+        cells_inside["ara_z"] * 1000 / atlas_size,
+        cells_inside["ara_y"] * 1000 / atlas_size,
         s=presynaptic_marker_size,
         linewidths=0,
         c=cells_inside["cortical_area"].cat.codes.map(lambda x: area_colors[areas[x]]),
@@ -71,13 +93,13 @@ def plot_all_rv_cells(
         alpha=0.3,
     )
     ax_coronal.scatter(
-        starters["ara_z"]  * 1000 / atlas_size, 
-        starters["ara_y"] * 1000 / atlas_size, 
+        starters["ara_z"] * 1000 / atlas_size,
+        starters["ara_y"] * 1000 / atlas_size,
         s=starter_marker_size,
         edgecolors="none",
         c="black",
         zorder=2,
-        alpha=0.6,        
+        alpha=0.6,
     )
     ax_coronal.plot([980, 1080], [50, 50], color="black", lw=3)
 
@@ -132,7 +154,7 @@ def plot_all_rv_cells(
         frameon=False,
         handlelength=1,
         ncols=3,
-        fontsize=legend_fontsize
+        fontsize=legend_fontsize,
     )
 
 
@@ -156,22 +178,22 @@ def plot_example_barcodes(
     # ]
 
     ax_coronal.contour(
-        bin_image, 
-        levels=np.arange(0.5, np.max(bin_image) + 1, 0.5), 
-        colors="black", 
+        bin_image,
+        levels=np.arange(0.5, np.max(bin_image) + 1, 0.5),
+        colors="black",
         linewidths=0.5,
         zorder=0,
     )
     starters = cells_df[cells_df["is_starter"] == True]
     ax_coronal.scatter(
-        cells_df["ara_z"]  * 1000 / atlas_size, 
-        cells_df["ara_y"] * 1000 / atlas_size, 
+        cells_df["ara_z"] * 1000 / atlas_size,
+        cells_df["ara_y"] * 1000 / atlas_size,
         s=all_cells_marker_size,
         linewidths=0,
         c="gray",
         alpha=0.15,
         zorder=1,
-        label="All barcoded cells"
+        label="All barcoded cells",
     )
 
     atlas_utils.plot_flatmap(
@@ -190,10 +212,12 @@ def plot_example_barcodes(
     )
 
     for barcode, color in zip(barcodes, barcode_colors):
-        this_barcode = cells_df[cells_df["all_barcodes"].apply(lambda bcs: barcode in bcs)]
+        this_barcode = cells_df[
+            cells_df["all_barcodes"].apply(lambda bcs: barcode in bcs)
+        ]
         ax_coronal.scatter(
-            this_barcode["ara_z"]  * 1000 / atlas_size, 
-            this_barcode["ara_y"] * 1000 / atlas_size, 
+            this_barcode["ara_z"] * 1000 / atlas_size,
+            this_barcode["ara_y"] * 1000 / atlas_size,
             alpha=1,
             linewidths=0,
             s=presynaptic_marker_size,
@@ -212,10 +236,10 @@ def plot_example_barcodes(
         starters = this_barcode[this_barcode["is_starter"] == True]
         print(f"barcode {barcode} in starters {starters.index.values}")
         ax_coronal.scatter(
-            starters["ara_z"]  * 1000 / atlas_size, 
-            starters["ara_y"] * 1000 / atlas_size, 
+            starters["ara_z"] * 1000 / atlas_size,
+            starters["ara_y"] * 1000 / atlas_size,
             s=starter_marker_size,
-            alpha=1,            
+            alpha=1,
             edgecolors="white",
             marker=starter_marker,
             c=color,
@@ -365,9 +389,9 @@ def plot_layer_distribution(
         ax_interest.scatter(
             cells_df[cells_df["is_starter"]]["flatmap_dorsal_x"],
             cells_df[cells_df["is_starter"]]["normalised_layers"] * norm_factor,
-            s=3, 
-            edgecolors="none", 
-            c="black", 
+            s=3,
+            edgecolors="none",
+            c="black",
             label="Starter cells",
         )
         ax_interest.set_xlim(18750, 22750)
@@ -376,17 +400,19 @@ def plot_layer_distribution(
         ax_interest.set_ylabel("Cortical depth (µm)", fontsize=label_fontsize)
         for layer, z in layer_tops.items():
             ax_interest.axhline(z, c="black", lw=0.5, linestyle="--")
-        ax_interest.set_xticks((18750, 19750, 20750, 21750, 22750), labels=[-2, -1, 0, 1, 2])
+        ax_interest.set_xticks(
+            (18750, 19750, 20750, 21750, 22750), labels=[-2, -1, 0, 1, 2]
+        )
         ax_interest.tick_params(axis="both", labelsize=tick_fontsize)
 
     sns.violinplot(
-        y=cells_df["normalised_layers"] * norm_factor, 
-        hue=cells_df["is_starter"], 
-        split=True, 
+        y=cells_df["normalised_layers"] * norm_factor,
+        hue=cells_df["is_starter"],
+        split=True,
         fill=True,
         alpha=1,
         ax=ax_density,
-        bw_adjust=0.5,        
+        bw_adjust=0.5,
         linewidth=1,
         inner=None,
         palette={True: "black", False: "gray"},
@@ -402,7 +428,7 @@ def plot_layer_distribution(
         ncol=2 if show_cells else 1,
     )
     ax_density.set_xlabel("Cell\ndensity", fontsize=label_fontsize)
-    ax_density.set_ylim(y_min, y_max)    
+    ax_density.set_ylim(y_min, y_max)
     ax_density.tick_params(axis="both", labelsize=tick_fontsize)
     for layer, z in layer_tops.items():
         ax_density.axhline(z, c="black", lw=0.5, linestyle="--")
@@ -415,10 +441,8 @@ def plot_layer_distribution(
 
     # prepend a 0 to layer tops and find layer centres
     ax_right = ax_density.twinx()
-    ax_right.set_ylim(y_min, y_max)    
+    ax_right.set_ylim(y_min, y_max)
     layer_edges = np.array(list(layer_tops.values()))
     layer_centres = (layer_edges[1:] + layer_edges[:-1]) / 2
     ax_right.set_yticks(layer_centres, labels=list(layer_tops.keys())[:-1])
     ax_right.tick_params(axis="both", labelsize=tick_fontsize, length=0)
-
-    

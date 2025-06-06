@@ -193,7 +193,9 @@ def repeated_hierarchical_bootstrap_in_parallel(
             total=n_permutations,
         )
 
-        shuffled_matrices, mean_input_fractions, starter_input_fractions, _ = zip(*results)
+        shuffled_matrices, mean_input_fractions, starter_input_fractions, _ = zip(
+            *results
+        )
 
         return (
             bootstrapped_results,
@@ -357,10 +359,10 @@ def plot_confidence_intervals(
             ax_curr.set_xticks([0.0, 0.6], labels=["0", "0.6"])
             for label, x in zip(ax_curr.get_xticklabels(), [0.0, 0.6]):
                 if x == 0.0:
-                    label.set_ha('left')   # left-align the label
+                    label.set_ha("left")  # left-align the label
                 elif x == 0.6:
-                    label.set_ha('right')  # right-align the label
-            if i>0:
+                    label.set_ha("right")  # right-align the label
+            if i > 0:
                 ax_curr.set_yticks([])
             ax_curr.invert_yaxis()
             ax_curr.text(
@@ -371,7 +373,7 @@ def plot_confidence_intervals(
                 va="center",
                 color="black",
                 fontsize=tick_fontsize,
-            )        
+            )
         ax_curr.spines["top"].set_visible(False)
         ax_curr.spines["right"].set_visible(False)
         ax_curr.tick_params(axis="both", which="major", labelsize=tick_fontsize)
@@ -383,5 +385,5 @@ def plot_confidence_intervals(
     else:
         axes[0].set_yticks(np.arange(len(presyn_area_order)), labels=presyn_area_order)
         axes[0].set_ylabel("Presynaptic layer", fontsize=label_fontsize)
-        axes[2].set_title("Starter layer", fontsize=label_fontsize, loc="left", pad=15)      
-        axes[2].set_xlabel("Input fraction", fontsize=label_fontsize, loc="left")  
+        axes[2].set_title("Starter layer", fontsize=label_fontsize, loc="left", pad=15)
+        axes[2].set_xlabel("Input fraction", fontsize=label_fontsize, loc="left")

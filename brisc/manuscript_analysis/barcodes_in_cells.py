@@ -227,7 +227,9 @@ def plot_multibarcoded_starters(
             - n_presyn_with_barcode2 (int): Number of presynaptic cells with barcode2
             - n_presyn_with_both (int): Number of presynaptic cells with both barcodes
     """
-    max_bc = multibarcoded_starters["n_presyn_per_barcode"].apply(len).max().astype(int)
+    max_bc = (
+        multibarcoded_starters["n_presyn_per_barcode"].apply(len).max()
+    )  # .astype(int)
     multibarcoded_starters["n_barcodes"] = multibarcoded_starters["barcodes"].apply(len)
     multibarcoded_starters["n_presyn_per_barcode"] = multibarcoded_starters[
         "n_presyn_per_barcode"
