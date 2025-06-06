@@ -10,7 +10,7 @@ import iss_preprocess as iss
 
 def pairwise_barcode_distances_with_nearest_diff(
     data_path="becalia_rabies_barseq/BRAC8498.3e/chamber_07/",
-    error_correction_ds_name="BRAC8498.3e_error_corrected_barcodes_10",
+    error_correction_ds_name="BRAC8498.3e_error_corrected_barcodes_26",
 ):
     """
     Compute pairwise distances among starter cells that share at least one barcode,
@@ -500,7 +500,7 @@ def create_barcode_shuffled_nulls_parallel(
     # Use process_map for parallel processing with tqdm
     results = process_map(shuffle_iteration, args, max_workers=cpu_count() - 1)
 
-    all_shuffled_distances, all_starter_coords = zip(*results)
+    all_shuffled_distances, all_starter_coords, starters_df = zip(*results)
     all_shuffled_distances = list(all_shuffled_distances)
     all_starter_coords = list(all_starter_coords)
 

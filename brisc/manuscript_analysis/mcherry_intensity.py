@@ -9,7 +9,7 @@ import seaborn as sns
 def load_mcherry_data(
     project="becalia_rabies_barseq",
     mouse="BRAC8498.3e",
-    error_correction_ds_name="BRAC8498.3e_error_corrected_barcodes_10",
+    error_correction_ds_name="BRAC8498.3e_error_corrected_barcodes_26",
 ):
     df_file = flz.get_processed_path(
         f"becalia_rabies_barseq/BRAC8498.3e/analysis/{error_correction_ds_name}_cell_barcode_df.pkl"

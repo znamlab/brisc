@@ -21,7 +21,7 @@ def assign_cell_barcodes(
     project: str = "becalia_rabies_barseq",
     mouse: str = "BRAC8498.3e",
     valid_chambers: list = ["chamber_07", "chamber_08", "chamber_09", "chamber_10"],
-    error_correction_ds_name: str = "BRAC8498.3e_error_corrected_barcodes_10",
+    error_correction_ds_name: str = "BRAC8498.3e_error_corrected_barcodes_26",
     redo_barcode_assignment: bool = True,
     redo_barcode_ara: bool = False,
     redo_gene_assignment: bool = False,
@@ -85,7 +85,7 @@ def assign_cell_barcodes(
             Defaults to ["chamber_07", "chamber_08", "chamber_09", "chamber_10"].
         error_correction_ds_name (str, optional): The name of the dataset
             containing error-corrected barcode sequences.
-            Defaults to "BRAC8498.3e_error_corrected_barcodes_10".
+            Defaults to "BRAC8498.3e_error_corrected_barcodes_26".
         redo_barcode_assignment (bool, optional): If True, re-runs the
             barcode-to-cell assignment and ARA annotation for rabies spots.
             Otherwise, attempts to load from saved CSV files. Defaults to True.
