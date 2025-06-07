@@ -566,6 +566,10 @@ def plot_pairwise_dist_distri(ax, colors, fontsize_dict, clicked_cells=None, **k
         cells = clicked_cells[where]
         dst = np.linalg.norm(cells[:, None] - cells[None, :], axis=2)
         pairwise[where] = dst[~np.eye(dst.shape[0], dtype=bool)]
+        med = np.median(pairwise[where])
+        sc = ax.scatter(med, 1.05, color=colors[where], marker="v", s=10)
+        sc.set_clip_on(False)
+        print(f"{where} median: {med*1000:.2f} um, n: {len(cells)} cells")
         kde = gaussian_kde(pairwise[where], bw_method=0.1)(bins)
 
         (line,) = ax.plot(bins, kde / kde.max(), color=colors[where], **kwargs)
