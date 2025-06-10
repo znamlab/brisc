@@ -207,31 +207,32 @@ def add_scalebar(
     margin_px=15,  # margin from right & bottom in display pixels
     color="white",
 ):
-    """
-    Draw a horizontal scalebar of a fixed pixel-thickness and margin,
-    of length `length_um`, in the lower-right corner of `ax`.
-    """
-    # 1) how many display‐pixels long the bar should be
-    disp_px_size_um = pixel_size_um * downsample_factor  # µm per displayed pixel
-    length_px = length_um / disp_px_size_um
+    """Draw a horizontal scalebar of physical length *length_um* (µm)."""
+    # physical length to data pixels
+    disp_px_size_um = pixel_size_um * downsample_factor  # um per data pixel
+    length_data_px = length_um / disp_px_size_um  # data-px
 
-    # 2) force a draw so we can query the renderer for actual axes size
+    # renderer size adjustment
     fig = ax.figure
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
     bbox = ax.get_window_extent(renderer)
-    ax_w = bbox.width  # axes width in display‐pixels
-    ax_h = bbox.height  # axes height in display‐pixels
+    ax_w, ax_h = bbox.width, bbox.height  # screen-px
 
-    # 3) convert px → axes‐fraction coordinates
-    length_frac = length_px / ax_w
+    # data-px to screen-px
+    xlim = ax.get_xlim()
+    W_data = abs(xlim[1] - xlim[0])  # data-px width
+    length_screen_px = length_data_px * ax_w / W_data  # screen-px
+
+    # px to Axes-fraction
+    length_frac = length_screen_px / ax_w
     height_frac = bar_height_px / ax_h
     margin_x_frac = margin_px / ax_w
     margin_y_frac = margin_px / ax_h
 
-    # 4) position the rectangle in Axes coords (0,0 lower‐left; 1,1 upper‐right)
-    x0 = 1.0 - margin_x_frac - length_frac
-    y0 = margin_y_frac
+    # draw rectangle
+    x0 = 1.0 - margin_x_frac - length_frac  # right-hand side
+    y0 = margin_y_frac  # bottom margin
 
     rect = patches.Rectangle(
         (x0, y0),
@@ -245,3 +246,44 @@ def add_scalebar(
         zorder=10,
     )
     ax.add_patch(rect)
+
+
+def downsample_xy(rgb_img: np.ndarray, factor: int = 5) -> np.ndarray:
+    """
+    Down-sample an (H, W, C) RGB image in x and y by an integer *factor*
+    without interpolation, using np.max over each block.
+
+    Args:
+        rgb_img : ndarray  (H, W, 3)  or (H, W, 4)  uint8 / float
+        factor  : int      down-sampling factor in x and y (default 5)
+    Returns:
+        ndarray (H/f, W/f, C)  same dtype as input
+    """
+    if factor <= 1:
+        return rgb_img
+    reducer_shape = (factor, factor, 1)
+    return block_reduce(rgb_img, reducer_shape, np.max)
+
+
+def print_image_stats(name, img, *, pixel_size_um, downsample_factor):
+    """
+    Print width of `img` in pixels and µm plus the effective pixel size.
+
+    Args:
+        name : str
+            Friendly label (e.g. "rab").
+        img : np.ndarray
+            RGB image (HxWx3).
+        pixel_size_um : float
+            Raw microscope pixel size (µm / raw-pixel).
+        downsample_factor : int
+            How many raw pixels → one displayed pixel.
+    """
+    disp_px_size_um = pixel_size_um * downsample_factor  # µm per displayed pixel
+    H, W = img.shape[:2]
+    width_um = W * disp_px_size_um
+    print(
+        f"[{name:8s}]  width = {W:5d} px   |   "
+        f"pixel size = {disp_px_size_um:6.3f} µm/px   |   "
+        f"width = {width_um:8.1f} µm"
+    )
