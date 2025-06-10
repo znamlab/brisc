@@ -65,6 +65,7 @@ def plot_all_rv_cells(
     starter_marker_size=2,
     invert_xaxis=True,
     drop_areas=("hippocampal", "fiber_tract"),
+    rasterized=True,
 ):
     ax_coronal.contour(
         bin_image,
@@ -92,6 +93,7 @@ def plot_all_rv_cells(
         c=cells_inside["cortical_area"].cat.codes.map(lambda x: area_colors[areas[x]]),
         zorder=1,
         alpha=0.3,
+        rasterized=rasterized,
     )
     ax_coronal.scatter(
         starters["ara_z"] * 1000 / atlas_size,
@@ -101,6 +103,7 @@ def plot_all_rv_cells(
         c="black",
         zorder=2,
         alpha=0.6,
+        rasterized=rasterized,
     )
     ax_coronal.plot([980, 1080], [50, 50], color="black", lw=3)
 
@@ -122,6 +125,7 @@ def plot_all_rv_cells(
         c=cells_inside["cortical_area"].cat.codes.map(lambda x: area_colors[areas[x]]),
         zorder=1,
         alpha=0.3,
+        rasterized=rasterized,
     )
     ax_flatmap.scatter(
         starters["flatmap_x"],
@@ -131,6 +135,7 @@ def plot_all_rv_cells(
         c="black",
         zorder=2,
         alpha=0.6,
+        rasterized=rasterized,
     )
     ax_flatmap.plot([100, 200], [1330, 1330], color="black", lw=3)
     ax_flatmap.set_ylim(740, 1350)
@@ -173,6 +178,7 @@ def plot_example_barcodes(
     all_cells_marker_size=1,
     starter_marker="o",
     invert_xaxis=True,
+    rasterized=True,
 ):
     # cells_df = cells_df[
     #     cells_df["cortical_area"].apply(lambda area: not pd.isnull(area))
@@ -195,6 +201,7 @@ def plot_example_barcodes(
         alpha=0.15,
         zorder=1,
         label="All barcoded cells",
+        rasterized=rasterized,
     )
 
     atlas_utils.plot_flatmap(
@@ -210,6 +217,7 @@ def plot_example_barcodes(
         c="gray",
         zorder=1,
         alpha=0.15,
+        rasterized=rasterized,
     )
 
     for barcode, color in zip(barcodes, barcode_colors):
@@ -224,6 +232,7 @@ def plot_example_barcodes(
             s=presynaptic_marker_size,
             c=color,
             zorder=2,
+            rasterized=rasterized,
         )
         ax_flatmap.scatter(
             this_barcode["flatmap_x"],
@@ -233,6 +242,7 @@ def plot_example_barcodes(
             s=presynaptic_marker_size,
             c=color,
             zorder=2,
+            rasterized=rasterized,
         )
         starters = this_barcode[this_barcode["is_starter"] == True]
         print(f"barcode {barcode} in starters {starters.index.values}")
@@ -247,6 +257,7 @@ def plot_example_barcodes(
             linewidths=1,
             label=barcode,
             zorder=3,
+            rasterized=rasterized,
         )
         ax_flatmap.scatter(
             starters["flatmap_x"],
@@ -258,6 +269,7 @@ def plot_example_barcodes(
             linewidths=1,
             label=barcode,
             zorder=3,
+            rasterized=rasterized,
         )
     ax_coronal.plot([980, 1080], [50, 50], color="black", lw=3)
     ax_coronal.set_xlim(570, 1100)
@@ -294,6 +306,7 @@ def plot_flat_ml_rv_cells(
     starter_size=2,
     presyn_alpha=0.7,
     legend_height=1.8,
+    rasterized=True,
 ):
     """
     Plot the medio-lateral and dorso-ventral coordinates of cells on the flatmap.
@@ -333,7 +346,7 @@ def plot_flat_ml_rv_cells(
         s=presyn_size,
         linewidths=0,
         c=cells["cortical_area"].cat.codes.map(lambda x: color_mapping[categories[x]]),
-        rasterized=True,
+        rasterized=rasterized,
     )
 
     ax.scatter(
@@ -342,7 +355,7 @@ def plot_flat_ml_rv_cells(
         s=starter_size,
         edgecolors="none",
         c="black",
-        rasterized=True,
+        rasterized=rasterized,
     )
     ax.set_xlabel("Medio-lateral coordinates (µm)", fontsize=label_fontsize)
     ax.set_ylabel("Cortical Depth (µm)", fontsize=label_fontsize)
@@ -360,6 +373,7 @@ def plot_layer_distribution(
     label_fontsize=10,
     tick_fontsize=8,
     show_cells=True,
+    rasterized=True,
 ):
     layer_tops = get_avg_layer_depth()
     layer_tops["1"] = 0.0
@@ -376,6 +390,7 @@ def plot_layer_distribution(
             c="gray",
             alpha=0.5,
             label="Presynaptic cells",
+            rasterized=rasterized,
         )
         ax_interest.scatter(
             cells_df[cells_df["is_starter"]]["flatmap_x"] * scale,
@@ -384,6 +399,7 @@ def plot_layer_distribution(
             edgecolors="none",
             c="black",
             label="Starter cells",
+            rasterized=rasterized,
         )
         ax_interest.set_xlim(18750, 22750)
         ax_interest.set_ylim(y_min, y_max)
