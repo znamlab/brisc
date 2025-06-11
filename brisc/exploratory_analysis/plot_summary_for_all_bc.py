@@ -315,6 +315,7 @@ def compute_flatmap_coors(
         drop_voxels_outside_view_streamlines=False,
         view_space_for_other_hemisphere=view_space,
         hemisphere="right",
+        thickness_type=thickness_type,
     )
     flat_coors[to_move, :] = reprojected
 
