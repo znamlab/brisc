@@ -216,7 +216,7 @@ def plot_example_barcodes(
         linewidths=0,
         c="gray",
         zorder=1,
-        alpha=0.15,
+        alpha=0.2,
         rasterized=rasterized,
     )
 
@@ -262,7 +262,7 @@ def plot_example_barcodes(
         ax_flatmap.scatter(
             starters["flatmap_x"],
             starters["flatmap_y"],
-            s=starter_marker_size * 0.7,
+            s=starter_marker_size,
             edgecolors="white",
             marker=starter_marker,
             c=color,
@@ -271,15 +271,15 @@ def plot_example_barcodes(
             zorder=3,
             rasterized=rasterized,
         )
-    ax_coronal.plot([980, 1080], [50, 50], color="black", lw=3)
+    ax_coronal.plot([980, 1080], [70, 70], color="black", lw=3)
     ax_coronal.set_xlim(570, 1100)
     ax_coronal.set_ylim(450, 0)
     ax_coronal.set_axis_off()
     ax_coronal.set_aspect("equal")
 
-    ax_flatmap.plot([100, 200], [1330, 1330], color="black", lw=3)
-    ax_flatmap.set_ylim(740, 1350)
-    ax_flatmap.set_xlim(100, 1200)
+    ax_flatmap.plot([640, 740], [1130, 1130], color="black", lw=3)
+    ax_flatmap.set_ylim(950, 1150)
+    ax_flatmap.set_xlim(450, 780)
     ax_flatmap.invert_yaxis()
     ax_flatmap.set_axis_off()
     ax_flatmap.set_aspect("equal")
