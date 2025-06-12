@@ -224,6 +224,10 @@ def plot_area_by_area_connectivity(
     line_width=1,
     show_counts=True,
     cbar_label="Input fraction",
+    xlabel="Starter layer",
+    ylabel="Presynaptic layer",
+    vmin=None,
+    vmax=None,
 ):
     """Plots an area-by-area connectivity matrix as a heatmap.
 
@@ -255,8 +259,10 @@ def plot_area_by_area_connectivity(
             the heatmap. Defaults to True.
         cbar_label (str, optional): Label for the colorbar. Defaults to "Input fraction".
     """
-    vmin = np.min(connectivity_matrix[connectivity_matrix != -np.inf]) * 0.7
-    vmax = -vmin if odds_ratio else connectivity_matrix.max(axis=None)
+    if vmin is None:
+        vmin = np.min(connectivity_matrix[connectivity_matrix != -np.inf]) * 0.7
+    if vmax is None:
+        vmax = -vmin if odds_ratio else connectivity_matrix.max(axis=None)
     cmap = "RdBu_r" if odds_ratio else "inferno"
     # Plot the heatmap
     sns.heatmap(
@@ -278,6 +284,7 @@ def plot_area_by_area_connectivity(
         cbax.patch.set_edgecolor("black")
         cbax.patch.set_linewidth(1.5)
         cbax.set_title(cbar_label, fontsize=tick_fontsize, loc="left")
+        # cbax.set_clim(-1.0, 1.0 if odds_ratio else 0)
 
     # Annotate with appropriate color based on background
     for (i, j), val in np.ndenumerate(connectivity_matrix):
@@ -312,8 +319,8 @@ def plot_area_by_area_connectivity(
     )
     ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
     ax.tick_params(axis="y", rotation=0)
-    ax.set_xlabel("Starter layer", fontsize=label_fontsize)
-    ax.set_ylabel("Presynaptic layer", fontsize=label_fontsize)
+    ax.set_xlabel(xlabel, fontsize=label_fontsize)
+    ax.set_ylabel(ylabel, fontsize=label_fontsize)
 
     if not show_counts:
         return
@@ -453,7 +460,7 @@ def shuffle_wrapper(arg):
 def compare_to_shuffle(observed_matrix, shuffled_matrices, alpha=0.05):
     """Compares an observed matrix to shuffled matrices to find significant differences.
 
-    This function calculates the log10 ratio of an observed connectivity matrix
+    This function calculates the log2 ratio of an observed connectivity matrix
     to the mean of a distribution of shuffled (null) matrices. It also computes
     empirical p-values and applies False Discovery Rate (FDR) correction.
 
@@ -466,7 +473,7 @@ def compare_to_shuffle(observed_matrix, shuffled_matrices, alpha=0.05):
             Defaults to 0.05.
     Returns:
         tuple[pd.DataFrame, pd.DataFrame]:
-            - log_ratio_matrix (pd.DataFrame): Matrix of log10 ratios of
+            - log_ratio_matrix (pd.DataFrame): Matrix of log2 ratios of
               observed values to the mean of the null distributions.
             - pval_corrected_df (pd.DataFrame): Matrix of FDR-corrected p-values.
     """
@@ -476,7 +483,7 @@ def compare_to_shuffle(observed_matrix, shuffled_matrices, alpha=0.05):
     ratio_matrix = pd.DataFrame(
         ratio_matrix, index=observed_matrix.index, columns=observed_matrix.columns
     )
-    log_ratio_matrix = np.log10(ratio_matrix)
+    log_ratio_matrix = np.log2(ratio_matrix)
     pval_df = compute_empirical_pvalues(
         observed_matrix, shuffled_matrices, two_sided=True
     )
@@ -868,7 +875,7 @@ def plot_log_ratio_matrix(subset_observed_cm, subset_null_array):
         ratio_matrix, index=subset_observed_cm.index, columns=subset_observed_cm.columns
     )
     # Calculate the log ratio matrix
-    log_ratio_matrix = np.log10(ratio_matrix)
+    log_ratio_matrix = np.log2(ratio_matrix)
     # Mask for zero values (log(1) = 0)
     mask = np.isclose(log_ratio_matrix, 0)
     # Ensure pval_df has the same index/columns as log_ratio_matrix
@@ -892,7 +899,7 @@ def plot_log_ratio_matrix(subset_observed_cm, subset_null_array):
         annot=False,  # Disable built-in annotations
         square=True,
         mask=mask,
-        cbar_kws={"label": "Log10 Ratio"},
+        cbar_kws={"label": "log2 Ratio"},
         vmax=0.30,
         vmin=-0.30,
     )
@@ -956,6 +963,8 @@ def bubble_plot(
     ax=None,
     cbax=None,
     show_legend=True,
+    vmin=None,
+    vmax=None,
 ):
     """
     Create a bubble plot to visualize log-ratios with p-values.
@@ -989,11 +998,15 @@ def bubble_plot(
     # Calculate bubble size & color value
     # Bubble size: absolute log ratio * size_scale
     df_plot["bubble_size"] = df_plot["log_ratio"].abs() * size_scale
-    # Color value = sign(log_ratio) * -log10(p_value)
+    # Color value = sign(log_ratio) * -log2(p_value)
     # => Positive log-ratio => red, negative => blue
-    df_plot["color_value"] = np.sign(df_plot["log_ratio"]) * -np.log10(
+    df_plot["color_value"] = np.sign(df_plot["log_ratio"]) * -np.log2(
         df_plot["p_value"].clip(lower=1e-300)
     )
+    if vmin is None:
+        vmin = np.log2(alpha)
+    if vmax is None:
+        vmax = -np.log2(alpha)
     # Main scatter
     sc = ax.scatter(
         x=df_plot["x"],
@@ -1001,8 +1014,8 @@ def bubble_plot(
         s=df_plot["bubble_size"],
         c=df_plot["color_value"],
         cmap="coolwarm",
-        vmin=np.log10(alpha),
-        vmax=-np.log10(alpha),
+        vmin=vmin,
+        vmax=vmax,
         edgecolors="none",
     )
 
@@ -1020,9 +1033,7 @@ def bubble_plot(
     )
     if cbax:
         plt.colorbar(sc, cax=cbax, ax=ax)
-        cbax.set_title(
-            "Signed\n$\log_{10}$ p-value", fontsize=tick_fontsize, loc="left"
-        )
+        cbax.set_title("Signed\n$\log_{2}$ p-value", fontsize=tick_fontsize, loc="left")
         cbax.tick_params(
             axis="both",
             which="both",
@@ -1031,7 +1042,7 @@ def bubble_plot(
         )
 
     if show_legend:
-        legend_values = [0.2, 0.4, 0.6]
+        legend_values = [0.3, 0.6, 1.0]
         legend_handles = []
         for val in legend_values:
             size_val = val * size_scale
@@ -1046,7 +1057,7 @@ def bubble_plot(
             frameon=False,
             handleheight=3.0,
             fontsize=tick_fontsize,
-            title="$|\log_{10}\\frac{\mathrm{observed}}{\mathrm{shuffled}}|$",
+            title="$|\log_{2}\\frac{\mathrm{observed}}{\mathrm{shuffled}}|$",
         )
         legend.get_title().set_fontsize("6")
     ax.set_xlim([-0.5, len(x_categories) - 0.5])
@@ -1071,6 +1082,21 @@ def bubble_plot(
     ax.set_ylabel("Presynaptic layer", fontsize=label_fontsize)
 
 
+def _truncate_colormap(
+    cmap: mcolors.Colormap, start: float = 0.0, end: float = 1.0, n: int = 256
+) -> mcolors.Colormap:
+    """
+    Return a new Colormap that maps the interval [start, end] of *cmap*
+    onto the full [0, 1] range.
+    """
+    if not (0.0 <= start < end <= 1.0):
+        raise ValueError("start and end must satisfy 0 ≤ start < end ≤ 1.")
+    colors = cmap(np.linspace(start, end, n))
+    return mcolors.LinearSegmentedColormap.from_list(
+        f"{cmap.name}_trunc_{start:.2f}_{end:.2f}", colors
+    )
+
+
 def connectivity_diagram_mpl(
     mean_input_fraction: pd.DataFrame,
     lower_df: pd.DataFrame,
@@ -1083,7 +1109,9 @@ def connectivity_diagram_mpl(
     node_style: dict = None,
     arrow_style: dict = None,
     ci_to_alpha: bool = True,
-    ci_cmap: str = None,
+    ci_cmap: str | None = None,
+    ci_cmap_start: float = 0.0,
+    ci_cmap_end: float = 1.0,
     edge_width_scale: float = 2.0,
     arrow_head_scale: float = 20.0,
     vmin: float = None,
@@ -1205,7 +1233,8 @@ def connectivity_diagram_mpl(
         print("Very low max inverse CI")
         vmax = 1.0
     if ci_cmap is not None:
-        cmap_obj = plt.get_cmap(ci_cmap)
+        base_cmap = plt.get_cmap(ci_cmap)
+        cmap_obj = _truncate_colormap(base_cmap, start=ci_cmap_start, end=ci_cmap_end)
     # Plot edges
     for starter_name in connection_names:  # Target of the connection
         for presyn_name in connection_names:  # Source of the connection
