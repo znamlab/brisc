@@ -954,27 +954,40 @@ def plot_log_ratio_matrix(subset_observed_cm, subset_null_array):
 
 
 def bubble_plot(
-    log_ratio_matrix,
-    pval_df,
-    alpha=0.05,
-    size_scale=800,
-    label_fontsize=12,
-    tick_fontsize=12,
-    ax=None,
-    cbax=None,
-    show_legend=True,
-    vmin=None,
-    vmax=None,
+    log_ratio_matrix: pd.DataFrame,
+    pval_df: pd.DataFrame,
+    alpha: float = 0.05,
+    size_scale: float = 800,
+    label_fontsize: int = 12,
+    tick_fontsize: int = 12,
+    ax: plt.Axes = None,
+    cbax: plt.Axes = None,
+    show_legend: bool = True,
+    vmin: float = None,
+    vmax: float = None,
+    bubble_lw: float = 0.7,
 ):
-    """
-    Create a bubble plot to visualize log-ratios with p-values.
+    """Generates a bubble plot to visualize log-ratios and p-values.
+
+    This function creates a scatter plot where each bubble represents a
+    cell in the input matrices. The size of the bubble corresponds to the
+    absolute log-ratio, and the color corresponds to the signed -log2(p-value).
+    Significant cells (p-value < alpha) are outlined in black.
+
     Args:
-    - log_ratio_matrix: pd.DataFrame, shape (n_rows, n_cols)
-        DataFrame of log-ratios (log₁₀(observed / expected)).
-    - pval_df: pd.DataFrame, shape (n_rows, n_cols)
-        DataFrame of p-values for each log-ratio.
-    - size_scale: int, default 800
-        Scaling factor for bubble sizes.
+        log_ratio_matrix: DataFrame of log-ratios, where rows and columns
+            represent categories being compared.
+        pval_df: DataFrame of p-values corresponding to the log_ratio_matrix.
+        alpha: Significance level for highlighting bubbles.
+        size_scale: Scaling factor for bubble sizes.
+        label_fontsize: Font size for axis labels.
+        tick_fontsize: Font size for tick labels and colorbar.
+        ax: Matplotlib Axes to plot on. If None, uses the current Axes.
+        cbax: Matplotlib Axes for the colorbar. If None, no colorbar is drawn.
+        show_legend: If True, displays a legend for bubble sizes.
+        vmin: Minimum value for the colormap normalization of color_value.
+        vmax: Maximum value for the colormap normalization of color_value.
+        bubble_lw: Linewidth for the outline of significant bubbles.
     """
     # Reformat input dfs into a long-form DataFrame for plotting
     row_name = log_ratio_matrix.index.name or "row_label"
@@ -1003,10 +1016,6 @@ def bubble_plot(
     df_plot["color_value"] = np.sign(df_plot["log_ratio"]) * -np.log2(
         df_plot["p_value"].clip(lower=1e-300)
     )
-    if vmin is None:
-        vmin = np.log2(alpha)
-    if vmax is None:
-        vmax = -np.log2(alpha)
     # Main scatter
     sc = ax.scatter(
         x=df_plot["x"],
@@ -1029,7 +1038,7 @@ def bubble_plot(
         s=df_signif["bubble_size"],
         facecolors="none",
         edgecolors="black",
-        linewidths=0.5,
+        linewidths=bubble_lw,
     )
     if cbax:
         plt.colorbar(sc, cax=cbax, ax=ax)
