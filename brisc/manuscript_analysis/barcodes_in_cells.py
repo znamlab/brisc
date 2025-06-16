@@ -77,9 +77,10 @@ def plot_presyn_per_barcode(
     ax=None,
     label_fontsize=12,
     tick_fontsize=12,
-    max_val=50,
+    max_val=30,
     colors=("darkorange", "dodgerblue"),
     linewidth=0.5,
+    alpha=0.8,
 ):
     """Plots histograms of presynaptic cells per barcode, distinguishing
     between orphan and non-orphan barcodes.
@@ -94,6 +95,7 @@ def plot_presyn_per_barcode(
         max_val (int, optional): Maximum value for the x-axis. Defaults to 50.
         colors (tuple, optional): Colors for the two histograms
             (orphan and non-orphan barcodes). Defaults to ("darkorange", "dodgerblue").
+
     """
     cells_with_starter = barcodes_df[barcodes_df["n_starters"] > 0][
         "n_presynaptic"
@@ -102,24 +104,29 @@ def plot_presyn_per_barcode(
         "n_presynaptic"
     ].values
     # Regular histogram (left subplot)
+
     # Non-starters *with* starter
-    bin_edges = np.arange(0, max_val + 5, 5)
+    bin_edges = np.arange(0, max_val + 1, 1)
     bin_edges[-1] = 1e4
-    print(f"Bin edges: {bin_edges}")
     for cells, color in zip((cells_without_starter, cells_with_starter), colors):
         counts, _ = np.histogram(cells, bins=bin_edges)
-        print(f"Counts: {counts}")
         props = counts / np.sum(counts)
-        plt.stairs(
-            props,
-            bin_edges,
-            fill=False,
+        # add 0 to finish the last bar
+        edge2plot = np.hstack([bin_edges[:-1], max_val])
+        props2plot = np.hstack([props, 0])
+        plt.plot(
+            edge2plot,
+            props2plot,
             linewidth=linewidth,
             color=color,
+            drawstyle="steps-post",
+            alpha=alpha,
         )
 
-    ax.set_xlim(0, max_val)
-    ax.set_xticks(np.arange(0, max_val + 10, 10))
+    ax.set_xlim(0, max_val + 1)
+    labels = [str(l) for l in np.arange(0, max_val + 10, 10).astype(int)]
+    labels[-1] = f">{labels[-1]}"
+    ax.set_xticks(np.arange(0, max_val + 10, 10), labels=labels)
 
     ax.set_xlabel(
         "Presynaptic cells per barcode",
@@ -134,7 +141,7 @@ def plot_presyn_per_barcode(
         loc="upper right",
         fontsize=tick_fontsize,
         frameon=False,
-        bbox_to_anchor=[1.3, 1],
+        bbox_to_anchor=[1.3, 1.13],
         handlelength=1,
     )
     ax.tick_params(
