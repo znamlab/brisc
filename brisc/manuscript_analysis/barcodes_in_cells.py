@@ -81,21 +81,32 @@ def plot_presyn_per_barcode(
     colors=("darkorange", "dodgerblue"),
     linewidth=0.5,
     alpha=0.8,
+    log_scale=True,
 ):
-    """Plots histograms of presynaptic cells per barcode, distinguishing
-    between orphan and non-orphan barcodes.
+    """Plots histograms of the number of presynaptic cells per barcode.
+
+    The function distinguishes between barcodes associated with starter cells
+    ('non-orphan') and those not associated with any starter cell ('orphan').
+    It can display the distribution on a linear or logarithmic x-axis.
 
     Args:
         barcodes_df (pd.DataFrame): DataFrame containing barcode data.
             Must include 'n_starters' and 'n_presynaptic' columns.
         ax (plt.Axes, optional): Matplotlib axes object to plot on.
-            Defaults to None.
+            If None, the current axes are used. Defaults to None.
         label_fontsize (int, optional): Font size for axis labels. Defaults to 12.
         tick_fontsize (int, optional): Font size for tick labels. Defaults to 12.
-        max_val (int, optional): Maximum value for the x-axis. Defaults to 50.
+        max_val (int, optional): Maximum value for the x-axis when
+            `log_scale` is False. Defaults to 30.
         colors (tuple, optional): Colors for the two histograms
-            (orphan and non-orphan barcodes). Defaults to ("darkorange", "dodgerblue").
-
+            (orphan, non-orphan). Defaults to ("darkorange", "dodgerblue").
+        linewidth (float, optional): Linewidth for the histogram steps.
+            Defaults to 0.5.
+        alpha (float, optional): Alpha transparency for the histogram fill. Defaults to
+            0.8.
+        log_scale (bool, optional): If True, plots with a logarithmic x-axis
+            and filled steps. If False, plots with a linear x-axis and step lines.
+            Defaults to True.
     """
     cells_with_starter = barcodes_df[barcodes_df["n_starters"] > 0][
         "n_presynaptic"
@@ -106,27 +117,61 @@ def plot_presyn_per_barcode(
     # Regular histogram (left subplot)
 
     # Non-starters *with* starter
-    bin_edges = np.arange(0, max_val + 1, 1)
-    bin_edges[-1] = 1e4
-    for cells, color in zip((cells_without_starter, cells_with_starter), colors):
-        counts, _ = np.histogram(cells, bins=bin_edges)
-        props = counts / np.sum(counts)
-        # add 0 to finish the last bar
-        edge2plot = np.hstack([bin_edges[:-1], max_val])
-        props2plot = np.hstack([props, 0])
-        plt.plot(
-            edge2plot,
-            props2plot,
-            linewidth=linewidth,
-            color=color,
-            drawstyle="steps-post",
-            alpha=alpha,
-        )
-
-    ax.set_xlim(0, max_val + 1)
-    labels = [str(l) for l in np.arange(0, max_val + 10, 10).astype(int)]
-    labels[-1] = f">{labels[-1]}"
-    ax.set_xticks(np.arange(0, max_val + 10, 10), labels=labels)
+    labels = ["Orphan barcodes", "Non-orphan barcodes"]
+    if log_scale:
+        ax = plt.gca()
+        max_n = max(cells_without_starter.max(), cells_with_starter.max())
+        print(max_n)
+        bins = 10 ** (np.arange(0, np.log10(max_n), 0.16))
+        i = 0
+        for cells, color in zip((cells_without_starter, cells_with_starter), colors):
+            c = cells[cells != 0]
+            # c = np.log10(c)
+            h, b = np.histogram(c, bins=bins)
+            ax.stairs(
+                h / len(c),
+                b,
+                fill=True,
+                color=color,
+                lw=0,
+                alpha=alpha,
+                label=labels[i],
+            )
+            ax.stairs(
+                h / len(c),
+                b,
+                fill=False,
+                color=color,
+                lw=linewidth,
+                alpha=1,
+                label="__no_legend__",
+            )
+            i += 1
+        ax.set_xscale("log")
+    else:
+        bin_edges = np.arange(0, max_val + 1, 1)
+        bin_edges[-1] = 1e4
+        i = 0
+        for cells, color in zip((cells_without_starter, cells_with_starter), colors):
+            counts, _ = np.histogram(cells, bins=bin_edges)
+            props = counts / np.sum(counts)
+            # add 0 to finish the last bar
+            edge2plot = np.hstack([bin_edges[:-1], max_val])
+            props2plot = np.hstack([props, 0])
+            plt.plot(
+                edge2plot,
+                props2plot,
+                linewidth=linewidth,
+                color=color,
+                drawstyle="steps-post",
+                alpha=alpha,
+                label=labels[i],
+            )
+            i += 1
+        ax.set_xlim(0, max_val + 1)
+        labels = [str(l) for l in np.arange(0, max_val + 10, 10).astype(int)]
+        labels[-1] = f">{labels[-1]}"
+        ax.set_xticks(np.arange(0, max_val + 10, 10), labels=labels)
 
     ax.set_xlabel(
         "Presynaptic cells per barcode",
@@ -137,11 +182,10 @@ def plot_presyn_per_barcode(
         fontsize=label_fontsize,
     )
     ax.legend(
-        ["Orphan barcodes", "Non-orphan barcodes"],
         loc="upper right",
         fontsize=tick_fontsize,
         frameon=False,
-        bbox_to_anchor=[1.3, 1.13],
+        bbox_to_anchor=[1.2, 1],
         handlelength=1,
     )
     ax.tick_params(
