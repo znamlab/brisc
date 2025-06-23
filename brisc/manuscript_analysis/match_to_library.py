@@ -239,13 +239,17 @@ def plot_matches_to_library(
 
     # X-axis formatting
     ax[0].set_xlabel(
-        "Library barcode abundance",
+        "Proportion of unique reads in viral library",
         fontsize=label_fontsize,
     )
     # ax[0].xaxis.set_major_locator(mticker.FixedLocator(locs=np.logspace(0, 6, 5)))
     # ax[0].xaxis.set_minor_locator(mticker.LogLocator(numticks=999, subs="auto"))
+    total_read_in_library = np.sum(rv35_library["counts"])
+    xticklab = np.array([1e-8, 1e-5, 1e-2])
+    xtick = xticklab * total_read_in_library
     ax[0].set_xticks(
-        [np.sqrt(0.03 * 0.1), 1, 1e3, 1e6], labels=["$0$", "$10^0$", "$10^3$", "$10^6$"]
+        np.hstack([np.sqrt(0.03 * 0.1), xtick]),
+        labels=["$0$", "$10^{-8}$", "$10^{-5}$", "$10^{-2}$"],
     )
 
     # Y-axis label
