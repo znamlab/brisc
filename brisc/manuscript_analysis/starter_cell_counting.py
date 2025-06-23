@@ -19,13 +19,21 @@ from xml.etree import ElementTree
 
 def plot_starter_dilution_densities(
     ax,
+    titre=4.5e13,
+    volume=50,
     label_fontsize=12,
     tick_fontsize=12,
     processed=Path("/nemo/lab/znamenskiyp/home/shared/projects/"),
 ):
     """
     Plot the densities of the starter cells for the different dilutions of PHP.eb (only for V1)
+
+    Args:
+        ax:
+        titre: titre in vg/ml
+        volume: injected volume in ul
     """
+
     atlas_size = 25
     cortical_areas = "ALL"
     bg_atlas = bga.bg_atlas.BrainGlobeAtlas("allen_mouse_%dum" % atlas_size)
@@ -113,13 +121,25 @@ def plot_starter_dilution_densities(
 
     # Remove zres 25
     v1 = v1.loc[v1["zres"] == 8]
-
+    order = ["1/100", "1/330", "1/1000", "1/3300"]
+    if titre is not None:
+        dilution = np.array([1 / 100, 1 / 330, 1 / 1000, 1 / 3300])
+        num_particle = dilution * volume * 1e-3 * titre
+        lab = [f"{p:.0e}" for p in num_particle]
+        xtlabel = []
+        for l in lab:
+            parts = l.split("e+")
+            xtlabel.append(f"{parts[0]}x$10^{{{int(parts[1])}}}$")
+        xlabel = "# of viral particles injected"
+    else:
+        xtlabel = order
+        xlabel = ("AAV hSyn-Cre dilution",)
     # Plot the data points with dodge
     sns.stripplot(
         data=v1,
         x="dilution",
         y="density",
-        order=["1/100", "1/330", "1/1000", "1/3300"],
+        order=order,
         dodge=True,
         jitter=True,
         ax=ax,
@@ -130,14 +150,14 @@ def plot_starter_dilution_densities(
     )
 
     # Calculate positions for the boxplots
-    positions_v1 = np.arange(len(["1/100", "1/330", "1/1000", "1/3300"]))  # - 0.2
+    positions_v1 = np.arange(len(order))  # - 0.2
 
     # Plot the boxplot for v1
     sns.boxplot(
         data=v1,
         x="dilution",
         y="density",
-        order=["1/100", "1/330", "1/1000", "1/3300"],
+        order=order,
         dodge=False,
         showmeans=True,
         meanline=True,
@@ -152,22 +172,21 @@ def plot_starter_dilution_densities(
         positions=positions_v1,
     )
 
-    plt.setp(ax, ylim=(0))
     ax.set_yticklabels(
         ax.get_yticklabels(),
         fontsize=tick_fontsize,
     )
     ax.set_xticklabels(
-        ["1/100", "1/330", "1/1000", "1/3300"],
+        xtlabel,
         fontsize=tick_fontsize,
-        rotation=45,
+        rotation=45 if titre is None else 0,
     )
     plt.xlabel(
-        "AAV hSyn-Cre dilution",
+        xlabel,
         fontsize=label_fontsize,
     )
     plt.ylabel(
-        "tdTomato+ cell\ndensity (mm$^{-3}$)",
+        "Cell density (mm$^{-3}$)",
         fontsize=label_fontsize,
     )
     despine(ax)
@@ -569,7 +588,7 @@ def plot_pairwise_dist_distri(ax, colors, fontsize_dict, clicked_cells=None, **k
         med = np.median(pairwise[where])
         sc = ax.scatter(med, 1.05, color=colors[where], marker="v", s=10)
         sc.set_clip_on(False)
-        print(f"{where} median: {med*1000:.2f} um, n: {len(cells)} cells")
+        print(f"{where} median: {med:.2f} mm, n: {len(cells)} cells")
         kde = gaussian_kde(pairwise[where], bw_method=0.1)(bins)
 
         (line,) = ax.plot(bins, kde / kde.max(), color=colors[where], **kwargs)
