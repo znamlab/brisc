@@ -6,7 +6,7 @@ import brainglobe_atlasapi as bga
 import pandas as pd
 import seaborn as sns
 from cricksaw_analysis import atlas_utils
-from ..exploratory_analysis.plot_summary_for_all_bc import get_avg_layer_depth
+from .flatmap_projection import get_avg_layer_depth
 
 
 def prepare_area_labels(
