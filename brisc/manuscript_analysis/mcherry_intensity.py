@@ -1,5 +1,5 @@
 import iss_analysis as issa
-
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import flexiznam as flz
@@ -63,10 +63,14 @@ def plot_mcherry_intensity_presyn(
     label_fontsize=12,
     tick_fontsize=12,
     marker_size=10,
+    xcol="intensity_mean-0",
+    set_ticks=True,
 ):
+    if ax is None:
+        ax = plt.gca()
     # ax.set(xscale="log", yscale="log")
     sns.regplot(
-        x=np.log(valid["intensity_mean-0"]),
+        x=np.log(valid[xcol]),
         y=np.log(valid["n_presynaptic"]),
         scatter_kws={
             "s": marker_size,
@@ -76,6 +80,7 @@ def plot_mcherry_intensity_presyn(
         },
         line_kws={"color": "darkslategray"},
         robust=True,
+        ax=ax,
     )
 
     # ax.scatter(
@@ -92,8 +97,9 @@ def plot_mcherry_intensity_presyn(
         "Number of presynaptic cells + 1",
         fontsize=label_fontsize,
     )
+    if set_ticks:
+        ax.set_xticks(np.log([100, 1000]), labels=[100, 1000])
     ax.set_yticks(np.log([1, 10, 100]), labels=[1, 10, 100])
-    ax.set_xticks(np.log([100, 1000]), labels=[100, 1000])
 
     ax.tick_params(
         axis="both",

@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+import matplotlib.ticker as mticker
 from brisc.manuscript_analysis.utils import despine
 
 
@@ -125,11 +126,10 @@ def plot_presyn_per_barcode(
         bins = 10 ** (np.arange(0, np.log10(max_n), 0.16))
         i = 0
         for cells, color in zip((cells_without_starter, cells_with_starter), colors):
-            c = cells[cells != 0]
             # c = np.log10(c)
-            h, b = np.histogram(c, bins=bins)
+            h, b = np.histogram(cells, bins=bins)
             ax.stairs(
-                h / len(c),
+                h / len(cells),
                 b,
                 fill=True,
                 color=color,
@@ -138,7 +138,7 @@ def plot_presyn_per_barcode(
                 label=labels[i],
             )
             ax.stairs(
-                h / len(c),
+                h / len(cells),
                 b,
                 fill=False,
                 color=color,
@@ -146,8 +146,47 @@ def plot_presyn_per_barcode(
                 alpha=1,
                 label="__no_legend__",
             )
+
+            zero_cells = (cells == 0).sum()
+            ax.stairs(
+                [zero_cells / len(cells)],
+                [0.48, 0.69],
+                fill=True,
+                color=color,
+                lw=linewidth,
+                alpha=alpha,
+                label="__no_legend__",
+            )
+            ax.stairs(
+                [zero_cells / len(cells)],
+                [0.48, 0.69],
+                fill=False,
+                color=color,
+                lw=linewidth,
+                alpha=1,
+                label="__no_legend__",
+            )
+
             i += 1
+
         ax.set_xscale("log")
+        ax.set_xlim(0.48, b[-1])
+        ax.set_xticks(
+            [np.sqrt(0.48 * 0.69), 1, 10, 100],
+            labels=["0", "1", "10", "100"],
+            fontsize=tick_fontsize,
+        )
+        # Manually set minor ticks to appear only for values >= 1
+        # Generate minor ticks for decades starting from 10**0 (which is 1)
+        minor_ticks = [
+            j * (10**i)
+            for i in range(0, 100)
+            for j in range(2, 10)
+            if j * (10**i) < 100
+        ]
+        ax.xaxis.set_minor_locator(mticker.FixedLocator(minor_ticks))
+        ax.xaxis.set_minor_formatter(mticker.NullFormatter())
+
     else:
         bin_edges = np.arange(0, max_val + 1, 1)
         bin_edges[-1] = 1e4
@@ -185,7 +224,7 @@ def plot_presyn_per_barcode(
         loc="upper right",
         fontsize=tick_fontsize,
         frameon=False,
-        bbox_to_anchor=[1.2, 1],
+        bbox_to_anchor=[1.3, 1],
         handlelength=1,
     )
     ax.tick_params(

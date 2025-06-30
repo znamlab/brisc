@@ -6,7 +6,7 @@ from pathlib import Path
 import functools
 
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
+from matplotlib import colors
 import matplotlib
 from brisc.manuscript_analysis.utils import despine
 
@@ -14,6 +14,7 @@ matplotlib.rcParams[
     "pdf.fonttype"
 ] = 42  # Use Type 3 fonts (TrueType) for selectable text
 matplotlib.rcParams["ps.fonttype"] = 42  # For EPS, if relevant
+plt.rcParams.update({"mathtext.default": "regular"})  # make math mode also Arial
 
 
 def _hamming_distance(str1, str2):
@@ -142,8 +143,10 @@ def plot_matches_to_library(
     ax=None,
     label_fontsize=12,
     tick_fontsize=12,
-    line_width=0.5,
+    linewidth=0.5,
+    hist_edgewith=0.5,
     num_bins=20,
+    alpha=1,
 ):
     # Define bin edges for consistent binning
     bin_edges = np.logspace(0, 6, num=num_bins)
@@ -183,63 +186,61 @@ def plot_matches_to_library(
     # Plot normalized histograms as step-line plots
     for this_ax in ax:
         plt.sca(this_ax)
+        # Plot normalized library sequence data as a black line
+        plt.stairs(
+            counts[1:],
+            bin_edges[1:],
+            linestyle="-",
+            linewidth=linewidth,  # hist_edgewith,
+            label="Viral library barcodes",
+            fill=False,
+            edgecolor="black",
+            # facecolor="slategray",
+        )
+
         plt.stairs(
             in_situ_hist[1:],
             bin_edges[1:],
             color="dodgerblue",
             linestyle="-",
-            linewidth=line_width,
+            linewidth=linewidth,
             label="In situ barcodes",
+            alpha=alpha,
         )
         plt.stairs(
             [
                 in_situ_hist[0],
             ],
-            [0.03, 0.1],
+            [0.03, 0.06],
             color="dodgerblue",
             linestyle="-",
-            linewidth=line_width,
+            linewidth=linewidth,
+            alpha=alpha,
         )
         plt.stairs(
             random_hist[1:],
             bin_edges[1:],
-            color="darkorange",
-            linestyle="-",
-            linewidth=line_width,
+            color="dodgerblue",
+            linestyle=(0, (2, 1)),
+            linewidth=linewidth,
             label="Random barcodes",
         )
         plt.stairs(
             [
                 random_hist[0],
             ],
-            [0.03, 0.1],
-            color="darkorange",
-            linestyle="-",
-            linewidth=line_width,
-        )
-
-        # Plot normalized library sequence data as a dashed black line
-        plt.stairs(
-            counts[1:],
-            bin_edges[1:],
-            color="black",
-            linestyle="--",
-            linewidth=line_width,
-            label="Viral library barcodes",
+            [0.03, 0.06],
+            color="dodgerblue",
+            linestyle=(0, (2, 1)),
+            linewidth=linewidth,
         )
 
         # X-axis log scale
         this_ax.set_xscale("log")
-        despine(this_ax)
-        this_ax.tick_params(
-            axis="both",
-            which="major",
-            labelsize=tick_fontsize,
-        )
 
     # X-axis formatting
     ax[0].set_xlabel(
-        "Proportion of unique reads in viral library",
+        "Proportion of unique reads in viral library per barcode",
         fontsize=label_fontsize,
     )
     # ax[0].xaxis.set_major_locator(mticker.FixedLocator(locs=np.logspace(0, 6, 5)))
@@ -248,20 +249,44 @@ def plot_matches_to_library(
     xticklab = np.array([1e-8, 1e-5, 1e-2])
     xtick = xticklab * total_read_in_library
     ax[0].set_xticks(
-        np.hstack([np.sqrt(0.03 * 0.1), xtick]),
+        np.hstack([np.sqrt(0.03 * 0.06), xtick]),
         labels=["$0$", "$10^{-8}$", "$10^{-5}$", "$10^{-2}$"],
     )
 
     # Y-axis label
+    slate4label = np.array(colors.to_rgb("slategray")) * 0  # Keep it black
+    twinxs = [ax[0].twinx(), ax[1].twinx()]
+    twinxs[0].set_ylabel(
+        "             Proportion of unique reads",
+        fontsize=label_fontsize,
+        color=slate4label,
+    )
     ax[0].set_ylabel(
         "             Proportion of barcodes",
         fontsize=label_fontsize,
+        color="dodgerblue",
     )
-    ax[0].set_ylim(0, 0.2)
-    ax[1].set_ylim(0.6, 0.65)
-    # Y-axis scale (0 to 1 since everything is normalized)
-    # ax.set_xlim(1, 1e6)
-    # ax.set_ylim(0, 1.05)
-    ax[1].spines.bottom.set_visible(False)
-    ax[1].set_xticks([])
+    for iax, x in enumerate([ax, twinxs]):
+        x[0].set_ylim(0, 0.2)
+        x[1].set_ylim(0.6, 0.65)
+        for this_ax in x:
+            despine(this_ax)
+            this_ax.tick_params(
+                axis="both",
+                which="major",
+                labelsize=tick_fontsize,
+            )
+        x[0].set_yticks(
+            [0, 0.1, 0.2],
+            labels=[0, 0.1, 0.2],
+            color=slate4label if iax else "dodgerblue",
+        )
+        x[1].set_yticks(
+            [0.6, 0.65], labels=[0.6, 0.65], color=slate4label if iax else "dodgerblue"
+        )
+        x[1].spines.bottom.set_visible(False)
+        x[1].set_xticks([])
+        x[0].spines.right.set_visible(True)
+        x[1].spines.right.set_visible(True)
+
     ax[1].legend(loc="upper right", fontsize=tick_fontsize, frameon=False)
