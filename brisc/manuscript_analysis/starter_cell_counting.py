@@ -121,11 +121,11 @@ def plot_starter_dilution_densities(
 
     # Remove zres 25
     v1 = v1.loc[v1["zres"] == 8]
-    order = ["1/100", "1/330", "1/1000", "1/3300"]
+    order = ["1/100", "1/330", "1/1000", "1/3300"][::-1]
     if titre is not None:
-        dilution = np.array([1 / 100, 1 / 330, 1 / 1000, 1 / 3300])
+        dilution = np.array([1 / 100, 1 / 330, 1 / 1000, 1 / 3300])[::-1]
         num_particle = dilution * volume * 1e-3 * titre
-        lab = [f"{p:.0e}" for p in num_particle]
+        lab = [f"{p:.1e}" for p in num_particle]
         xtlabel = []
         for l in lab:
             parts = l.split("e+")
