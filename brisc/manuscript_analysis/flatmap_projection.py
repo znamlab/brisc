@@ -6,8 +6,6 @@ import ccf_streamlines.projection as ccfproj
 
 import flexiznam as flz
 
-from brisc.exploratory_analysis.plot_summary_for_all_bc import ARA_PROJECTION
-
 
 ARA_PROJECTION = "flatmap_dorsal"
 ATLAS_SIZE = 10
