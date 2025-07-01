@@ -979,7 +979,7 @@ def bubble_plot(
 
     This function creates a scatter plot where each bubble represents a
     cell in the input matrices. The size of the bubble corresponds to the
-    absolute log-ratio, and the color corresponds to the signed -log2(p-value).
+    absolute log-ratio, and the color corresponds to the signed -log10(p-value).
     Significant cells (p-value < alpha) are outlined in black.
 
     Args:
@@ -1021,7 +1021,7 @@ def bubble_plot(
     df_plot["bubble_size"] = df_plot["log_ratio"].abs() * size_scale
     # Color value = sign(log_ratio) * -log2(p_value)
     # => Positive log-ratio => red, negative => blue
-    df_plot["color_value"] = np.sign(df_plot["log_ratio"]) * -np.log2(
+    df_plot["color_value"] = np.sign(df_plot["log_ratio"]) * -np.log10(
         df_plot["p_value"].clip(lower=1e-300)
     )
     # Main scatter
@@ -1050,7 +1050,9 @@ def bubble_plot(
     )
     if cbax:
         plt.colorbar(sc, cax=cbax, ax=ax)
-        cbax.set_title("Signed\n$\log_{2}$ p-value", fontsize=tick_fontsize, loc="left")
+        cbax.set_title(
+            "Signed\n$\log_{10}$ p-value", fontsize=tick_fontsize, loc="left"
+        )
         cbax.tick_params(
             axis="both",
             which="both",
