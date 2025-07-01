@@ -2,6 +2,7 @@ import iss_analysis as issa
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy.stats import linregress
 import flexiznam as flz
 import seaborn as sns
 
@@ -82,7 +83,12 @@ def plot_mcherry_intensity_presyn(
         robust=True,
         ax=ax,
     )
-
+    slope, intercept, rvalue, pvalue, stderr = linregress(
+        x=np.log(valid[xcol].values), y=np.log(valid["n_presynaptic"].values)
+    )
+    txt = f"n = {len(valid)}, # presynaptic = {slope:.2f} mCherry + {intercept:.2f}."
+    txt += f" rvalue={rvalue:.2f}, pvalue={pvalue:.2e}"
+    print(txt)
     # ax.scatter(
 
     #     valid["n_presynaptic"],
