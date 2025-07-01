@@ -41,8 +41,9 @@ def match_barcodes(cells_df):
 
 def compute_input_fractions(starter_row, presyn_cells, presyn_grouping):
     """
-    For a single starter cell row, find all presynaptic cells sharing at least one barcode,
-    then compute the counts and input fraction of those presynaptic cells coming from each presyn group.
+    For a single starter cell row, find all presynaptic cells sharing at least one
+    barcode, then compute the counts and input fraction of those presynaptic cells
+    coming from each presyn group.
 
     Args:
         starter_row (pd.Series): Row of starter cell data
@@ -136,7 +137,10 @@ def compute_connectivity_matrix(
     return total_counts_df, mean_frac_df, fractions_df, counts_df
 
 
-def compute_odds_ratio(p_matrix, starter_counts):
+def compute_odds_ratio(
+    p_matrix: pd.DataFrame,
+    starter_counts: pd.Series,
+) -> pd.DataFrame:
     """
     Calculate the odds ratio comparing p_matrix (the fraction of presynaptic outputs)
     to the fraction of all starter cells in each area.
@@ -457,7 +461,11 @@ def shuffle_wrapper(arg):
     )
 
 
-def compare_to_shuffle(observed_matrix, shuffled_matrices, alpha=0.05):
+def compare_to_shuffle(
+    observed_matrix: pd.DataFrame,
+    shuffled_matrices: np.ndarray,
+    alpha: float = 0.05,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Compares an observed matrix to shuffled matrices to find significant differences.
 
     This function calculates the log2 ratio of an observed connectivity matrix
