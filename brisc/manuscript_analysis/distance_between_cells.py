@@ -1,3 +1,4 @@
+from functools import partial
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import cdist
@@ -325,3 +326,185 @@ def plot_3d_distance_histo(
         fontsize=tick_fontsize,
         loc="upper right",
     )
+
+
+def compute_pairwise_distances(df, return_section_info=False, get_nonadj_id=False):
+    """Computes pairwise distances between all rows in a DataFrame.
+
+    This function calculates the Euclidean distance between all pairs of
+    points defined by the 'ara_x', 'ara_y', and 'ara_z' columns in the
+    input DataFrame. It can optionally also compute the pairwise difference
+    in section numbers.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing cell data. Must include
+            'ara_x', 'ara_y', 'ara_z' columns. If `return_section_info`
+            is True, it must also include an 'absolute_section' column.
+        return_section_info (bool, optional): If True, the function also
+            calculates and returns the pairwise differences in the
+            'absolute_section' column. Defaults to False.
+
+    Returns:
+        np.ndarray or tuple[np.ndarray, np.ndarray]:
+            - If `return_section_info` is False, returns a 1D numpy array
+              containing the unique pairwise distances (lower triangle of the
+              distance matrix).
+            - If `return_section_info` is True, returns a tuple of two 1D
+              numpy arrays: (pairwise_distances, section_differences).
+    """
+    coords = df[["ara_x", "ara_y", "ara_z"]].values.astype(float)
+    pairwise = np.linalg.norm(coords[None, :, :] - coords[:, None, :], axis=2)
+    pairwise = np.tril(pairwise)
+    pairwise = pairwise[pairwise != 0]
+    if not return_section_info:
+        return pairwise
+    sec = df["absolute_section"].values.astype(float)
+    delta_sec = sec[None, :] - sec[:, None]
+    triu_mask = np.arange(delta_sec.shape[0])[:, None] <= np.arange(delta_sec.shape[1])
+    delta_sec[triu_mask] = np.nan
+    if get_nonadj_id:
+        non_adj = np.logical_and(~np.isnan(delta_sec), np.abs(delta_sec) != 1)
+        non_adj = np.where(non_adj.sum(axis=1) > 0)[0]
+    delta_sec = delta_sec[~np.isnan(delta_sec)]
+    if get_nonadj_id:
+        return pairwise, delta_sec, non_adj
+    return pairwise, delta_sec
+
+
+def compute_distances(df1, df2):
+    """Computes pairwise Euclidean distances between two sets of points.
+
+    This function calculates the distance between each point in `df1` and every
+    point in `df2` based on their 'ara_x', 'ara_y', and 'ara_z' coordinates.
+
+    Args:
+        df1 (pd.DataFrame): DataFrame for the first set of points. Must
+            include 'ara_x', 'ara_y', and 'ara_z' columns.
+        df2 (pd.DataFrame): DataFrame for the second set of points. Must
+            also include 'ara_x', 'ara_y', and 'ara_z' columns.
+
+    Returns:
+        np.ndarray: A 2D numpy array of shape (len(df2), len(df1)) where
+            the element at (i, j) is the distance between the i-th point
+            in df2 and the j-th point in df1.
+    """
+    c1 = df1[["ara_x", "ara_y", "ara_z"]].values.astype(float)
+    c2 = df2[["ara_x", "ara_y", "ara_z"]].values.astype(float)
+    dst = np.linalg.norm(c1[None, :, :] - c2[:, None, :], axis=2)
+    return dst
+
+
+def distances_between_starters(barcode_list, starter_df, verbose=False):
+    """Calculates distances within and between groups of starter cells based on shared
+    barcodes.
+
+    This function is designed to be used in a bootstrapping context. For each
+    barcode in a given sample (`barcode_list`), it identifies the starter cells
+    sharing that barcode. It then computes three sets of distances:
+    1. Pairwise distances among the starter cells sharing the barcode.
+    2. Pairwise differences in section number for the same group.
+    3. Distances from this group of cells to all other starter cells.
+
+    Args:
+        barcode_list (iterable): An iterable of barcodes, typically a bootstrap sample.
+        starter_df (pd.DataFrame): A DataFrame containing only starter cells.
+            Must include 'all_barcodes', 'ara_x', 'ara_y', 'ara_z', and
+            'absolute_section' columns.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray, np.ndarray]: A tuple containing:
+            - dist2same (np.ndarray): 1D array of pairwise distances between
+              starter cells sharing the same barcode.
+            - sectiondiff (np.ndarray): 1D array of pairwise section
+              differences corresponding to `dist2same`.
+            - dist2others (np.ndarray): 1D array of distances from starter
+              cells with a given barcode to all other starter cells.
+    """
+    dist2same = []
+    sectiondiff = []
+    dist2others = []
+    if verbose:
+        bc_used = [set(), set(), set()]
+        cell_used = [set(), set(), set()]
+    for bc in barcode_list:
+        has_bc = starter_df.all_barcodes.map(lambda x: bc in x)
+        cells = starter_df[has_bc]
+        other_cells = starter_df[~has_bc]
+        p, d, nonadjid = compute_pairwise_distances(
+            cells, return_section_info=True, get_nonadj_id=True
+        )
+        if verbose:
+            bc_used[0].add(bc)
+            for bc_other in other_cells.all_barcodes:
+                bc_used[1].update(bc_other)
+            cell_used[0].update(cells.index)
+            cell_used[1].update(other_cells.index)
+            if len(nonadjid) > 0:
+                bc_used[2].add(bc)
+            for i in nonadjid:
+                cell_used[2].add(cells.index[i])
+        d2o = compute_distances(cells, other_cells)
+        dist2others.append(d2o.flatten())
+        dist2same.append(p)
+        sectiondiff.append(d)
+    dist2same = np.hstack(dist2same)
+    sectiondiff = np.hstack(sectiondiff)
+    dist2others = np.hstack(dist2others)
+    if verbose:
+        print(f"BC used: {[len(b) for b in bc_used]}")
+        print(f"Cell used: {[len(b) for b in cell_used]}")
+        return dist2same, sectiondiff, dist2others, bc_used, cell_used
+    return dist2same, sectiondiff, dist2others
+
+
+def bootstrap_barocdes_in_multiple_cells(
+    starter_df, multi_starter_bcs, n_permutations=1000, random_state=12
+):
+    """Performs bootstrap analysis of distances between starter cells sharing barcodes.
+
+    This function simulates the distribution of distances between starter cells
+    that are labeled with the same barcode. It works by repeatedly sampling
+    (with replacement) from a pool of barcodes known to infect multiple starter
+    cells (`multi_starter_bcs`). For each bootstrap sample of barcodes, it
+    calculates the resulting intra- and inter-group distances in parallel.
+
+    Args:
+        starter_df (pd.DataFrame): DataFrame containing all starter cells.
+            Must be compatible with `distances_between_starters`.
+        multi_starter_bcs (iterable): A collection of barcodes that appear in
+            more than one starter cell. This serves as the population for
+            bootstrapping.
+        n_permutations (int, optional): The number of bootstrap iterations to
+            perform. Defaults to 1000.
+        random_state (int, optional): Seed for the random number generator to
+            ensure reproducibility. Defaults to 12.
+
+    Returns:
+        tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
+            A tuple of three lists, where each list contains the results from
+            the `n_permutations` iterations:
+            - dist2same: A list of 1D arrays of pairwise distances between
+              starter cells sharing the same barcode.
+            - sectiondiff: A list of 1D arrays of pairwise section differences.
+            - dist2others: A list of 1D arrays of distances from barcode-sharing
+              groups to other starter cells.
+    """
+    rng = np.random.default_rng(seed=random_state)
+    bootsamples = [
+        rng.choice(list(multi_starter_bcs), size=len(multi_starter_bcs), replace=True)
+        for i in range(n_permutations)
+    ]
+    func = partial(distances_between_starters, starter_df=starter_df)
+    bootstrapped_results = process_map(
+        func,
+        bootsamples,
+        max_workers=round(cpu_count() / 3),
+        desc="Hierarchical Bootstrapping",
+        total=n_permutations,
+        chunksize=10,
+    )
+    dist2same = [b[0] for b in bootstrapped_results]
+    sectiondiff = [b[1] for b in bootstrapped_results]
+    dist2others = [b[2] for b in bootstrapped_results]
+
+    return dist2same, sectiondiff, dist2others
