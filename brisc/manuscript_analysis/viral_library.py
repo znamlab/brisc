@@ -242,19 +242,26 @@ def plot_unique_label_fraction(
         fractions = [
             fraction_unique(barcode_probability, num) for num in evaluation_points
         ]
+
         # We want to print the number of cells that can be picked to have 95% unique
         # barcodes
-        closest_id = len(fractions) - np.searchsorted(fractions[::-1], 0.95) - 1
+        def find_max_cell_below_percprop(fractions, evaluation_points, thres):
+            closest_id = len(fractions) - np.searchsorted(fractions[::-1], thres) - 1
 
-        def cost(x):
-            return ((fraction_unique(barcode_probability, x) - 0.95)) ** 2
+            def cost(x):
+                return ((fraction_unique(barcode_probability, x) - thres)) ** 2
 
-        max_95cells = evaluation_points[closest_id]
-        res = minimize_scalar(cost)
-        max_95cells = int(np.round(res.x))
-        print(
-            f"For {library_label}, 95% unique at {max_95cells:.0f} cells ({fraction_unique(barcode_probability,max_95cells)*100:.2f}%)"
-        )
+            max_thres_cells = evaluation_points[closest_id]
+            res = minimize_scalar(cost)
+            max_thres_cells = int(np.round(res.x))
+            return max_thres_cells
+
+        max_95cells = find_max_cell_below_percprop(fractions, evaluation_points, 0.95)
+        max_99cells = find_max_cell_below_percprop(fractions, evaluation_points, 0.99)
+        txt = f"For {library_label}, 95% unique at {max_95cells:.0f} cells"
+        txt += f"-- 99% unique at {max_99cells:.0f} cells"
+
+        print(txt)
 
         if not log_scale:
             ax.plot(
