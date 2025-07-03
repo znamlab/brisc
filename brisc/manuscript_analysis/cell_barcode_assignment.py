@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import iss_preprocess as iss
-import flexiznam as flz
 from iss_preprocess.io import get_processed_path, get_roi_dimensions
 from iss_preprocess.pipeline.segment import (
     get_cell_masks,
