@@ -254,6 +254,46 @@ def compute_percentile_matrices(bootstrap_list, lower_p=2.5, upper_p=97.5):
     return lower_df, upper_df
 
 
+def calc_pval(a, b, two_sided=True):
+    """Calculate empirical p-value from bootstrap distributions.
+
+    This function computes an empirical p-value to assess the likelihood of
+    observing a value as extreme as `a` given a distribution of values `b`
+    (typically from bootstrapping or permutation testing). It can perform
+    one-sided (right-tailed) or two-sided tests.  A small-sample correction is
+    applied by using (count + 1) / (N + 1), where N is the number of bootstrap samples.
+
+    Args:
+        a (float or int): The observed value or statistic.
+        b (np.ndarray): A 1D numpy array representing the distribution of values from
+            the bootstrap or permutation test.
+        two_sided (bool, optional): If True (default), perform a two-sided test. If
+            False, perform a one-sided (right-tailed) test.
+
+    Returns:
+        float: The calculated p-value.  Will be in the range [0, 1].  For a
+            two-tailed test, this is p_2sided = 2.0 * min(p_left, p_right),
+            clamped to a maximum of 1.0.  For a one-tailed test, this is simply
+            the right-tailed p-value.
+    """
+    n_boot = len(b)
+    # compute p-value
+    count_ge = np.sum(a >= b)
+    count_le = np.sum(a <= b)
+    # Small-sample correction uses (count + 1)/(N + 1)
+    p_right = (count_ge + 1) / (n_boot + 1)
+    p_left = (count_le + 1) / (n_boot + 1)
+    if two_sided:
+        # Two-sided p-value
+        p_2sided = 2.0 * min(p_left, p_right)
+        # Clamp at 1
+        p_val = min(p_2sided, 1.0)
+    else:
+        # One-sided (right-tailed)
+        p_val = p_right
+    return p_val
+
+
 def plot_confidence_intervals(
     mean_input_frac_df,
     lower_df,
