@@ -193,12 +193,16 @@ def shuffle_iteration(args):
 
     Args:
         seed (int): Seed for random number generation.
-        starters_df (pd.DataFrame): DataFrame with starter cell properties, including 'unique_barcodes'.
-        non_starters_df (pd.DataFrame): DataFrame with non-starter cell properties, including 'unique_barcodes'.
+        starters_df (pd.DataFrame): DataFrame with starter cell properties, including
+            'unique_barcodes'.
+        non_starters_df (pd.DataFrame): DataFrame with non-starter cell properties,
+            including 'unique_barcodes'.
 
     Returns:
-        iteration_distances (np.array): 2D array with distances between starter and presynaptic cells.
-        starter_coords_shuffle (np.array): 2D array with x, y, z coordinates of starter cells.
+        iteration_distances (np.array): 2D array with distances between starter and
+            presynaptic cells.
+        starter_coords_shuffle (np.array): 2D array with x, y, z coordinates of starter
+            cells.
 
     """
     seed, cells_df, col_prefix, col_suffix = args

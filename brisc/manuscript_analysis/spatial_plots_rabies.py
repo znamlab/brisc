@@ -4,6 +4,7 @@ import matplotlib.cm as cm
 import numpy as np
 import brainglobe_atlasapi as bga
 import pandas as pd
+from tqdm import tqdm
 import seaborn as sns
 from cricksaw_analysis import atlas_utils
 from .flatmap_projection import get_avg_layer_depth
@@ -34,7 +35,7 @@ def prepare_area_labels(
 ):
     atlas = bga.bg_atlas.BrainGlobeAtlas(f"allen_mouse_{atlas_size}um")
     bin_image = atlas.get_structure_mask(atlas.structures["root"]["id"])[xpos, :, :]
-    for i, structure in enumerate(structures):
+    for i, structure in enumerate(tqdm(structures, desc="Preparing area labels")):
         mask = atlas.get_structure_mask(atlas.structures[structure]["id"])[xpos, :, :]
         bin_image[mask > 0] = i + 1
     return bin_image
