@@ -145,7 +145,7 @@ def plot_selected_rounds(
         rgb_stack = np.rot90(rgb_stack, 1, (0, 1))
         ax.imshow(rgb_stack)
         # put title on bottom
-        ax.set_title(f"Round {iround}", fontsize=fontsize, y=-0.45)
+        ax.set_title(f"Round {iround}", fontsize=fontsize, y=-0.25)
         if iround == 1:
             add_bases_legend(channel_colors, ax.transAxes, fontsize=fontsize)
 
@@ -153,6 +153,7 @@ def plot_selected_rounds(
         ax.set_facecolor("black")
         ax.set_xticks([])
         ax.set_yticks([])
+        ax.axis("off")
 
 
 def make_downsampled_rgb(
