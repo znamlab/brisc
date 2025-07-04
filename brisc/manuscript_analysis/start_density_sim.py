@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.optimize import minimize_scalar
 from brisc.manuscript_analysis.utils import despine
 
 
@@ -33,19 +34,31 @@ def plot_starter_spread_sim(
         matplotlib.axes.Axes: Axes object with the secondary x-axis.
     """
 
+    # Horizontal dashed line at starter_spread_probability
+    ax.axhline(
+        starter_spread_probability,
+        linestyle="dashed",
+        color="black",
+        lw=line_width * 0.7,
+    )
+
+    # Vertical dashed line at the cross of the n=20 line and the proba
+    def cost(density):
+        return ((1 - (1 - density) ** 20) - starter_spread_probability) ** 2
+
+    density_threshold = minimize_scalar(cost)
+    assert density_threshold.success
+    density_threshold = density_threshold.x
+    ax.axvline(
+        density_threshold,
+        linestyle="dashed",
+        color="black",
+        lw=line_width * 0.7,
+    )
+    # Lines for different cell/starter number
     for n, color in zip(ns, colors):
         p = 1 - (1 - density) ** n
         ax.loglog(density, p, label=str(n), lw=line_width, c=color)
-
-    # Horizontal dashed line at starter_spread_probability
-    ax.hlines(
-        starter_spread_probability,
-        x_range[0],
-        x_range[1],
-        linestyles="dashed",
-        colors="black",
-        lw=line_width,
-    )
 
     ax.set_xlim(x_range[0], x_range[1])
     ax.set_xscale("log")
@@ -85,6 +98,12 @@ def plot_starter_spread_sim(
 
     def density_to_fraction(x):
         return x / v1_cell_density
+
+    print(
+        f"For 20 presynaptics per starter, the {starter_spread_probability*100:.0f}% "
+        f"threshold is crossed at p={density_threshold*100:.2f}%, or "
+        f"{fraction_to_density(density_threshold):.0f} cells/mm$^3$"
+    )
 
     # Create a secondary x-axis at the top that shows absolute density
     ax2 = ax.secondary_xaxis(

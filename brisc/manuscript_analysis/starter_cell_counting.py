@@ -230,8 +230,6 @@ def plot_starter_confocal(ax, img, metadata):
         rotated = cv2.warpAffine(image, M, (w, h))
         return cv2.flip(rotated, 1) if flip else rotated
 
-    # Create two sub-axes within the given ax
-    # inset_axes = [ax.inset_axes([0, 0.5, 1, 0.5]), ax.inset_axes([0, 0, 1, 0.5])]
     zplanes = [3, 4, 5]
 
     img = np.mean(img[:, zplanes, :, :], axis=1)
@@ -252,27 +250,6 @@ def plot_starter_confocal(ax, img, metadata):
     rgb = vis.to_rgb(stack, colors, vmax=[1000, 10000, 5000], vmin=None)
     ax.imshow(rgb, vmin=0, vmax=5000)
 
-    # Add scalebar
-    bar_length = 20  # Scale bar in micrometers
-    scalebar2 = plt.Line2D(
-        [rgb.shape[1] - 140, rgb.shape[1] + bar_length / scale["X"] - 140],
-        [rgb.shape[0] - 50, rgb.shape[0] - 50],
-        color="white",
-        linewidth=4,
-    )
-    # fontprops = fm.FontProperties(size=label_fontsize)
-    # scalebar = AnchoredSizeBar(
-    #     ax.transData,
-    #     bar_length / scale["X"],
-    #     loc="lower right",
-    #     label_top=True,
-    #     color="white",
-    #     frameon=False,
-    #     size_vertical=5,
-    #     prop=fontprops,
-    # )
-    # ax.add_artist(scalebar)
-
     # Add starter cell arrows
     # starters = [np.array([390, 200]), np.array([650, 480])]
     starters = [np.array([220, 130]), np.array([460, 430])]
@@ -289,12 +266,6 @@ def plot_starter_confocal(ax, img, metadata):
                 headwidth=6,
             ),
         )
-
-    # sub_ax.set_xticks([])
-    # sub_ax.set_yticks([])
-
-    # Adjust layout
-    # ax.figure.subplots_adjust(top=1, bottom=0, left=0, right=1, wspace=0, hspace=0)
     ax.axis("off")
     return ax
 
@@ -571,7 +542,25 @@ def plot_taillocal_scatter(ax, colors, fontsize_dict, clicked_cells=None, **kwar
 
 
 def plot_pairwise_dist_distri(ax, colors, fontsize_dict, clicked_cells=None, **kwargs):
-    """"""
+    """Plots the distribution of pairwise distances between cells for two conditions.
+
+    This function visualizes the spatial spread of cells from 'local' and 'tail'
+    injections by plotting the kernel density estimate (KDE) of all pairwise
+    Euclidean distances within each group. The median distance for each group is
+    indicated with a triangular marker.
+
+    Args:
+        ax (matplotlib.axes.Axes): The axes on which to plot.
+        colors (tuple or list): A sequence of two colors for the 'local' and
+            'tail' distributions, respectively.
+        fontsize_dict (dict): A dictionary containing font sizes for plot elements,
+            e.g., {'label': 12, 'tick': 10}.
+        clicked_cells (dict, optional): A dictionary with keys 'local' and 'tail',
+            where each value is a numpy array of cell coordinates (N, 3). If not
+            provided, data is loaded using `load_cell_click_data`.
+            Defaults to None.
+        **kwargs: Additional keyword arguments passed to `ax.plot` for the KDE lines.
+    """
     if clicked_cells is None:
         clicked_cells = load_cell_click_data(relative=True)
 
