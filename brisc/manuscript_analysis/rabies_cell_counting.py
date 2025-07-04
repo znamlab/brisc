@@ -41,7 +41,7 @@ def mask_points(pts, mask):
     return pts[interpolated_values > 0]
 
 
-def plot_rv_coronal_slice(ax, mcherry, background):
+def plot_rv_coronal_slice(injection_center, ax, mcherry, background):
     """
 
     Returns:
@@ -64,10 +64,11 @@ def plot_rv_coronal_slice(ax, mcherry, background):
 
     # masked_points = mask_points(pts, mask)
 
-    # Normalize and create RGB for the second subplot
-    cropped_mcherry = mcherry[620:750, :, :]
+    # Normalize and create RGB for the second subplot[673, 205, 890]
+    z, row, col = injection_center
+    cropped_mcherry = mcherry[z - 50 : z + 50, :, :]
     cropped_mcherry_normalized = normalize(cropped_mcherry, 0, 3000)
-    cropped_background_channel = normalize(background[620:750, :, :], 0, 1500)
+    cropped_background_channel = normalize(background[z - 50 : z + 50, :, :], 0, 1500)
 
     rgb2 = np.zeros((*cropped_mcherry_normalized.max(axis=0).shape, 3))
     rgb2[..., 0] = cropped_mcherry_normalized.max(axis=0)  # Red channel for mCherry
@@ -82,46 +83,18 @@ def plot_rv_coronal_slice(ax, mcherry, background):
     ax_overview.set_yticks([])
     for spine in ax_overview.spines.values():
         spine.set_edgecolor("white")
-    rgb2 = rgb2[75:600, 500:-50, :]
+    rgb2 = rgb2[max(0, row - 90) : row + 380, col - 310 : col + 290, :]
     ax_zoom.imshow(rgb2)
-    # plot_cells = False
-    # if plot_cells:
-    #     ax.scatter(
-    #         masked_points.iloc[:, 2],
-    #         masked_points.iloc[:, 1],
-    #         s=0.1,
-    #         alpha=0.3,
-    #         color="white",
-    #     )
-    # ax.scatter(inj_center[2], inj_center[1], s=5, color="white")
-    # circle2 = plt.Circle(
-    #     (inj_center[2], inj_center[1]),
-    #     50,
-    #     color="lightblue",
-    #     linewidth=1,
-    #     fill=False,
-    #     alpha=0.6,
-    # )
-    # ax.add_artist(circle2)
     ax_zoom.set_aspect("equal")
     ax_zoom.axis("off")
 
     scalebar2 = plt.Line2D(
         [rgb2.shape[1] - 140, rgb2.shape[1] - 40],
-        [rgb2.shape[0] - 50, rgb2.shape[0] - 50],
+        [rgb2.shape[0] - 30, rgb2.shape[0] - 30],
         color="white",
         linewidth=4,
     )
     ax_zoom.add_line(scalebar2)
-    # ax_zoom.text(
-    #     rgb2.shape[1] - 90,
-    #     rgb2.shape[0] - 60,
-    #     "1 mm",
-    #     color="white",
-    #     ha="center",
-    #     va="bottom",
-    #     fontsize=label_fontsize,
-    # )
 
 
 def mask_rounded_points(points, mask):
@@ -148,9 +121,9 @@ def mask_rounded_points(points, mask):
 
 
 def plot_rabies_density(
-    inj_center=np.array([673, 205, 890]),
+    inj_center,
     project="rabies_barcoding",
-    mouse="BRYC64.2i",
+    mouse="BRYC64.2h",
     processed=Path("/nemo/lab/znamenskiyp/home/shared/projects/"),
     ax=None,
     label_fontsize=12,
