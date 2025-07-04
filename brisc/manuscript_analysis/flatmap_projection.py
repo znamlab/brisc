@@ -55,6 +55,7 @@ def compute_flatmap_coors(
     projection="flatmap_dorsal",
     distance_cutoff=150,
     thickness_type="unnormalized",
+    hemisphere="right",
 ):
     """Compute coordinates on ARA flatmap
 
@@ -92,7 +93,10 @@ def compute_flatmap_coors(
     if projection == "flatmap_dorsal":
         view_space = "flatmap_dorsal"
     elif projection == "top":
-        view_space = False
+        if hemisphere == "both":
+            view_space = True
+        else:
+            view_space = False
     else:
         print(f"Warning unknown projections: {projection}.")
         view_space = False
@@ -100,7 +104,7 @@ def compute_flatmap_coors(
         ori_coors[~bad, :] * 1000,
         drop_voxels_outside_view_streamlines=False,
         view_space_for_other_hemisphere=view_space,
-        hemisphere="right",
+        hemisphere=hemisphere,
         thickness_type=thickness_type,
     )
     if distance_cutoff is None or distance_cutoff <= 0:
@@ -165,7 +169,7 @@ def compute_flatmap_coors(
         closest_reflected[close_enough, :] * ccf_coord_proj.resolution[0],
         drop_voxels_outside_view_streamlines=False,
         view_space_for_other_hemisphere=view_space,
-        hemisphere="right",
+        hemisphere=hemisphere,
         thickness_type=thickness_type,
     )
     flat_coors[to_move, :] = reprojected
