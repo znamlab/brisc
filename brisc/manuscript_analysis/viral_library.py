@@ -122,6 +122,7 @@ def plot_barcode_counts_and_percentage(
     line_alpha=0.6,
     line_width=2,
     colors=("dodgerblue", "turquoise", "gold", "darkorange", "green"),
+    show_legend=True,
 ):
     """
     Plot barcode abundance (log scale, left y-axis) and
@@ -139,6 +140,7 @@ def plot_barcode_counts_and_percentage(
         line_alpha (float): Alpha value for plot lines.
         line_width (int): Width of plot lines.
         colors (list): List of colors for plotting.
+        show_legend (bool): display legend
 
     Returns:
         matplotlib.axes.Axes: Axes containing the plot.
@@ -177,16 +179,53 @@ def plot_barcode_counts_and_percentage(
         labelsize=tick_fontsize,
     )
 
-    # Legend (based on ax_left handles/labels)
-    ax.legend(
-        fontsize=tick_fontsize,
-        loc="upper right",
-        frameon=False,
-        handlelength=1,
-        bbox_to_anchor=(1.2, 1.05),
-        borderpad=0.0,
-    )
+    if show_legend:
+        # Legend (based on ax_left handles/labels)
+        ax.legend(
+            fontsize=tick_fontsize,
+            loc="upper right",
+            frameon=False,
+            handlelength=1,
+            bbox_to_anchor=(1.2, 1.05),
+            borderpad=0.0,
+        )
     despine(ax)
+
+
+def find_max_cell_below_percprop(
+    barcode_probability, fractions, evaluation_points, thres
+):
+    """Find the maximum number of cells that can be infected to achieve a target
+    fraction of uniquely labeled cells.
+
+    This function uses numerical optimization to find the number of infected
+    cells (`cell_num`) that minimizes the difference between the calculated
+    `fraction_unique(barcode_probability, cell_num)` and the desired
+    threshold `thres`.
+
+    Args:
+        barcode_probability (np.ndarray): An array containing the probability of
+            picking each barcode from the library.
+        fractions (list or np.ndarray): Pre-computed fractions of uniquely
+            labeled cells corresponding to the `evaluation_points`.
+        evaluation_points (list or np.ndarray): The number of infected cells
+            for which `fractions` were calculated.
+        thres (float): The target fraction of uniquely labeled cells (e.g., 0.95
+            for 95%).
+
+    Returns:
+        int: The estimated maximum number of infected cells that results in a
+             unique labeling fraction approximately equal to `thres`.
+    """
+    closest_id = len(fractions) - np.searchsorted(fractions[::-1], thres) - 1
+
+    def cost(x):
+        return ((fraction_unique(barcode_probability, x) - thres)) ** 2
+
+    max_thres_cells = evaluation_points[closest_id]
+    res = minimize_scalar(cost)
+    max_thres_cells = int(np.round(res.x))
+    return max_thres_cells
 
 
 def plot_unique_label_fraction(
@@ -202,6 +241,7 @@ def plot_unique_label_fraction(
     line_width=2,
     colors=("dodgerblue", "turquoise", "gold", "darkorange", "green"),
     show_legend=True,
+    verbose=True,
 ):
     """
     Plot fraction of uniquely labeled cells vs. number of infections,
@@ -227,6 +267,9 @@ def plot_unique_label_fraction(
         line_alpha (float): Alpha value for plot lines.
         line_width (int): Width of plot lines.
         colors (list): List of colors for plotting.
+        show_legend (bool): Show legend.
+        verbose (bool): Print verbose output.
+
 
     Returns:
         matplotlib.axes.Axes: Axes containing the plot.
@@ -243,25 +286,18 @@ def plot_unique_label_fraction(
             fraction_unique(barcode_probability, num) for num in evaluation_points
         ]
 
-        # We want to print the number of cells that can be picked to have 95% unique
-        # barcodes
-        def find_max_cell_below_percprop(fractions, evaluation_points, thres):
-            closest_id = len(fractions) - np.searchsorted(fractions[::-1], thres) - 1
-
-            def cost(x):
-                return ((fraction_unique(barcode_probability, x) - thres)) ** 2
-
-            max_thres_cells = evaluation_points[closest_id]
-            res = minimize_scalar(cost)
-            max_thres_cells = int(np.round(res.x))
-            return max_thres_cells
-
-        max_95cells = find_max_cell_below_percprop(fractions, evaluation_points, 0.95)
-        max_99cells = find_max_cell_below_percprop(fractions, evaluation_points, 0.99)
-        txt = f"For {library_label}, 95% unique at {max_95cells:.0f} cells"
-        txt += f"-- 99% unique at {max_99cells:.0f} cells"
-
-        print(txt)
+        if verbose:
+            # We want to print the number of cells that can be picked to have 95% unique
+            # barcodes
+            max_95cells = find_max_cell_below_percprop(
+                barcode_probability, fractions, evaluation_points, 0.95
+            )
+            max_99cells = find_max_cell_below_percprop(
+                barcode_probability, fractions, evaluation_points, 0.99
+            )
+            txt = f"For {library_label}, 95% unique at {max_95cells:.0f} cells"
+            txt += f"-- 99% unique at {max_99cells:.0f} cells"
+            print(txt)
 
         if not log_scale:
             ax.plot(
