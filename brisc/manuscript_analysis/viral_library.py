@@ -104,9 +104,12 @@ def load_library_data(data_path, library, edit_distance, collapse):
     # Prepare file paths
     fname = data_path / library / f"{library}_{collapse}_ed{edit_distance}.txt"
     with open(fname, "r", encoding="utf-8-sig") as encoded_path:
-        sequencing_counts = np.genfromtxt(
-            encoded_path, delimiter="\t", dtype=int, usecols=(0)
-        )
+        data = np.genfromtxt(encoded_path, delimiter="\t")
+        # Check if data has one or two columns
+        if data.ndim == 1:  # Single column
+            sequencing_counts = data.astype(int)
+        else:  # Two columns
+            sequencing_counts = data[:, 0].astype(int)
 
     array = np.zeros((len(sequencing_counts), 2))
     array[:, 0] = np.arange(1, len(sequencing_counts) + 1)
