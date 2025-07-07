@@ -130,7 +130,7 @@ def plot_starter_dilution_densities(
         for l in lab:
             parts = l.split("e+")
             xtlabel.append(f"{parts[0]}x$10^{{{int(parts[1])}}}$")
-        xlabel = "# of viral particles injected"
+        xlabel = "Number of viral particles injected"
     else:
         xtlabel = order
         xlabel = ("AAV hSyn-Cre dilution",)
