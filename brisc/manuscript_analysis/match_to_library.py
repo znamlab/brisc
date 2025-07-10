@@ -8,7 +8,7 @@ import functools
 import matplotlib.pyplot as plt
 from matplotlib import colors
 import matplotlib
-from brisc.manuscript_analysis.utils import despine
+from .utils import despine
 
 matplotlib.rcParams[
     "pdf.fonttype"

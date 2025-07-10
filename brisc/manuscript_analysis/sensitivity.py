@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from skimage.segmentation import expand_labels
 from tqdm import tqdm
-from brisc.manuscript_analysis.utils import despine
+from .utils import despine
 
 
 def detect_rab_cells(

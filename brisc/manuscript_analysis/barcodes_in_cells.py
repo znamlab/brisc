@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 import matplotlib.ticker as mticker
-from brisc.manuscript_analysis.utils import despine
+from .utils import despine
 
 
 def plot_hist(

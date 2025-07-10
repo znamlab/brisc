@@ -6,7 +6,7 @@ from tqdm.contrib.concurrent import process_map
 from multiprocessing import cpu_count
 from functools import partial
 
-from brisc.manuscript_analysis.connectivity_matrices import compute_connectivity_matrix
+from .connectivity_matrices import compute_connectivity_matrix
 
 
 def bootstrap_cells(cell_df, n_samples=None, random_state=None):

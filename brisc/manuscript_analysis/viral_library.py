@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.ticker as mticker
-from brisc.manuscript_analysis.utils import despine
 from scipy.optimize import minimize_scalar
+from .utils import despine
 
 
 def plasmid_sequencing_data(seq_path):

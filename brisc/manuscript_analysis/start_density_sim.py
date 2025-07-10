@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.optimize import minimize_scalar
-from brisc.manuscript_analysis.utils import despine
+from .utils import despine
 
 
 def plot_starter_spread_sim(

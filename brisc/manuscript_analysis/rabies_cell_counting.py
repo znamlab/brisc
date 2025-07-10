@@ -6,7 +6,7 @@ from brainglobe_atlasapi import BrainGlobeAtlas
 from scipy.ndimage import map_coordinates
 from matplotlib import pyplot as plt
 import matplotlib
-from brisc.manuscript_analysis.utils import despine
+from .utils import despine
 
 matplotlib.rcParams[
     "pdf.fonttype"
