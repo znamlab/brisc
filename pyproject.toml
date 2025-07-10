@@ -24,9 +24,6 @@ dependencies = [
         "shapely",]
 license = {text = "MIT"}
 
-[project.scripts]
-brisc = "brisc.cli:cli"
-
 [project.urls]
 "Homepage" = "https://github.com/znamlab/brisc"
 "Bug Tracker" = "https://github.com/znamlab/brisc/issues"
