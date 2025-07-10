@@ -170,7 +170,7 @@ def plot_barcode_counts_and_percentage(
         lbl.set_visible(False)
 
     ax.set_yscale("log")
-    ax.set_ylim(1, 1e6)
+    ax.set_ylim(0.8, 1e6)
     ax.yaxis.set_major_locator(mticker.FixedLocator(locs=np.logspace(0, 6, 7)))
     for lbl in ax.yaxis.get_ticklabels()[1::2]:
         lbl.set_visible(False)
