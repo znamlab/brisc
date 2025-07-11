@@ -39,7 +39,7 @@ def load_data(
     main_path=Path("/nemo/lab/znamenskiyp"),
     error_correction_ds_name="BRAC8498.3e_error_corrected_barcodes_26",
 ):
-    processed_path = barseq_path / "processed/becalia_rabies_barseq/BRAC8498.3e/"
+    processed_path = barseq_path / "becalia_rabies_barseq/BRAC8498.3e/"
     ara_is_starters = pd.read_pickle(
         processed_path / "analysis" / f"{error_correction_ds_name}_cell_barcode_df.pkl"
     )
@@ -50,7 +50,7 @@ def load_data(
 
     barcode_library_sequence_path = (
         main_path
-        / "home/shared/projects/barcode_diversity_analysis/collapsed_barcodes/RV35/RV35_bowtie_ed2.txt"
+        / "barcode_diversity_analysis/collapsed_barcodes/RV35/RV35_bowtie_ed2.txt"
     )
     rv35_library = pd.read_csv(barcode_library_sequence_path, sep="\t", header=None)
     rv35_library["10bp_seq"] = rv35_library[1].str.slice(0, 10)

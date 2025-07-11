@@ -9,12 +9,13 @@ from cricksaw_analysis.io import load_cellfinder_results
 from cricksaw_analysis.atlas_utils import cell_density_by_areas
 from iss_preprocess import vis
 from scipy.stats import gaussian_kde
-from brisc.manuscript_analysis.utils import despine
 import tifffile as tf
 import flexiznam as flz
 import cv2
 from czifile import CziFile
 from xml.etree import ElementTree
+
+from .utils import despine, get_path
 
 
 def plot_starter_dilution_densities(
@@ -25,13 +26,27 @@ def plot_starter_dilution_densities(
     tick_fontsize=12,
     processed=Path("/nemo/lab/znamenskiyp/home/shared/projects/"),
 ):
-    """
-    Plot the densities of the starter cells for the different dilutions of PHP.eb (only for V1)
+    """Plot starter cell densities for different dilutions.
+
+    This function visualizes the density of starter cells in the primary visual
+    cortex (VISp) across different dilutions of the PHP.eb-Cre virus. It
+    generates a combined strip and box plot, showing individual data points
+    and summary statistics for each dilution.
+
+    The x-axis can represent either the dilution factor or the calculated
+    number of viral particles injected, depending on whether `titre` is provided.
 
     Args:
-        ax:
-        titre: titre in vg/ml
-        volume: injected volume in ul
+        ax (matplotlib.axes.Axes): The axes on which to plot.
+        titre (float, optional): The titre of the virus in vg/ml. If provided,
+            the x-axis will show the number of viral particles.
+            Defaults to 4.5e13.
+        volume (int, optional): The injected volume in nanoliters (nl).
+            Used with `titre` to calculate the number of particles. Defaults to 50.
+        label_fontsize (int, optional): Font size for axis labels. Defaults to 12.
+        tick_fontsize (int, optional): Font size for tick labels. Defaults to 12.
+        processed (pathlib.Path, optional): The base path to the processed
+            project data. Defaults to a hardcoded path.
     """
 
     atlas_size = 25
@@ -193,6 +208,16 @@ def plot_starter_dilution_densities(
 
 
 def load_confocal_image(image_fname):
+    """Load a CZI image file.
+
+    Args:
+        image_fname (str or pathlib.Path): The path to the .czi image file.
+
+    Returns:
+        tuple:
+            - dict: The metadata from the CZI file.
+            - np.ndarray: The image data as a numpy array.
+    """
     with CziFile(image_fname) as czi:
         metadata = czi.metadata(raw=False)
         img = np.squeeze(czi.asarray())
@@ -200,13 +225,21 @@ def load_confocal_image(image_fname):
 
 
 def plot_starter_confocal(ax, img, metadata):
-    """
-    Plot the two inset images inside the given axis, one above the other.
+    """Plot a confocal image of starter cells.
+
+    This function takes a multi-channel confocal image, rotates it, extracts a
+    predefined inset region, and plots an RGB representation on the given axis.
+    It also annotates the locations of presumed starter cells with arrows.
 
     Args:
         ax (matplotlib.axes.Axes): The axis to plot on.
-        label_fontsize (int, optional): Font size for labels. Defaults to 12.
-        tick_fontsize (int, optional): Font size for ticks. Defaults to 10.
+        img (np.ndarray): The input image data, expected to be a
+            multi-channel array.
+        metadata (dict): The metadata dictionary from the CZI file, used to
+            get scaling information.
+
+    Returns:
+        matplotlib.axes.Axes: The axis with the plot.
     """
     # Define parameters
     ROTATION = 103  # rotation in degrees to put pia at the top of the image
@@ -329,6 +362,13 @@ def plot_tail_vs_local_images(
 
 
 def load_tail_vs_local_images():
+    """Load max projection images for tail vein and local injections.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]:
+            - local_img (np.ndarray): Image data for the local injection.
+            - tail_img (np.ndarray): Image data for the tail vein injection.
+    """
     taillocal_projections = flz.get_processed_path(
         "becalia_rabies_barseq/tail_vs_local"
     )
@@ -339,9 +379,10 @@ def load_tail_vs_local_images():
     return local_img, tail_img
 
 
-def load_cell_click_data(relative=False, return_px=False):
-    taillocal_projections = flz.get_processed_path(
-        "becalia_rabies_barseq/tail_vs_local"
+def load_cell_click_data(data_folder, relative=False, return_px=False):
+    """Load manually clicked cell coordinates"""
+    taillocal_projections = get_path(
+        "becalia_rabies_barseq/tail_vs_local", data_root=data_folder
     )
 
     def load_xml_data(path2xml):
@@ -380,9 +421,8 @@ def load_cell_click_data(relative=False, return_px=False):
     return clicked_cells
 
 
-def plot_3d_scatters(ax_local, ax_tail, fontsize_dict, colors, **kwargs):
+def plot_3d_scatters(clicked_cells, ax_local, ax_tail, fontsize_dict, colors, **kwargs):
     # NOT USED
-    clicked_cells = load_cell_click_data(relative=True)
     axes = dict(
         local=ax_local,
         tail=ax_tail,
@@ -425,14 +465,12 @@ def plot_3d_scatters(ax_local, ax_tail, fontsize_dict, colors, **kwargs):
 
 
 def plot_tailvein_vs_local_cells(
-    ax_transverse, ax_distri, fontsize_dict, linewidth=2, kde_bw=1
+    clicked_cells, ax_transverse, ax_distri, fontsize_dict, linewidth=2, kde_bw=1
 ):
     color = dict(
         local="forestgreen",
         tail="slateblue",
     )
-
-    clicked_cells = load_cell_click_data(relative=True)
 
     label = dict(local="Intracortical", tail="Tail vein")
     for where in ["local", "tail"]:
@@ -485,9 +523,8 @@ def plot_tailvein_vs_local_cells(
         despine(ax)
 
 
-def plot_taillocal_ml_distribution(ax, colors, fontsize_dict, **kwargs):
+def plot_taillocal_ml_distribution(clicked_cells, ax, colors, fontsize_dict, **kwargs):
     """"""
-    clicked_cells = load_cell_click_data(relative=True)
     colors = dict(
         local=colors[0],
         tail=colors[1],
@@ -509,10 +546,8 @@ def plot_taillocal_ml_distribution(ax, colors, fontsize_dict, **kwargs):
     return lines
 
 
-def plot_taillocal_scatter(ax, colors, fontsize_dict, clicked_cells=None, **kwargs):
+def plot_taillocal_scatter(clicked_cells, ax, colors, fontsize_dict, **kwargs):
     """"""
-    if clicked_cells is None:
-        clicked_cells = load_cell_click_data(relative=True)
     colors = dict(
         local=colors[0],
         tail=colors[1],
@@ -541,7 +576,7 @@ def plot_taillocal_scatter(ax, colors, fontsize_dict, clicked_cells=None, **kwar
     return scatters
 
 
-def plot_pairwise_dist_distri(ax, colors, fontsize_dict, clicked_cells=None, **kwargs):
+def plot_pairwise_dist_distri(clicked_cells, ax, colors, fontsize_dict, **kwargs):
     """Plots the distribution of pairwise distances between cells for two conditions.
 
     This function visualizes the spatial spread of cells from 'local' and 'tail'
@@ -561,8 +596,6 @@ def plot_pairwise_dist_distri(ax, colors, fontsize_dict, clicked_cells=None, **k
             Defaults to None.
         **kwargs: Additional keyword arguments passed to `ax.plot` for the KDE lines.
     """
-    if clicked_cells is None:
-        clicked_cells = load_cell_click_data(relative=True)
 
     pairwise = {}
     bins = np.arange(0, 1, 0.01)

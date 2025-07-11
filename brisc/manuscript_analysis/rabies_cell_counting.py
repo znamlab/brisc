@@ -6,7 +6,7 @@ from brainglobe_atlasapi import BrainGlobeAtlas
 from scipy.ndimage import map_coordinates
 from matplotlib import pyplot as plt
 import matplotlib
-from .utils import despine
+from .utils import despine, get_path
 
 matplotlib.rcParams[
     "pdf.fonttype"
@@ -215,12 +215,17 @@ def plot_rabies_density(
     despine(ax)
 
 
-def rv_cortical_cell_distances(inj_center, project, mouse, processed):
+def rv_cortical_cell_distances(inj_center, project, mouse, processed, data_root):
     points_file = (
-        processed / project / mouse / "cellfinder_results_010/points/downsampled.points"
+        get_path(project, data_root)
+        / mouse
+        / "cellfinder_results_010/points/downsampled.points"
     )
+
     pts = pd.read_hdf(points_file).values  # Nx3
-    reg_folder = processed / project / mouse / "cellfinder_results_010/registration"
+    reg_folder = (
+        get_path(project, data_root) / mouse / "cellfinder_results_010/registration"
+    )
     atlas = tf.imread(reg_folder / "registered_atlas.tiff")
 
     # -------------------------------------------------------------------------
