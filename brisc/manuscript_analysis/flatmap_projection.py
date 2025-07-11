@@ -11,9 +11,16 @@ ARA_PROJECTION = "flatmap_dorsal"
 ATLAS_SIZE = 10
 
 
+def get_ccf_streamlines_folder():
+    project_folder = Path(flz.PARAMETERS["data_root"]["processed"])
+    ccf_streamlines_folder = project_folder / "ccf_streamlines"
+    if not ccf_streamlines_folder.exists():
+        ccf_streamlines_folder = project_folder.parent / "resources" / "ccf_streamlines"
+    return ccf_streamlines_folder
+
+
 def get_avg_layer_depth():
-    project_folder = Path(flz.PARAMETERS["data_root"]["processed"]).parent
-    ccf_streamlines_folder = project_folder / "resources" / "ccf_streamlines"
+    ccf_streamlines_folder = get_ccf_streamlines_folder()
     with open(ccf_streamlines_folder / "avg_layer_depths.json", "r") as f:
         layer_tops = json.load(f)
     return layer_tops
@@ -25,9 +32,7 @@ def get_projector(ara_projection=ARA_PROJECTION):
     Returns:
         ccf_coord_proj: a projector object
     """
-    project_folder = Path(flz.PARAMETERS["data_root"]["processed"]).parent
-    ccf_streamlines_folder = project_folder / "resources" / "ccf_streamlines"
-
+    ccf_streamlines_folder = get_ccf_streamlines_folder()
     layer_tops = get_avg_layer_depth()
     layer_borders = np.hstack([0, np.sort(np.hstack(list(layer_tops.values())))])
     layer_thicknesses = {
