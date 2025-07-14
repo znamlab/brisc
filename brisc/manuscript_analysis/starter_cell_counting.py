@@ -6,7 +6,7 @@ from pathlib import Path
 import brainglobe_atlasapi as bga
 from cricksaw_analysis import atlas_utils
 from cricksaw_analysis.io import load_cellfinder_results
-from cricksaw_analysis.atlas_utils import cell_density_by_areas
+from cricksaw_analysis.atlas_utils import cell_density_by_areas, create_ctx_table
 from iss_preprocess import vis
 from scipy.stats import gaussian_kde
 import tifffile as tf
@@ -96,15 +96,19 @@ def plot_starter_dilution_densities(
             try:
                 cells, _, atlas = load_cellfinder_results(mouse_cellfinder_folder)
             except IOError or FileNotFoundError as err:
-                print("Failed to load data: %s" % err)
+                print(f"Failed to load {mouse_cellfinder_folder} data: {err}")
                 continue
             rd = np.array(np.round(cells.values), dtype=int)
             atlas_id = atlas[rd[:, 0], rd[:, 1], rd[:, 2]]
         if PLOT_SUMMARY:
             if REDO or (not summary_density_mouse_path.is_file()):
                 assert need_data
+                cortex_df = create_ctx_table(bg_atlas)
+                pixel_size = 25
                 summary_density[mouse] = pd.DataFrame(
-                    cell_density_by_areas(atlas_id, atlas)
+                    cell_density_by_areas(
+                        atlas_id, atlas, cortex_df, pixel_size, bg_atlas
+                    )
                 )
                 summary_density[mouse].to_csv(summary_density_mouse_path)
             else:
