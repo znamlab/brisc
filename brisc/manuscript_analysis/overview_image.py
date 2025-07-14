@@ -1,3 +1,4 @@
+import gc
 from iss_preprocess.diagnostics.diag_stitching import plot_single_overview
 from iss_preprocess.vis import round_to_rgb, to_rgb, add_bases_legend
 from iss_preprocess.vis.utils import get_stack_part
@@ -185,7 +186,8 @@ def make_downsampled_rgb(
                 small_stack_ch.shape + (stack.shape[-1],), dtype="uint16"
             )
         small_stack[:, :, ch] = small_stack_ch.astype("uint16")
-
+    del stack
+    gc.collect()
     rgb = to_rgb(
         small_stack,
         colors=channel_colors,
