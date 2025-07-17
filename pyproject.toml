@@ -21,7 +21,8 @@ dependencies = [
         "flexiznam @ git+ssh://git@github.com/znamlab/flexiznam.git",
         "scanpy",
         "tables",
-        "shapely",]
+        "shapely",
+        "editdistance",]
 license = {text = "MIT"}
 
 [project.urls]

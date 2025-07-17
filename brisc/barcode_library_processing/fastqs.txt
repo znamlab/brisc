@@ -1,0 +1,1 @@
+/brisc/barcode_diversity_analysis/raw/BEC2904A4_S40_L006_R1_001.fastq.gz
