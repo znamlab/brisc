@@ -21,7 +21,12 @@ pip install -e ".[dev]"
 ## Get the data
 
 Download the data from XXXX. Unzip and open the `brisc/config.yml` file to change
-the file path to the correct folder.
+the file path to the folder where you extracted the data.
+
+### Download external data
+
+For Fig S1, data from the previoulsy published viral libraries must be downloaded and
+preprocessed by running brisc/barcode_library_processing/convert_external_libraries.ipynb.
 
 ## Generate the figures
 
