@@ -373,9 +373,7 @@ def load_tail_vs_local_images():
             - local_img (np.ndarray): Image data for the local injection.
             - tail_img (np.ndarray): Image data for the tail vein injection.
     """
-    taillocal_projections = flz.get_processed_path(
-        "becalia_rabies_barseq/tail_vs_local"
-    )
+    taillocal_projections = flz.get_processed_path("rabies_barcoding/tail_vs_local")
     tail_img = tf.imread(taillocal_projections / "MAX_BRAC10946.1f_injection_site.tif")
     local_img = tf.imread(taillocal_projections / "MAX_BRAC10946.1c_injection_site.tif")
     tail_img = np.moveaxis(tail_img, 0, 2)
@@ -386,7 +384,7 @@ def load_tail_vs_local_images():
 def load_cell_click_data(data_folder, relative=False, return_px=False):
     """Load manually clicked cell coordinates"""
     taillocal_projections = get_path(
-        "becalia_rabies_barseq/tail_vs_local", data_root=data_folder
+        "rabies_barcoding/tail_vs_local", data_root=data_folder
     )
 
     def load_xml_data(path2xml):
