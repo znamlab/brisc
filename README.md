@@ -2,7 +2,8 @@
 
 ## Installation
 
-Clone the repository and install it with pip:
+This should work with any python > 3.8 and was tested with python version up to 3.11.
+To install clone the repository and install it with pip:
 
 ```bash
 git clone git@github.com:znamlab/brisc.git
@@ -15,6 +16,7 @@ requirements for `pre-commit`:
 
 ```bash
 pip install -e ".[dev]"
+pre-commit install
 ```
 
 
