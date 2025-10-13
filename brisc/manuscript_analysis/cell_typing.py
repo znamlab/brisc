@@ -48,7 +48,9 @@ def load_cell_typing_data(
     """
     # Load BRAC8498.4e data
     cell_genes = pd.read_pickle(
-        processed_path / "analysis" / "cell_barcode_genes_df.pkl"
+        processed_path
+        / "analysis"
+        / "BRAC8498.3e_error_corrected_barcodes_26_cell_barcode_df.pkl"
     )
     adata_q = df_to_adata(cell_genes)
 
