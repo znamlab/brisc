@@ -1,1 +1,2 @@
-/brisc/barcode_diversity_analysis/raw/BEC2904A4_S40_L006_R1_001.fastq.gz
+Alex,/nemo/lab/znamenskiyp/home/shared/projects/barcode_diversity_analysis/vectorcore/STR8533A1_S159_L008_R1_001.fastq.gz
+Amplified,/nemo/lab/znamenskiyp/home/shared/projects/barcode_diversity_analysis/vectorcore/STR8533A2_S160_L008_R1_001.fastq.gz

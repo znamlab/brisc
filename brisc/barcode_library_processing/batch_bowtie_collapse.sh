@@ -12,11 +12,12 @@
 # MEMORY assigned to tasks
 #SBATCH --mem=4G
 
-cd /brisc/barcode_library_processing/
+cd /nemo/lab/znamenskiyp/home/users/becalia/code/brisc/brisc/barcode_library_processing/
 
-sample_names=("PBC20")
+sample_names=("Alex" "Amplified")
+subsample=False
 
 for SAMPLENAME in "${sample_names[@]}"; do
 	echo "Processing sample: $SAMPLENAME"
-	sbatch -J "${SAMPLENAME}_bowtiecollapse" --export=subsample=$SUBSAMPLE,samplename=$SAMPLENAME bowtie_collapse.sh
+	sbatch -J "${SAMPLENAME}_bowtiecollapse" --export=subsample=$subsample,samplename=$SAMPLENAME bowtie_collapse.sh
 done
