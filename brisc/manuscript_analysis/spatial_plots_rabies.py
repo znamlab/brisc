@@ -180,6 +180,7 @@ def plot_example_barcodes(
     starter_marker="o",
     invert_xaxis=True,
     rasterized=True,
+    starter2presynaptics_kwargs=None,
 ):
     # cells_df = cells_df[
     #     cells_df["cortical_area"].apply(lambda area: not pd.isnull(area))
@@ -220,7 +221,14 @@ def plot_example_barcodes(
         alpha=0.2,
         rasterized=rasterized,
     )
-
+    if starter2presynaptics_kwargs is not None:
+        linekw = dict(
+            color="black",
+            lw=0.5,
+            zorder=-3,
+            rasterized=rasterized,
+        )
+        linekw.update(starter2presynaptics_kwargs)
     for barcode, color in zip(barcodes, barcode_colors):
         this_barcode = cells_df[
             cells_df["all_barcodes"].apply(lambda bcs: barcode in bcs)
@@ -272,6 +280,26 @@ def plot_example_barcodes(
             zorder=3,
             rasterized=rasterized,
         )
+        if starter2presynaptics_kwargs is not None:
+            assert len(starters) == 1, f"Multiple starters for barcode {barcode}"
+            starter = starters.iloc[0]
+            for i, presyn in this_barcode.iterrows():
+                ax_coronal.plot(
+                    [
+                        starter["ara_z"] * 1000 / atlas_size,
+                        presyn["ara_z"] * 1000 / atlas_size,
+                    ],
+                    [
+                        starter["ara_y"] * 1000 / atlas_size,
+                        presyn["ara_y"] * 1000 / atlas_size,
+                    ],
+                    **linekw,
+                )
+                ax_flatmap.plot(
+                    [starter["flatmap_x"], presyn["flatmap_x"]],
+                    [starter["flatmap_y"], presyn["flatmap_y"]],
+                    **linekw,
+                )
     ax_coronal.plot([980, 1080], [70, 70], color="black", lw=3)
     ax_coronal.set_xlim(570, 1100)
     ax_coronal.set_ylim(450, 0)
