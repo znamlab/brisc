@@ -283,6 +283,7 @@ def plot_example_barcodes(
         if starter2presynaptics_kwargs is not None:
             assert len(starters) == 1, f"Multiple starters for barcode {barcode}"
             starter = starters.iloc[0]
+            linekw["color"] = color
             for i, presyn in this_barcode.iterrows():
                 ax_coronal.plot(
                     [
@@ -307,8 +308,8 @@ def plot_example_barcodes(
     ax_coronal.set_aspect("equal")
 
     ax_flatmap.plot([640, 740], [1130, 1130], color="black", lw=3)
-    ax_flatmap.set_ylim(950, 1150)
-    ax_flatmap.set_xlim(450, 780)
+    ax_flatmap.set_ylim(850, 1250)
+    ax_flatmap.set_xlim(250, 980)
     ax_flatmap.invert_yaxis()
     ax_flatmap.set_axis_off()
     ax_flatmap.set_aspect("equal")
