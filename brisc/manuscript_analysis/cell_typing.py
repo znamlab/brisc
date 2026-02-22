@@ -675,3 +675,200 @@ def plot_kde_panels(
         ax.grid(False)
 
     return (ax_leg, ax_glu, ax_gaba)
+
+
+def plot_cluster_mosaic(
+    fig,
+    gs_slot,
+    adata,
+    bin_image,
+    fontsize_dict,
+    group_key="custom_leiden",
+    chambers=("chamber_07",),
+    clusters_not_used=("Unassigned", "Zero_correlation", "VLMC"),
+    cortex_exclude=("fiber_tract", "non_cortical", "TH", "hippocampal"),
+    qc=None,
+    atlas_size=10,
+    ncols=2,
+    # --- NEW: per-panel KDE controls ---
+    x_key="flatmap_dorsal_x",
+    depth_key="normalised_depth",
+    layer_tops=None,
+    x_min=1970,
+    x_max=2260,
+    bw_method=0.1,
+    # --- NEW: opacity/size overrides for specific types ---
+    high_opacity_types=("Lamp5", "Pvalb", "Sst", "Vip", "L6b", "L5 NP"),
+    s_default=0.8,
+    alpha_default=0.05,
+    s_high_opacity=0.45,     # smaller
+    alpha_high_opacity=0.18, # more opaque
+):
+    """
+    Create a scatter-grid (mosaic) where EACH cluster has:
+      [coronal scatter] [KDE depth distribution]
+
+    Returns
+    -------
+    clusters : list[str]
+    axd : dict[str, tuple(matplotlib Axes, matplotlib Axes)]
+        mapping label -> (ax_scatter, ax_kde)
+    """
+    if qc is None:
+        qc = dict(best_score=0.3, knn_agree_conf=0.3, raw_gene_counts=2)
+
+    if layer_tops is None:
+        layer_tops = {"wm": 957.0592130899}
+
+    adata_plot = adata.copy()
+    adata_plot = adata_plot[~adata_plot.obs[group_key].isin(list(clusters_not_used))].copy()
+    adata_plot = adata_plot[adata_plot.obs["chamber"].isin(list(chambers))].copy()
+
+    cluster_series = adata_plot.obs[group_key]
+    if pd.api.types.is_categorical_dtype(cluster_series):
+        clusters = [c for c in cluster_series.cat.categories if c not in clusters_not_used]
+    else:
+        clusters = sorted(cluster_series.dropna().unique().tolist())
+
+    # color mapping
+    color_key = f"{group_key}_colors"
+    if color_key not in adata_plot.uns:
+        adata_plot.uns[color_key] = sc.pl.palettes.default_20[: len(clusters)]
+    cluster_colors = list(adata_plot.uns[color_key])
+    if len(cluster_colors) < len(clusters):
+        cluster_colors = (cluster_colors + sc.pl.palettes.default_20)[: len(clusters)]
+        adata_plot.uns[color_key] = cluster_colors
+    cat_to_color = dict(zip(clusters, cluster_colors[: len(clusters)]))
+
+    # layout: each cluster occupies TWO columns (scatter + kde)
+    n = len(clusters)
+    nrows = int(np.ceil(n / ncols))
+
+    labels = [f"cl_{i:02d}" for i in range(n)]
+    subgs = gs_slot.subgridspec(
+        nrows=nrows,
+        ncols=ncols * 2,
+        wspace=0.02,
+        hspace=0.03,
+        width_ratios=[1.0, 0.25] * ncols,  # KDE column narrower
+    )
+
+    axd = {}
+    for i, key in enumerate(labels):
+        r = i // ncols
+        c = i % ncols
+        ax_scatter = fig.add_subplot(subgs[r, 2 * c])
+        ax_kde = fig.add_subplot(subgs[r, 2 * c + 1])
+        axd[key] = (ax_scatter, ax_kde)
+
+    # Helpers for KDE
+    def _get_depths_for_cluster(adata_category):
+        # Match the same filtering used for scatter
+        m = (
+            (~adata_category.obs["cortical_area"].isna())
+            & ~(adata_category.obs["cortical_area"].isin(list(cortex_exclude)))
+            & (adata_category.obs["best_score"] > qc["best_score"])
+            & (adata_category.obs["knn_agree_conf"] > qc["knn_agree_conf"])
+            & (adata_category.obs["raw_gene_counts"] > qc["raw_gene_counts"])
+        )
+        ad = adata_category[m].copy()
+        if ad.n_obs == 0:
+            return None
+
+        # same x-windowing logic as your previous KDE panel
+        x_coords = ad.obs[x_key] / 10
+        y_coords = ad.obs[depth_key]
+
+        current_max = 2000.0
+        norm_factor = layer_tops["wm"] / current_max
+        y_coords = y_coords * norm_factor
+
+        mask_region = (
+            (x_coords >= x_min)
+            & (x_coords <= x_max)
+            & (y_coords <= layer_tops["wm"])
+            & (y_coords >= 0)
+        )
+        y_sub = y_coords[mask_region]
+        if len(y_sub) < 3:
+            return None
+        return y_sub.to_numpy()
+
+    # plot each cluster: scatter + KDE
+    for i, category in enumerate(clusters):
+        ax_scatter, ax_kde = axd[labels[i]]
+        cluster_color = cat_to_color.get(category, "C0")
+
+        adata_category = adata_plot[adata_plot.obs[group_key] == category].copy()
+
+        # --- scatter (coronal) ---
+        ad_scatter = adata_category.copy()
+        ad_scatter = ad_scatter[
+            (~ad_scatter.obs["cortical_area"].isna())
+            & ~(ad_scatter.obs["cortical_area"].isin(list(cortex_exclude)))
+            & (ad_scatter.obs["best_score"] > qc["best_score"])
+            & (ad_scatter.obs["knn_agree_conf"] > qc["knn_agree_conf"])
+            & (ad_scatter.obs["raw_gene_counts"] > qc["raw_gene_counts"])
+        ].copy()
+
+        # background contour
+        ax_scatter.contour(
+            bin_image,
+            levels=np.arange(0.5, np.max(bin_image) + 1, 0.5),
+            colors="black",
+            linewidths=0.35,
+            zorder=0,
+        )
+
+        # opacity/size override for selected types
+        if str(category) in set(high_opacity_types):
+            s = s_high_opacity
+            a = alpha_high_opacity
+        else:
+            s = s_default
+            a = alpha_default
+
+        ax_scatter.scatter(
+            ad_scatter.obs["ara_z"] * 1000 / atlas_size,
+            ad_scatter.obs["ara_y"] * 1000 / atlas_size,
+            s=s,
+            alpha=a,
+            c=cluster_color,
+            rasterized=True,
+            linewidths=0,
+        )
+
+        ax_scatter.set_title(str(category), fontsize=fontsize_dict["title"], pad=1.5)
+        ax_scatter.invert_yaxis()
+        ax_scatter.invert_xaxis()
+        ax_scatter.set_xlim(1100, 500)
+        ax_scatter.set_ylim(420, 0)
+        ax_scatter.set_aspect("equal")
+        ax_scatter.axis("off")
+
+        # --- KDE next to it ---
+        ax_kde.set_title("KDE", fontsize=fontsize_dict["title"], pad=1.5)
+        y_sub = _get_depths_for_cluster(adata_category)
+
+        if y_sub is not None:
+            kde = gaussian_kde(y_sub, bw_method=bw_method)
+            y_range = np.linspace(y_sub.min(), y_sub.max(), 200)
+            density = kde(y_range)
+            if density.max() > 0:
+                density = density / density.max()
+
+            ax_kde.plot(density, y_range, color=cluster_color, lw=1.5)
+
+        ax_kde.set_ylim(layer_tops["wm"], 0)
+        ax_kde.set_xlim(0, 1.05)
+        ax_kde.set_aspect(0.003)  # stretch to match scatter height
+        
+        r = i // ncols
+        if r == nrows - 1:
+            ax_kde.set_xlabel("Norm. density", fontsize=fontsize_dict["label"])
+            
+        ax_kde.tick_params(axis="both", which="both", labelsize=fontsize_dict["tick"])
+        ax_kde.tick_params(axis="y", which="both", left=False, labelleft=False)
+        ax_kde.grid(False)
+
+    return clusters, axd
