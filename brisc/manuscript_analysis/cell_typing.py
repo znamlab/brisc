@@ -464,218 +464,6 @@ def plot_cell_clusters(adata_q, ax, spot_size=10, fontsize=6, font_outline=1):
         show=False,
     )
 
-def plot_cluster_mosaic(
-        fig,
-        gs_slot,
-        adata,
-        bin_image,
-        fontsize_dict,
-        group_key="custom_leiden",
-        chambers=("chamber_07",),
-        clusters_not_used=("Unassigned", "Zero_correlation", "VLMC"),
-        cortex_exclude=("fiber_tract", "non_cortical", "TH", "hippocampal"),
-        qc=None,
-        atlas_size=10,
-        ncols=4,
-):
-    """Create the scatter-grid (mosaic) inside a given GridSpec slot."""
-    if qc is None:
-        qc = dict(best_score=0.3, knn_agree_conf=0.3, raw_gene_counts=2)
-
-    adata_plot = adata.copy()
-    adata_plot = adata_plot[
-        ~adata_plot.obs[group_key].isin(list(clusters_not_used))
-        ].copy()
-    adata_plot = adata_plot[adata_plot.obs["chamber"].isin(list(chambers))].copy()
-
-    cluster_series = adata_plot.obs[group_key]
-    if pd.api.types.is_categorical_dtype(cluster_series):
-        clusters = [
-            c for c in cluster_series.cat.categories if c not in clusters_not_used
-        ]
-    else:
-        clusters = sorted(cluster_series.dropna().unique().tolist())
-
-    color_key = f"{group_key}_colors"
-    if color_key not in adata_plot.uns:
-        adata_plot.uns[color_key] = sc.pl.palettes.default_20[: len(clusters)]
-    cluster_colors = list(adata_plot.uns[color_key])
-    if len(cluster_colors) < len(clusters):
-        cluster_colors = (cluster_colors + sc.pl.palettes.default_20)[: len(clusters)]
-        adata_plot.uns[color_key] = cluster_colors
-    cat_to_color = dict(zip(clusters, cluster_colors[: len(clusters)]))
-
-    n = len(clusters)
-    nrows = int(np.ceil(n / ncols))
-    labels = [f"cl_{i:02d}" for i in range(n)]
-    mosaic = []
-    k = 0
-    for r in range(nrows):
-        row = []
-        for c in range(ncols):
-            if k < n:
-                row.append(labels[k]); k += 1
-            else:
-                row.append(".")
-        mosaic.append(row)
-
-    # nested sub-gridspec for the mosaic area
-    subgs = gs_slot.subgridspec(
-        nrows=nrows, ncols=ncols, wspace=0.02, hspace=0.02
-    )
-    axd = {}
-    for i, key in enumerate(labels):
-        r, c = divmod(i, ncols)
-        axd[key] = fig.add_subplot(subgs[r, c])
-
-    # plot each cluster
-    adata_ch = adata_plot
-    for i, category in enumerate(clusters):
-        ax = axd[labels[i]]
-        cluster_color = cat_to_color.get(category, "C0")
-
-        adata_category = adata_ch[adata_ch.obs[group_key] == category].copy()
-        adata_category = adata_category[
-            (~adata_category.obs["cortical_area"].isna())
-            & ~(adata_category.obs["cortical_area"].isin(list(cortex_exclude)))
-            & (adata_category.obs["best_score"] > qc["best_score"])
-            & (adata_category.obs["knn_agree_conf"] > qc["knn_agree_conf"])
-            & (adata_category.obs["raw_gene_counts"] > qc["raw_gene_counts"])
-        ].copy()
-
-        ax.contour(
-            bin_image,
-            levels=np.arange(0.5, np.max(bin_image) + 1, 0.5),
-            colors="black", linewidths=0.35, zorder=0,
-        )
-        ax.scatter(
-            adata_category.obs["ara_z"] * 1000 / atlas_size,
-            adata_category.obs["ara_y"] * 1000 / atlas_size,
-            s=0.8, alpha=0.05, c=cluster_color,
-            rasterized=True, linewidths=0,
-        )
-        ax.set_title(str(category), fontsize=fontsize_dict["title"], pad=1.5)
-        ax.invert_yaxis(); ax.invert_xaxis()
-        ax.set_xlim(1100, 500); ax.set_ylim(500, 0)
-        ax.set_aspect("equal")
-        ax.axis("off")
-
-    return clusters, axd
-
-def plot_kde_panels(
-        ax_leg,
-        ax_glu,
-        ax_gaba,
-        adata,
-        fontsize_dict,
-        group_key="custom_leiden",
-        x_key="flatmap_dorsal_x", depth_key="normalised_depth",
-        layer_tops=None, blacklist=(),
-        glutamatergic_types=(), gabaergic_types=(),
-        x_min=1970, x_max=2260, bw_method=0.1
-):
-    """Plot KDEs into provided axes; use a dedicated legend axis."""
-    if layer_tops is None:
-        layer_tops = {"wm": 957.0592130899}
-
-    x_coords = adata.obs[x_key] / 10
-    y_coords = adata.obs[depth_key]
-
-    current_max = 2000.0
-    norm_factor = layer_tops["wm"] / current_max
-    y_coords = y_coords * norm_factor
-
-    cortical_layers = adata.obs[group_key].astype('category')
-
-    mask_blacklist = ~adata.obs[group_key].isin(list(blacklist))
-    x_coords = x_coords[mask_blacklist]
-    y_coords = y_coords[mask_blacklist]
-    cortical_layers = cortical_layers[mask_blacklist]
-
-    y_min, y_max = layer_tops["wm"], 0
-    mask_region = (x_coords >= x_min) & (x_coords <= x_max) & (y_coords <= y_min) & (y_coords >= y_max)
-
-    y_sub = y_coords[mask_region]
-    layers_sub = cortical_layers[mask_region]
-
-    cmap = plt.get_cmap('tab20')
-    cats = list(layers_sub.cat.categories)
-    cat_to_color = {cat: cmap((i % 20) / 20) for i, cat in enumerate(cats)}
-
-    present_cats = [c for c in cats if c in set(layers_sub.astype(str))]
-    handles = [
-        plt.Line2D(
-            [0],
-            [0],
-            color=cat_to_color.get(cat, 'black'),
-            lw=1.5
-        ) for cat in present_cats
-        ]
-    labels = present_cats
-
-    def plot_individual_distributions(ax, cell_types, y_data, layer_data, title):
-        for ctype in cell_types:
-            if ctype in layer_data.cat.categories:
-                y_filtered = y_data[layer_data == ctype]
-                if len(y_filtered) > 2:
-                    kde = gaussian_kde(y_filtered, bw_method=bw_method)
-                    y_range = np.linspace(y_filtered.min(), y_filtered.max(), 200)
-                    density = kde(y_range)
-                    density = density / density.max()
-                    ax.plot(density, y_range, color=cat_to_color.get(ctype, 'black'))
-        ax.set_title(title)
-        ax.set_xlabel("Normalised cell density", fontsize=fontsize_dict["label"])
-
-    # legend column
-    ax_leg.axis('off')
-    ax_leg.legend(
-        handles, labels, title="Cell types",
-        loc="center",
-        frameon=False,
-        fontsize=fontsize_dict["legend"],
-        title_fontsize=fontsize_dict["legend"],
-        borderaxespad=0.0,
-        handlelength=1.6,
-        handletextpad=0.4,
-        labelspacing=0.25,
-    )
-
-    # KDE panels
-    plot_individual_distributions(
-        ax_glu,
-        glutamatergic_types,
-        y_sub,
-        layers_sub,
-        "Glutamatergic"
-    )
-    plot_individual_distributions(
-        ax_gaba,
-        gabaergic_types,
-        y_sub,
-        layers_sub,
-        "GABAergic"
-    )
-
-    ax_glu.set_ylim(layer_tops["wm"], 0)
-    ax_glu.set_ylabel("Depth (µm)", fontsize=fontsize_dict["label"])
-
-    # ensure KDE plots use all available vertical space
-    for ax in (ax_glu, ax_gaba):
-        ax.set_aspect("auto")
-        ax.margins(y=0)
-
-    ax_glu.tick_params(axis='both', which='both', labelsize=fontsize_dict["tick"])
-    ax_gaba.tick_params(axis='both', which='both', labelsize=fontsize_dict["tick"])
-
-    ax_glu.tick_params(axis='y', which='both', left=True, labelleft=True)
-    ax_gaba.tick_params(axis='y', which='both', left=False, labelleft=False)
-    ax_leg.tick_params(axis='y', which='both', left=False, labelleft=False)
-
-    for ax in (ax_glu, ax_gaba):
-        ax.grid(False)
-
-    return (ax_leg, ax_glu, ax_gaba)
-
 
 def plot_cluster_mosaic(
     fig,
@@ -690,23 +478,62 @@ def plot_cluster_mosaic(
     qc=None,
     atlas_size=10,
     ncols=2,
-    # --- NEW: per-panel KDE controls ---
-    x_key="flatmap_dorsal_x",
-    depth_key="normalised_depth",
     layer_tops=None,
     x_min=1970,
     x_max=2260,
     bw_method=0.1,
-    # --- NEW: opacity/size overrides for specific types ---
     high_opacity_types=("Lamp5", "Pvalb", "Sst", "Vip", "L6b", "L5 NP"),
     s_default=0.8,
     alpha_default=0.05,
-    s_high_opacity=0.45,     # smaller
-    alpha_high_opacity=0.18, # more opaque
+    s_high_opacity=0.5,
+    alpha_high_opacity=0.3,
 ):
     """
     Create a scatter-grid (mosaic) where EACH cluster has:
       [coronal scatter] [KDE depth distribution]
+    
+    Args:
+        adata : AnnData
+            The dataset containing the cells to plot, with necessary obs columns.
+        bin_image : 2D array
+            The binned cell density image for contour plotting.
+        fontsize_dict : dict
+            Dictionary with keys "title", "label", "tick", "legend" for font sizes.
+        group_key : str
+            The obs column to use for cluster labels.
+        chambers : list[str]
+            Which chambers to include in the plot.
+        clusters_not_used : list[str]
+            Cluster labels to exclude from the plot.
+        cortex_exclude : list[str]
+            Which cortical areas to exclude from the scatter/KDE.
+        qc : dict or None
+            Quality control thresholds for filtering cells in scatter/KDE:
+                - best_score
+                - knn_agree_conf
+                - raw_gene_counts
+             If None, defaults will be used.
+        atlas_size : float
+            The size of the atlas in microns (used for scaling coordinates).
+        ncols : int
+            Number of cluster pairs (scatter + KDE) per row.
+        layer_tops : dict or None
+            Mapping of layer names to their top depth in microns. Used for normalizing depth.
+             If None, defaults will be used.
+        x_min, x_max : float
+            The x-coordinate range (in microns) to include in the scatter/KDE.
+        bw_method : float
+            Bandwidth method for KDE. Passed directly to scipy.stats.gaussian_kde.
+        high_opacity_types : list[str]
+            Cluster labels for which to use higher opacity in the scatter plot.
+        s_default : float
+            Default point size for scatter plot.
+        alpha_default : float
+            Default alpha for scatter plot.
+        s_high_opacity : float
+            Point size for high-opacity types in scatter plot.
+        alpha_high_opacity : float
+            Alpha for high-opacity types in scatter plot.
 
     Returns
     -------
@@ -740,7 +567,7 @@ def plot_cluster_mosaic(
         adata_plot.uns[color_key] = cluster_colors
     cat_to_color = dict(zip(clusters, cluster_colors[: len(clusters)]))
 
-    # layout: each cluster occupies TWO columns (scatter + kde)
+    # layout: each cluster occupies two columns (scatter + kde)
     n = len(clusters)
     nrows = int(np.ceil(n / ncols))
 
@@ -750,7 +577,7 @@ def plot_cluster_mosaic(
         ncols=ncols * 2,
         wspace=0.02,
         hspace=0.03,
-        width_ratios=[1.0, 0.25] * ncols,  # KDE column narrower
+        width_ratios=[1.0, 0.25] * ncols,  # make the KDE column narrower
     )
 
     axd = {}
@@ -775,9 +602,8 @@ def plot_cluster_mosaic(
         if ad.n_obs == 0:
             return None
 
-        # same x-windowing logic as your previous KDE panel
-        x_coords = ad.obs[x_key] / 10
-        y_coords = ad.obs[depth_key]
+        x_coords = ad.obs["flatmap_dorsal_x"] / 10
+        y_coords = ad.obs["normalised_depth"]
 
         current_max = 2000.0
         norm_factor = layer_tops["wm"] / current_max
@@ -801,7 +627,7 @@ def plot_cluster_mosaic(
 
         adata_category = adata_plot[adata_plot.obs[group_key] == category].copy()
 
-        # --- scatter (coronal) ---
+        # scatter (coronal)
         ad_scatter = adata_category.copy()
         ad_scatter = ad_scatter[
             (~ad_scatter.obs["cortical_area"].isna())
@@ -846,7 +672,7 @@ def plot_cluster_mosaic(
         ax_scatter.set_aspect("equal")
         ax_scatter.axis("off")
 
-        # --- KDE next to it ---
+        # KDE next to it
         ax_kde.set_title("KDE", fontsize=fontsize_dict["title"], pad=1.5)
         y_sub = _get_depths_for_cluster(adata_category)
 
