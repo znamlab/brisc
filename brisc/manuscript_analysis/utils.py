@@ -34,7 +34,7 @@ def get_output_folder(data_root=None):
     if data_root is None:
         import flexiznam as flz
 
-        processed = flz.get_processed_path("becalia_rabies_barseq").parent
+        processed = flz.get_processed_path("rabies_barcoding").parent
         processed = processed.parent / "presentations"
     else:
         processed = Path(data_root)

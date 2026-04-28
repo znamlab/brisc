@@ -209,6 +209,7 @@ def add_scalebar(
     bar_height_px=10,  # bar thickness in display pixels
     margin_px=15,  # margin from right & bottom in display pixels
     color="white",
+    location="bottom right",
 ):
     """Draw a horizontal scalebar of physical length *length_um* (µm)."""
     # physical length to data pixels
@@ -234,8 +235,23 @@ def add_scalebar(
     margin_y_frac = margin_px / ax_h
 
     # draw rectangle
-    x0 = 1.0 - margin_x_frac - length_frac  # right-hand side
-    y0 = margin_y_frac  # bottom margin
+    if location == "bottom right":
+        x0 = 1.0 - margin_x_frac - length_frac  # right-hand side
+        y0 = margin_y_frac  # bottom margin
+    elif location == "bottom left":
+        x0 = margin_x_frac
+        y0 = margin_y_frac
+    elif location == "top right":
+        x0 = 1.0 - margin_x_frac - length_frac
+        y0 = 1.0 - margin_y_frac - height_frac
+    elif location == "top left":
+        x0 = margin_x_frac
+        y0 = 1.0 - margin_y_frac - height_frac
+    else:
+        raise ValueError(
+            f"Unknown location: {location}. "
+            "Choose from 'bottom right', 'bottom left', 'top right', 'top left'."
+        )
 
     rect = patches.Rectangle(
         (x0, y0),

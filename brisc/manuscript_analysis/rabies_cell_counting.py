@@ -41,13 +41,49 @@ def mask_points(pts, mask):
     return pts[interpolated_values > 0]
 
 
-def plot_rv_coronal_slice(injection_center, ax, mcherry, background):
+def plot_rv_coronal_slice(
+    injection_center,
+    ax,
+    mcherry,
+    background,
+    z_proj_size=100,
+    vlim_mcherry=(0, 3000),
+    vlim_background=(0, 1500),
+    zoom_row_lims=(-90, 380),
+    zoom_col_lims=(-310, 290),
+    use_downsampled=False,
+):
     """
+    Plot a coronal slice of the brain with the injection site.
+
+    Args:
+        injection_center (np.ndarray): Injection center in voxel coordinates (Z, Y, X).
+        ax (matplotlib.axes._axes.Axes or None): Axes on which to plot.
+        mcherry (np.ndarray): mCherry channel data.
+        background (np.ndarray): Background channel data.
+        z_proj_size (int): Size of the z-projection (ignored when use_downsampled=True).
+        vlim_mcherry (tuple): (vmin, vmax) for mCherry normalization.
+        vlim_background (tuple): (vmin, vmax) for background normalization.
+        zoom_row_lims (tuple): (min_offset, max_offset) for cropping the zoom plot along rows.
+        zoom_col_lims (tuple): (min_offset, max_offset) for cropping the zoom plot along columns.
+        use_downsampled (bool): If True, treat mcherry/background as 3-D registered
+            downsampled volumes and take a single coronal slice at injection_center[0]
+            instead of computing a Z-projection over z_proj_size slices.
 
     Returns:
         matplotlib.axes.Axes: Axes object with the plot.
         matplotlib.axes.Axes: Axes object with the secondary x-axis.
     """
+
+    # Parameters for BRYC64.2h (mouse used for initial submission)
+    # z_proj_size=100,
+    # vlim_mcherry=(0, 3000),
+    # vlim_background=(0, 1500),
+    # zoom_row_lims=(-90, 380),
+    # zoom_col_lims=(-310, 290),
+
+    # Parameters for BRAC11816.2e (revision experiment)
+
     # Load the Allen Brain Atlas
     # atlas_obj = BrainGlobeAtlas("allen_mouse_10um")
 
@@ -66,16 +102,30 @@ def plot_rv_coronal_slice(injection_center, ax, mcherry, background):
 
     # Normalize and create RGB for the second subplot[673, 205, 890]
     z, row, col = injection_center
-    cropped_mcherry = mcherry[z - 50 : z + 50, :, :]
-    cropped_mcherry_normalized = normalize(cropped_mcherry, 0, 3000)
-    cropped_background_channel = normalize(background[z - 50 : z + 50, :, :], 0, 1500)
+    if use_downsampled:
+        nz = int(z_proj_size / 2)
+        cropped_mcherry = mcherry[z - nz : z + nz, :, :].astype(float)
+        cropped_background_channel = background[z - nz : z + nz, :, :].astype(float)
+        cropped_mcherry_normalized = normalize(
+            cropped_mcherry, vlim_mcherry[0], vlim_mcherry[1]
+        ).max(axis=0)
+        cropped_background_normalized = normalize(
+            cropped_background_channel, vlim_background[0], vlim_background[1]
+        ).max(axis=0)
+    else:
+        # full res volumes are already projected; take a single
+        # coronal slice at the injection z-coordinate.
+        cropped_mcherry_normalized = normalize(
+            mcherry.astype(float), vlim_mcherry[0], vlim_mcherry[1]
+        )
+        cropped_background_normalized = normalize(
+            background.astype(float), vlim_background[0], vlim_background[1]
+        )
 
-    rgb2 = np.zeros((*cropped_mcherry_normalized.max(axis=0).shape, 3))
-    rgb2[..., 0] = cropped_mcherry_normalized.max(axis=0)  # Red channel for mCherry
-    rgb2[..., 1] = cropped_background_channel.max(
-        axis=0
-    )  # Green channel for background
-    rgb2[..., 2] = cropped_background_channel.max(axis=0)  # Blue channel for background
+    rgb2 = np.zeros((*cropped_mcherry_normalized.shape, 3))
+    rgb2[..., 0] = cropped_mcherry_normalized  # Red channel for mCherry
+    rgb2[..., 1] = cropped_background_normalized  # Green channel for background
+    rgb2[..., 2] = cropped_background_normalized  # Blue channel for background
     ax_zoom, ax_overview = ax
     ax_overview.imshow(rgb2)
     ax_overview.set_aspect("equal")
@@ -83,14 +133,25 @@ def plot_rv_coronal_slice(injection_center, ax, mcherry, background):
     ax_overview.set_yticks([])
     for spine in ax_overview.spines.values():
         spine.set_edgecolor("white")
-    rgb2 = rgb2[max(0, row - 90) : row + 380, col - 310 : col + 290, :]
-    ax_zoom.imshow(rgb2)
+
+    rgb_zoom = rgb2[
+        max(0, row + zoom_row_lims[0]) : row + zoom_row_lims[1],
+        max(0, col + zoom_col_lims[0]) : col + zoom_col_lims[1],
+        :,
+    ]
+    ax_zoom.imshow(rgb_zoom)
     ax_zoom.set_aspect("equal")
     ax_zoom.axis("off")
 
+    if use_downsampled:
+        xdata = [rgb_zoom.shape[1] - 240, rgb_zoom.shape[1] - 140]
+        ydata = [rgb_zoom.shape[0] - 50, rgb_zoom.shape[0] - 50]
+    else:
+        xdata = [100, 200]
+        ydata = [rgb_zoom.shape[0] - 100, rgb_zoom.shape[0] - 100]
     scalebar2 = plt.Line2D(
-        [rgb2.shape[1] - 140, rgb2.shape[1] - 40],
-        [rgb2.shape[0] - 30, rgb2.shape[0] - 30],
+        xdata,
+        ydata,
         color="white",
         linewidth=4,
     )

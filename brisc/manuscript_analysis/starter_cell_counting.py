@@ -245,59 +245,68 @@ def plot_starter_confocal(ax, img, metadata):
     Returns:
         matplotlib.axes.Axes: The axis with the plot.
     """
-    # Define parameters
-    ROTATION = 103  # rotation in degrees to put pia at the top of the image
-    INSET = [
-        2580,
-        4800,
-        3180,
-        None,
-    ]
-    aspect_ratio = 1.5  # Approximate aspect ratio adjustment
-    INSET[-1] = int(INSET[1] + (INSET[2] - INSET[0]) / aspect_ratio * 2)
-
-    scale = metadata["ImageDocument"]["Metadata"]["Scaling"]["Items"]["Distance"]
-    scale = {s["Id"]: s["Value"] * 1e6 for s in scale}
-
-    def rotate(image, angle, center=None, scale=1.0, flip=True):
-        (h, w) = image.shape[:2]
-        if center is None:
-            center = (w // 2, h // 2)
-        M = cv2.getRotationMatrix2D(center, angle, scale)
-        rotated = cv2.warpAffine(image, M, (w, h))
-        return cv2.flip(rotated, 1) if flip else rotated
-
-    zplanes = [3, 4, 5]
-
-    img = np.mean(img[:, zplanes, :, :], axis=1)
-
-    # for sub_ax, z in zip(inset_axes, zplanes):
-    lim = np.array(INSET)
-    stack = np.dstack(
-        [
-            rotate(i, ROTATION)[lim[0] : lim[2], lim[1] : lim[3]]
-            for i in [
-                img[1, :, :],
-                img[1, :, :],
-                img[0, :, :],
-            ]
+    if metadata is not None:
+        # we are using preprint data
+        # Define parameters
+        ROTATION = 103  # rotation in degrees to put pia at the top of the image
+        INSET = [
+            2580,
+            4800,
+            3180,
+            None,
         ]
-    )
-    colors = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
-    rgb = vis.to_rgb(stack, colors, vmax=[1000, 10000, 5000], vmin=None)
-    ax.imshow(rgb, vmin=0, vmax=5000)
+        aspect_ratio = 1.5  # Approximate aspect ratio adjustment
+        INSET[-1] = int(INSET[1] + (INSET[2] - INSET[0]) / aspect_ratio * 2)
+
+        scale = metadata["ImageDocument"]["Metadata"]["Scaling"]["Items"]["Distance"]
+        scale = {s["Id"]: s["Value"] * 1e6 for s in scale}
+
+        def rotate(image, angle, center=None, scale=1.0, flip=True):
+            (h, w) = image.shape[:2]
+            if center is None:
+                center = (w // 2, h // 2)
+            M = cv2.getRotationMatrix2D(center, angle, scale)
+            rotated = cv2.warpAffine(image, M, (w, h))
+            return cv2.flip(rotated, 1) if flip else rotated
+
+        zplanes = [3, 4, 5]
+
+        img = np.mean(img[:, zplanes, :, :], axis=1)
+
+        # for sub_ax, z in zip(inset_axes, zplanes):
+        lim = np.array(INSET)
+        stack = np.dstack(
+            [
+                rotate(i, ROTATION)[lim[0] : lim[2], lim[1] : lim[3]]
+                for i in [
+                    img[1, :, :],
+                    img[1, :, :],
+                    img[0, :, :],
+                ]
+            ]
+        )
+        colors = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+        rgb = vis.to_rgb(stack, colors, vmax=[1000, 10000, 5000], vmin=0)
+        ax.imshow(rgb, vmin=0, vmax=5000)
+        starters = [np.array([220, 130]), np.array([460, 430])]
+    else:
+        # reorder the axes to make rgb image instead of (3, y, x)
+        colors = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+        rgb = vis.to_rgb(
+            np.moveaxis(img, 0, -1), colors, vmax=[400, 1500, 900], vmin=[0, 400, 200]
+        )
+        ax.imshow(rgb)
+        starters = [np.array([200, 300]), np.array([500, 200])]
 
     # Add starter cell arrows
-    # starters = [np.array([390, 200]), np.array([650, 480])]
-    starters = [np.array([220, 130]), np.array([460, 430])]
     for starter in starters:
         ax.annotate(
             "",
             xy=starter,
-            xytext=starter + np.array([-75, -75]),
+            xytext=starter + np.array([-40, -40]),
             arrowprops=dict(
                 facecolor="white",
-                shrink=0.05,
+                shrink=0.1,
                 edgecolor="none",
                 width=1,
                 headwidth=6,
