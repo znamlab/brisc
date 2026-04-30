@@ -100,9 +100,7 @@ def find_injection_center(
         coords, bin_size_mm=bin_size_mm, smooth_sigma=smooth_sigma
     )
     peak_idx = np.unravel_index(H_smooth.argmax(), H_smooth.shape)
-    center = np.array(
-        [edges[i][peak_idx[i]] + bs / 2 for i in range(3)]
-    )
+    center = np.array([edges[i][peak_idx[i]] + bs / 2 for i in range(3)])
     return center
 
 
@@ -160,21 +158,15 @@ def select_cells_in_density_region(
     bin_indices = np.empty_like(all_coords, dtype=int)
     for d in range(3):
         bin_indices[:, d] = np.searchsorted(edges[d][1:], all_coords[:, d])
-        bin_indices[:, d] = np.clip(
-            bin_indices[:, d], 0, H_smooth.shape[d] - 1
-        )
+        bin_indices[:, d] = np.clip(bin_indices[:, d], 0, H_smooth.shape[d] - 1)
 
-    cell_in_region = above[
-        bin_indices[:, 0], bin_indices[:, 1], bin_indices[:, 2]
-    ]
+    cell_in_region = above[bin_indices[:, 0], bin_indices[:, 1], bin_indices[:, 2]]
 
     adata_region = adata[cell_in_region].copy()
 
     # Injection center = peak voxel centre
     peak_idx = np.unravel_index(H_smooth.argmax(), H_smooth.shape)
-    center = np.array(
-        [edges[i][peak_idx[i]] + bs / 2 for i in range(3)]
-    )
+    center = np.array([edges[i][peak_idx[i]] + bs / 2 for i in range(3)])
 
     region_info = dict(
         center=center,
@@ -182,7 +174,7 @@ def select_cells_in_density_region(
         threshold_density=float(cutoff),
         density_threshold_frac=float(density_threshold),
         n_voxels=n_voxels,
-        approx_volume_mm3=float(n_voxels * bs ** 3),
+        approx_volume_mm3=float(n_voxels * bs**3),
         bin_size_mm=bs,
         smooth_sigma=smooth_sigma,
     )
@@ -200,6 +192,7 @@ def select_cells_in_sphere(
     coords = adata.obs[list(coord_cols)].values
     dists = np.linalg.norm(coords - np.asarray(center), axis=1)
     return adata[dists <= radius_mm].copy()
+
 
 def observed_barcode_counts(
     adata_region,
@@ -285,15 +278,12 @@ def poisson_expected_counts(observed):
     k_vals = np.array([0, 1, 2, 3, 4, 5], dtype=float)
     lambda_hat = float((k_vals * observed).sum() / n_total)
 
-    probs = np.array(
-        [poisson.pmf(k, lambda_hat) for k in range(5)]
-    )
+    probs = np.array([poisson.pmf(k, lambda_hat) for k in range(5)])
     prob_5plus = max(0.0, 1.0 - probs.sum())
     all_probs = np.append(probs, prob_5plus)
 
     expected = all_probs * n_total
     return expected, lambda_hat
-
 
 
 def _log10_chi2_sf(x, df):
@@ -333,9 +323,7 @@ def chi_squared_test(observed, expected, min_expected: float = 5.0):
         dict with ``chi2``, ``df``, ``p_value``, ``observed_binned``,
         ``expected_binned``, ``bin_labels``.
     """
-    obs_b, exp_b, labels = _merge_bins(
-        observed, expected, min_expected
-    )
+    obs_b, exp_b, labels = _merge_bins(observed, expected, min_expected)
     n_bins = len(obs_b)
     df = max(n_bins - 2, 1)
     chi2_stat = float(np.sum((obs_b - exp_b) ** 2 / exp_b))
@@ -369,11 +357,7 @@ def _merge_bins(observed, expected, min_expected=5.0):
             lab = (
                 CATEGORY_LABELS[start_k]
                 if start_k == k
-                else (
-                    CATEGORY_LABELS[start_k]
-                    + "-"
-                    + CATEGORY_LABELS[k]
-                )
+                else (CATEGORY_LABELS[start_k] + "-" + CATEGORY_LABELS[k])
             )
             obs_l.append(obs_acc)
             exp_l.append(exp_acc)
@@ -405,9 +389,7 @@ def _poisson_prob(lam: float, k: int) -> float:
     """Stable Poisson PMF via log-space."""
     if lam <= 0:
         return 1.0 if k == 0 else 0.0
-    return float(
-        np.exp(-lam + k * np.log(lam) - _log_factorial(k))
-    )
+    return float(np.exp(-lam + k * np.log(lam) - _log_factorial(k)))
 
 
 def bootstrap_excess_test(
@@ -454,18 +436,12 @@ def bootstrap_excess_test(
         obs_stats[k] = float(observed[idx]) - exp_k
 
     # Combined
-    obs_combined = sum(
-        float(observed[min(k, 5)]) for k in cats
-    )
-    obs_combined_exp = n * sum(
-        _poisson_prob(lambda_hat, k) for k in cats
-    )
+    obs_combined = sum(float(observed[min(k, 5)]) for k in cats)
+    obs_combined_exp = n * sum(_poisson_prob(lambda_hat, k) for k in cats)
     obs_stats["combined"] = obs_combined - obs_combined_exp
 
     # Bootstrap replicates
-    sim_stats = {
-        k: np.empty(n_boot) for k in list(cats) + ["combined"]
-    }
+    sim_stats = {k: np.empty(n_boot) for k in list(cats) + ["combined"]}
 
     for b in range(n_boot):
         sim = rng.poisson(lam=lambda_hat, size=n)
@@ -486,10 +462,7 @@ def bootstrap_excess_test(
     for k in cats:
         idx = min(k, 5)
         exp_k = n * _poisson_prob(lambda_hat, k)
-        p = float(
-            (1 + np.sum(sim_stats[k] >= obs_stats[k]))
-            / (n_boot + 1)
-        )
+        p = float((1 + np.sum(sim_stats[k] >= obs_stats[k])) / (n_boot + 1))
         rows.append(
             dict(
                 category=str(k),
@@ -501,16 +474,11 @@ def bootstrap_excess_test(
         )
 
     p_comb = float(
-        (1 + np.sum(
-            sim_stats["combined"] >= obs_stats["combined"]
-        ))
-        / (n_boot + 1)
+        (1 + np.sum(sim_stats["combined"] >= obs_stats["combined"])) / (n_boot + 1)
     )
     rows.append(
         dict(
-            category=(
-                "combined(" + "+".join(str(k) for k in cats) + ")"
-            ),
+            category=("combined(" + "+".join(str(k) for k in cats) + ")"),
             observed=int(obs_combined),
             expected=round(obs_combined_exp, 2),
             surplus=round(obs_stats["combined"], 2),
@@ -546,21 +514,27 @@ def summary_table(observed, expected, lambda_hat):
     return df
 
 
-
 def plot_observed_vs_expected(
     observed,
     expected,
     lambda_hat,
     test_result=None,
     ax=None,
-    label_fontsize=12,
-    tick_fontsize=10,
     title=None,
     bar_width=0.35,
+    fontsize_dict={"title": 8, "label": 7, "tick": 6, "legend": 6},
 ):
     """Bar chart of observed vs Poisson-expected counts."""
     if ax is None:
         _, ax = plt.subplots(figsize=(6, 4))
+
+    # Resolve font sizes
+    if fontsize_dict is None:
+        fontsize_dict = {}
+    label_fontsize = fontsize_dict.get("label", 7)
+    tick_fontsize = fontsize_dict.get("tick", 6)
+    legend_fontsize = fontsize_dict.get("legend", 6)
+    title_fontsize = fontsize_dict.get("title", 8)
 
     x = np.arange(N_CATEGORIES)
     ax.bar(
@@ -580,16 +554,14 @@ def plot_observed_vs_expected(
 
     ax.set_xticks(x)
     ax.set_xticklabels(CATEGORY_LABELS, fontsize=tick_fontsize)
-    ax.set_xlabel(
-        "Unique barcodes per cell", fontsize=label_fontsize
-    )
+    ax.set_xlabel("Unique barcodes per cell", fontsize=label_fontsize)
     ax.set_ylabel("Number of cells", fontsize=label_fontsize)
     ax.tick_params(axis="y", labelsize=tick_fontsize)
 
     ax.legend(
-        #title=f"$\\lambda$ = {lambda_hat:.4f}",
-        fontsize=tick_fontsize,
-        title_fontsize=tick_fontsize,
+        # title=f"$\\lambda$ = {lambda_hat:.4f}",
+        fontsize=legend_fontsize,
+        title_fontsize=legend_fontsize,
         frameon=False,
     )
     despine(ax)
@@ -613,7 +585,7 @@ def plot_observed_vs_expected(
             ),
         )
     if title is not None:
-        ax.set_title(title, fontsize=label_fontsize)
+        ax.set_title(title, fontsize=title_fontsize)
     return ax
 
 
@@ -623,9 +595,8 @@ def plot_observed_vs_expected_log(
     lambda_hat,
     test_result=None,
     ax=None,
-    label_fontsize=12,
-    tick_fontsize=10,
     title=None,
+    fontsize_dict={"title": 8, "label": 7, "tick": 6, "legend": 6},
 ):
     """Same as :func:`plot_observed_vs_expected` with log y-axis."""
     ax = plot_observed_vs_expected(
@@ -634,14 +605,17 @@ def plot_observed_vs_expected_log(
         lambda_hat,
         test_result=test_result,
         ax=ax,
-        label_fontsize=label_fontsize,
-        tick_fontsize=tick_fontsize,
         title=title,
+        fontsize_dict=fontsize_dict,
     )
+
+    # Resolve font sizes
+    if fontsize_dict is None:
+        fontsize_dict = {}
+    label_fontsize = fontsize_dict.get("label", 7)
+
     ax.set_yscale("log")
-    ax.set_ylabel(
-        "Number of cells", fontsize=label_fontsize
-    )
+    ax.set_ylabel("Number of cells", fontsize=label_fontsize)
     ax.set_ylim(bottom=0.5)
     return ax
 
@@ -650,12 +624,17 @@ def plot_residuals(
     observed,
     expected,
     ax=None,
-    label_fontsize=12,
-    tick_fontsize=10,
+    fontsize_dict={"title": 8, "label": 7, "tick": 6, "legend": 6},
 ):
     """Pearson residuals per category."""
     if ax is None:
         _, ax = plt.subplots(figsize=(6, 3))
+
+    # Resolve font sizes
+    if fontsize_dict is None:
+        fontsize_dict = {}
+    label_fontsize = fontsize_dict.get("label", 7)
+    tick_fontsize = fontsize_dict.get("tick", 6)
 
     x = np.arange(N_CATEGORIES)
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -664,18 +643,12 @@ def plot_residuals(
             (observed - expected) / np.sqrt(expected),
             0.0,
         )
-    colors = [
-        "steelblue" if r >= 0 else "salmon" for r in resid
-    ]
-    ax.bar(
-        x, resid, color=colors, edgecolor="white", linewidth=0.5
-    )
+    colors = ["steelblue" if r >= 0 else "salmon" for r in resid]
+    ax.bar(x, resid, color=colors, edgecolor="white", linewidth=0.5)
     ax.axhline(0, color="black", linewidth=0.5)
     ax.set_xticks(x)
     ax.set_xticklabels(CATEGORY_LABELS, fontsize=tick_fontsize)
-    ax.set_xlabel(
-        "Unique barcodes per cell", fontsize=label_fontsize
-    )
+    ax.set_xlabel("Unique barcodes per cell", fontsize=label_fontsize)
     ax.set_ylabel(
         "Pearson residual\n(obs - exp) / sqrt(exp)",
         fontsize=label_fontsize,
@@ -685,6 +658,73 @@ def plot_residuals(
     return ax
 
 
+def plot_density_field(
+    adata,
+    coord_cols=("ara_x", "ara_y", "ara_z"),
+    barcode_col="n_unique_barcodes",
+    projection_axes=(0, 2),
+    bin_size_mm=0.1,
+    smooth_sigma=2.0,
+    ax=None,
+    cmap="magma",
+    show_center=True,
+    label_fontsize=12,
+    tick_fontsize=10,
+):
+    """Plot a 2-D projection of the 3-D smoothed barcoded-cell density field.
+
+    Args:
+        adata: Full AnnData.
+        coord_cols: Coordinate column names.
+        barcode_col: Column with barcode counts.
+        projection_axes: Pair of axis indices (0=x, 1=y, 2=z).
+        bin_size_mm: Bin width for density.
+        smooth_sigma: Smoothing sigma (bins).
+        ax: Matplotlib axes.
+        cmap: Colormap for the density.
+        show_center: Whether to plot the red cross at the peak.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(6, 6))
+
+    obs = adata.obs
+    barcoded_mask = obs[barcode_col].notna() & (obs[barcode_col] > 0)
+    bc_coords = obs.loc[barcoded_mask, list(coord_cols)].values
+
+    H_smooth, edges, bs = _build_density_field(
+        bc_coords, bin_size_mm=bin_size_mm, smooth_sigma=smooth_sigma
+    )
+
+    i, j = projection_axes
+    # Find the axis to project out
+    k = [idx for idx in [0, 1, 2] if idx not in projection_axes][0]
+
+    # Max-projection along the depth axis
+    H_2d = H_smooth.max(axis=k)
+
+    # Prepare extent for imshow
+    extent = [edges[i][0], edges[i][-1], edges[j][-1], edges[j][0]]
+
+    im = ax.imshow(
+        H_2d,
+        extent=extent,
+        cmap=cmap,
+        aspect="equal",
+        origin="upper",
+    )
+
+    if show_center:
+        peak_idx = np.unravel_index(H_smooth.argmax(), H_smooth.shape)
+        center = np.array([edges[d][peak_idx[d]] + bs / 2 for d in range(3)])
+        ax.plot(center[i], center[j], "rx", markersize=8, markeredgewidth=2)
+
+    ax.set_xlabel(coord_cols[i] + " (mm)", fontsize=label_fontsize)
+    ax.set_ylabel(coord_cols[j] + " (mm)", fontsize=label_fontsize)
+    ax.tick_params(labelsize=tick_fontsize)
+    despine(ax)
+    return im
+
+
 def plot_injection_site(
     adata,
     region_info,
@@ -692,13 +732,24 @@ def plot_injection_site(
     barcode_col="n_unique_barcodes",
     projection_axes=(0, 2),
     ax=None,
-    label_fontsize=12,
-    tick_fontsize=10,
     coord_range=None,
     adata_region=None,
     region_alpha=0.15,
     barcode_alpha=0.8,
     layer="both",
+    show_density=False,
+    density_cmap="viridis",
+    barcode_inside_color="green",
+    barcode_outside_color=None,
+    show_center=True,
+    scalebar_mm=None,
+    scalebar_color="black",
+    density_color=None,
+    show_all_cells=True,
+    density_label="Smoothing Density",
+    show_colorbar=False,
+    colorbar_label="Density (cells/mm³)",
+    fontsize_dict={"title": 8, "label": 7, "tick": 6, "legend": 6},
 ):
     """2-D projection showing barcoded cells and/or the density region.
 
@@ -721,15 +772,41 @@ def plot_injection_site(
     Args:
         adata: Full annotated data matrix.
         region_info: Dict returned by ``select_cells_in_density_region``.
-        adata_region: Optional AnnData subset for the density region.
+        coord_cols: Coordinate column names (mm).
+        barcode_col: Column with unique-barcode counts.
+        projection_axes: Pair of axis indices (0=x, 1=y, 2=z).
+        ax: Optional Matplotlib axes.
         coord_range: Optional dict mapping axis index to (min, max)
             to exclude outlier points.
+        adata_region: Optional AnnData subset for the density region.
         region_alpha: Opacity for density-region cells (0-1).
         barcode_alpha: Opacity for barcoded cells (0-1).
         layer: ``"both"``, ``"region"``, or ``"barcoded"``.
+        show_density: Whether to overlay density contours.
+        density_cmap: Colormap for contours (if *density_color* is None).
+        barcode_inside_color: Color for barcoded cells in the region.
+        barcode_outside_color: Color for barcoded cells outside the region.
+            If provided, barcoded cells are split into two groups.
+        show_center: Whether to plot the red cross at the peak.
+        scalebar_mm: If provided, adds a scale bar of this length (mm).
+        scalebar_color: Color of the scale bar.
+        density_color: Single color for all contours (overrides *density_cmap*).
+        show_all_cells: Whether to plot the grey background of all cells.
+        density_label: Legend label for the density contours.
+        show_colorbar: Whether to add a colorbar for the density.
+        colorbar_label: Label for the colorbar.
     """
     if ax is None:
         _, ax = plt.subplots(figsize=(6, 6))
+
+    # Resolve font sizes
+    if fontsize_dict is None:
+        fontsize_dict = {}
+
+    label_fontsize = fontsize_dict.get("label", 7)
+    tick_fontsize = fontsize_dict.get("tick", 6)
+    legend_fontsize = fontsize_dict.get("legend", 6)
+    title_fontsize = fontsize_dict.get("title", 8)
 
     axis_labels = list(coord_cols)
     i, j = projection_axes
@@ -739,8 +816,7 @@ def plot_injection_site(
     obs_index = adata.obs.index.values
 
     barcoded_mask = (
-        adata.obs[barcode_col].notna()
-        & (adata.obs[barcode_col] > 0)
+        adata.obs[barcode_col].notna() & (adata.obs[barcode_col] > 0)
     ).values
 
     # Build region mask from adata_region index
@@ -767,28 +843,29 @@ def plot_injection_site(
             region_mask = region_mask[keep]
 
     # Layer 1: all cells (grey background, subsampled)
-    n_all = len(all_coords)
-    if n_all > 50_000:
-        idx = np.random.default_rng(42).choice(
-            n_all, 50_000, replace=False
-        )
-        ax.scatter(
-            all_coords[idx, i],
-            all_coords[idx, j],
-            s=0.1,
-            c="lightgrey",
-            alpha=0.3,
-            rasterized=True,
-        )
-    else:
-        ax.scatter(
-            all_coords[:, i],
-            all_coords[:, j],
-            s=0.1,
-            c="lightgrey",
-            alpha=0.3,
-            rasterized=True,
-        )
+    if show_all_cells:
+        n_all = len(all_coords)
+        if n_all > 50_000:
+            idx = np.random.default_rng(42).choice(n_all, 50_000, replace=False)
+            ax.scatter(
+                all_coords[idx, i],
+                all_coords[idx, j],
+                s=0.1,
+                c="lightgrey",
+                alpha=0.3,
+                rasterized=True,
+                label="All cells",
+            )
+        else:
+            ax.scatter(
+                all_coords[:, i],
+                all_coords[:, j],
+                s=0.1,
+                c="lightgrey",
+                alpha=0.3,
+                rasterized=True,
+                label="All cells",
+            )
 
     # Layer 2: density-region cells (black, semi-transparent)
     show_region = layer in ("both", "region")
@@ -802,7 +879,7 @@ def plot_injection_site(
                 c="black",
                 alpha=region_alpha,
                 rasterized=True,
-                label="density region",
+                label="Barcoded cell density",
             )
         else:
             # Fallback: draw equivalent-radius circle
@@ -818,35 +895,137 @@ def plot_injection_site(
                 label=f"equiv. radius {equiv_r:.2f} mm",
             )
             ax.add_patch(circle)
-
-    # Layer 3: barcoded cells (green)
+    # Layer 3: barcoded cells
     show_barcoded = layer in ("both", "barcoded")
     if show_barcoded:
-        bc_coords = all_coords[barcoded_mask]
-        ax.scatter(
-            bc_coords[:, i],
-            bc_coords[:, j],
-            s=2,
-            c="green",
-            alpha=barcode_alpha,
-            rasterized=True,
-            label="barcoded",
+        if barcode_outside_color is not None and region_mask is not None:
+            # Split into inside and outside
+            in_mask = barcoded_mask & region_mask
+            out_mask = barcoded_mask & (~region_mask)
+
+            # Outside cells
+            out_coords = all_coords[out_mask]
+            ax.scatter(
+                out_coords[:, i],
+                out_coords[:, j],
+                s=0.3,
+                c=barcode_outside_color,
+                alpha=barcode_alpha,
+                rasterized=True,
+                label="Barcoded Cells",
+            )
+            # Inside cells
+            in_coords = all_coords[in_mask]
+            ax.scatter(
+                in_coords[:, i],
+                in_coords[:, j],
+                s=0.3,
+                c=barcode_inside_color,
+                alpha=barcode_alpha,
+                rasterized=True,
+                label="Included Barcoded Cells",
+            )
+        else:
+            # Single color for all barcoded cells
+            bc_coords = all_coords[barcoded_mask]
+            ax.scatter(
+                bc_coords[:, i],
+                bc_coords[:, j],
+                s=2,
+                c=barcode_inside_color,
+                alpha=barcode_alpha,
+                rasterized=True,
+                label="barcoded",
+            )
+
+    # Layer 4: Density contours
+    if show_density:
+        obs = adata.obs
+        barcoded_mask = obs[barcode_col].notna() & (obs[barcode_col] > 0)
+        bc_coords = obs.loc[barcoded_mask, list(coord_cols)].values
+
+        # Use parameters from region_info if available, else defaults
+        bs = region_info.get("bin_size_mm", 0.1)
+        sigma = region_info.get("smooth_sigma", 2.0)
+
+        H_smooth, edges, _ = _build_density_field(
+            bc_coords, bin_size_mm=bs, smooth_sigma=sigma
         )
+        H_smooth /= bs**3  # convert to mm3
+
+        k = [idx for idx in [0, 1, 2] if idx not in projection_axes][0]
+        H_2d = H_smooth.max(axis=k)
+        peak = H_smooth.max()
+
+        # Generate meshgrid for contour
+        xx, yy = np.meshgrid(edges[i][:-1] + bs / 2, edges[j][:-1] + bs / 2)
+
+        contour_kwargs = dict(
+            levels=np.array([0.25, 0.5, 0.75, 0.9]) * peak,
+            linewidths=1,
+        )
+        if density_color:
+            contour_kwargs["colors"] = density_color
+        else:
+            contour_kwargs["cmap"] = density_cmap
+
+        cs = ax.contour(xx, yy, H_2d, **contour_kwargs)
+        if density_label:
+            # Proxy artist for the legend
+            ax.plot([], [], color=density_color or "gray", lw=1.5, label=density_label)
+
+        if show_colorbar:
+            import matplotlib as mpl
+
+            norm = mpl.colors.Normalize(vmin=0, vmax=H_2d.max())
+            sm = plt.cm.ScalarMappable(cmap=density_cmap, norm=norm)
+            sm.set_array([])
+
+            fig = ax.get_figure()
+            cbar = fig.colorbar(sm, ax=ax, shrink=0.6, pad=0.05)
+            cbar.set_label(colorbar_label, fontsize=label_fontsize)
+            cbar.ax.tick_params(labelsize=tick_fontsize)
+            despine(cbar.ax)
 
     # Center marker
-    ax.plot(
-        center[i], center[j], "rx", markersize=8, markeredgewidth=2
-    )
+    if show_center:
+        ax.plot(center[i], center[j], "rx", markersize=8, markeredgewidth=2)
 
-    ax.set_xlabel(
-        axis_labels[i] + " (mm)", fontsize=label_fontsize
-    )
-    ax.set_ylabel(
-        axis_labels[j] + " (mm)", fontsize=label_fontsize
-    )
+    # Scalebar
+    if scalebar_mm:
+        # Calculate length in axes fraction
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        ax_width = abs(xlim[1] - xlim[0])
+        ax_height = abs(ylim[1] - ylim[0])
+
+        length_frac = scalebar_mm / ax_width
+        height_frac = 0.02  # Fixed relative thickness
+
+        # Position at bottom right with 5% margin
+        x0 = 0.95 - length_frac
+        y0 = 0.05
+
+        import matplotlib.patches as patches
+
+        rect = patches.Rectangle(
+            (x0, y0),
+            length_frac,
+            height_frac,
+            transform=ax.transAxes,
+            facecolor=scalebar_color,
+            edgecolor=None,
+            linewidth=0,
+            zorder=15,
+            clip_on=False,
+        )
+        ax.add_patch(rect)
+
+    ax.set_xlabel(axis_labels[i] + " (mm)", fontsize=label_fontsize)
+    ax.set_ylabel(axis_labels[j] + " (mm)", fontsize=label_fontsize)
     ax.set_aspect("equal")
     ax.tick_params(labelsize=tick_fontsize)
-    ax.legend(fontsize=tick_fontsize, frameon=False)
+    ax.legend(fontsize=legend_fontsize, frameon=False)
     despine(ax)
     return ax
 
@@ -901,9 +1080,7 @@ def sweep_density_thresholds(
                 threshold=round(float(th), 2),
                 n_neurons=int(obs.sum()),
                 n_barcoded=n_barcoded,
-                approx_vol_mm3=round(
-                    info["approx_volume_mm3"], 4
-                ),
+                approx_vol_mm3=round(info["approx_volume_mm3"], 4),
                 lambda_hat=lam,
                 chi2=test["chi2"],
                 df=test["df"],
@@ -914,9 +1091,7 @@ def sweep_density_thresholds(
     return pd.DataFrame(rows)
 
 
-def plot_threshold_sweep(
-    sweep_df, axes=None, label_fontsize=12, tick_fontsize=10
-):
+def plot_threshold_sweep(sweep_df, axes=None, label_fontsize=12, tick_fontsize=10):
     """Two-panel plot: lambda and p-value vs density threshold."""
     if axes is None:
         _, axes = plt.subplots(1, 2, figsize=(10, 4))
@@ -928,18 +1103,12 @@ def plot_threshold_sweep(
         "o-",
         color="steelblue",
     )
-    ax0.set_xlabel(
-        "Density threshold", fontsize=label_fontsize
-    )
+    ax0.set_xlabel("Density threshold", fontsize=label_fontsize)
     ax0.set_ylabel("Estimated lambda", fontsize=label_fontsize)
     ax0.tick_params(labelsize=tick_fontsize)
     despine(ax0)
 
-    col = (
-        "log10_p_value"
-        if "log10_p_value" in sweep_df.columns
-        else None
-    )
+    col = "log10_p_value" if "log10_p_value" in sweep_df.columns else None
     if col is not None:
         ax1.plot(
             sweep_df["threshold"],
@@ -954,9 +1123,7 @@ def plot_threshold_sweep(
             lw=0.8,
             label="p = 0.05",
         )
-        ax1.set_ylabel(
-            "$\\log_{10}$(p-value)", fontsize=label_fontsize
-        )
+        ax1.set_ylabel("$\\log_{10}$(p-value)", fontsize=label_fontsize)
     else:
         ax1.semilogy(
             sweep_df["threshold"],
@@ -964,19 +1131,14 @@ def plot_threshold_sweep(
             "o-",
             color="salmon",
         )
-        ax1.axhline(
-            0.05, ls="--", color="grey", lw=0.8, label="p = 0.05"
-        )
-        ax1.set_ylabel(
-            "p-value (log)", fontsize=label_fontsize
-        )
-    ax1.set_xlabel(
-        "Density threshold", fontsize=label_fontsize
-    )
+        ax1.axhline(0.05, ls="--", color="grey", lw=0.8, label="p = 0.05")
+        ax1.set_ylabel("p-value (log)", fontsize=label_fontsize)
+    ax1.set_xlabel("Density threshold", fontsize=label_fontsize)
     ax1.tick_params(labelsize=tick_fontsize)
     ax1.legend(fontsize=tick_fontsize, frameon=False)
     despine(ax1)
     return ax0, ax1
+
 
 def load_spots_per_barcode(cells_df_path):
     """Load the cell-barcode DataFrame and return spot-count info.
@@ -1019,16 +1181,12 @@ def spot_count_summary(cells_df):
     single = cells_df[cells_df["n_unique_barcodes"] == 1]
     multi = cells_df[cells_df["n_unique_barcodes"] >= 2]
 
-    single_spots = np.array(
-        [s[0] for s in single["n_spots_per_barcode"]]
-    )
+    single_spots = np.array([s[0] for s in single["n_spots_per_barcode"]])
     multi_all = []
     for sl in multi["n_spots_per_barcode"]:
         multi_all.extend(sl)
     multi_all = np.array(multi_all)
-    multi_min = np.array(
-        [min(s) for s in multi["n_spots_per_barcode"]]
-    )
+    multi_min = np.array([min(s) for s in multi["n_spots_per_barcode"]])
 
     def _desc(arr, label):
         return dict(
@@ -1106,9 +1264,7 @@ def plot_spot_count_distributions(
     return ax
 
 
-def recount_barcodes_with_spot_floor(
-    cells_df, adata, min_spots=5
-):
+def recount_barcodes_with_spot_floor(cells_df, adata, min_spots=5):
     """Recount n_unique_barcodes after discarding barcodes with fewer
     than *min_spots* transcript spots.
 
@@ -1135,15 +1291,11 @@ def recount_barcodes_with_spot_floor(
     filtered_series = pd.Series(filtered, name=col_name)
 
     # Map onto adata; unbarcoded cells stay NaN
-    adata.obs[col_name] = filtered_series.reindex(
-        adata.obs.index
-    )
+    adata.obs[col_name] = filtered_series.reindex(adata.obs.index)
     # Cells that were barcoded but now have 0 qualifying barcodes
     # should be treated as 0 (not NaN) for the Poisson analysis
     mask = adata.obs["n_unique_barcodes"].notna()
-    adata.obs.loc[mask, col_name] = (
-        adata.obs.loc[mask, col_name].fillna(0)
-    )
+    adata.obs.loc[mask, col_name] = adata.obs.loc[mask, col_name].fillna(0)
     return col_name
 
 
@@ -1192,19 +1344,14 @@ def run_filtered_analysis_comparison(
     for floor in spot_floors:
         if verbose:
             print(f"\n{'='*60}")
-            print(
-                f"  Spot floor = {floor} "
-                "(minimum spots per barcode to count)"
-            )
+            print(f"  Spot floor = {floor} " "(minimum spots per barcode to count)")
             print(f"{'='*60}")
 
         if floor <= 3:
             # Original data already has a floor of 3
             bc_col = "n_unique_barcodes"
         else:
-            bc_col = recount_barcodes_with_spot_floor(
-                cells_df, adata, min_spots=floor
-            )
+            bc_col = recount_barcodes_with_spot_floor(cells_df, adata, min_spots=floor)
 
         res = run_double_labeling_analysis(
             adata,
@@ -1393,10 +1540,7 @@ def run_double_labeling_analysis(
                 f"{assume_neuron_density:,.0f} /mm3 "
                 f"-> {n_t:,} neurons in region"
             )
-        print(
-            f"Presynaptic barcoded: {n_b:,} "
-            f"(excluded {n_starters:,} starters)"
-        )
+        print(f"Presynaptic barcoded: {n_b:,} " f"(excluded {n_starters:,} starters)")
         print(f"lambda = {lambda_hat:.5f}")
         print(
             f"chi2 = {test['chi2']:.2f}, "
