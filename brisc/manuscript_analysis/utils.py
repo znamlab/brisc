@@ -62,7 +62,8 @@ def get_path(pathname, data_root=None):
     """
     Get the path to the processed data.
 
-    If data_root is provided, returns data_root / pathname.
+    If data_root is provided, returns data_root / pathname (unless
+    data_root already ends with pathname).
     Otherwise, attempts to find the path via flexiznam. Returns None if
     flexiznam is unavailable or the path cannot be found.
 
@@ -75,7 +76,10 @@ def get_path(pathname, data_root=None):
         pathlib.Path: The path to the processed data, or None if not found.
     """
     if data_root is not None:
-        return Path(data_root) / pathname
+        p = Path(data_root)
+        if p.name == pathname:
+            return p
+        return p / pathname
 
     try:
         import flexiznam as flz

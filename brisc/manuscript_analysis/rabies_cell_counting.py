@@ -113,8 +113,8 @@ def plot_rv_coronal_slice(
             cropped_background_channel, vlim_background[0], vlim_background[1]
         ).max(axis=0)
     else:
-        # full res volumes are already projected; take a single
-        # coronal slice at the injection z-coordinate.
+        # full res volumes are already projected;
+        pixel_size = 2
         cropped_mcherry_normalized = normalize(
             mcherry.astype(float), vlim_mcherry[0], vlim_mcherry[1]
         )
@@ -147,7 +147,7 @@ def plot_rv_coronal_slice(
         xdata = [rgb_zoom.shape[1] - 240, rgb_zoom.shape[1] - 140]
         ydata = [rgb_zoom.shape[0] - 50, rgb_zoom.shape[0] - 50]
     else:
-        xdata = [100, 200]
+        xdata = [100, 100 + 1000 / pixel_size]
         ydata = [rgb_zoom.shape[0] - 100, rgb_zoom.shape[0] - 100]
     scalebar2 = plt.Line2D(
         xdata,
