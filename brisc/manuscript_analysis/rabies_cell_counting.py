@@ -185,7 +185,7 @@ def plot_rabies_density(
     inj_center,
     project="rabies_barcoding",
     mouse="BRYC64.2h",
-    processed=Path("/nemo/lab/znamenskiyp/home/shared/projects/"),
+    data_root=None,
     ax=None,
     label_fontsize=12,
     tick_fontsize=12,
@@ -208,8 +208,8 @@ def plot_rabies_density(
         Project folder name.
     mouse : str
         Mouse folder name.
-    processed : Path
-        Base path to data.
+    data_root : Path, optional
+        Base path to data. Defaults to None (auto-find in lab).
     ax : matplotlib.axes._axes.Axes or None
         Axes on which to plot.
     label_fontsize : int
@@ -228,7 +228,7 @@ def plot_rabies_density(
     if voxel_distances_sorted is None or cell_distances_sorted is None:
         # Load points and atlas
         voxel_distances_sorted, cell_distances_sorted = rv_cortical_cell_distances(
-            inj_center, project, mouse, processed
+            inj_center, project, mouse, data_root
         )
 
     # -------------------------------------------------------------------------
@@ -276,7 +276,7 @@ def plot_rabies_density(
     despine(ax)
 
 
-def rv_cortical_cell_distances(inj_center, project, mouse, processed, data_root):
+def rv_cortical_cell_distances(inj_center, project, mouse, data_root=None):
     points_file = (
         get_path(project, data_root)
         / mouse

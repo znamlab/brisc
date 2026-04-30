@@ -24,7 +24,7 @@ def plot_starter_dilution_densities(
     volume=50,
     label_fontsize=12,
     tick_fontsize=12,
-    processed=Path("/nemo/lab/znamenskiyp/home/shared/projects/"),
+    data_root=None,
 ):
     """Plot starter cell densities for different dilutions.
 
@@ -45,8 +45,8 @@ def plot_starter_dilution_densities(
             Used with `titre` to calculate the number of particles. Defaults to 50.
         label_fontsize (int, optional): Font size for axis labels. Defaults to 12.
         tick_fontsize (int, optional): Font size for tick labels. Defaults to 12.
-        processed (pathlib.Path, optional): The base path to the processed
-            project data. Defaults to a hardcoded path.
+        data_root (pathlib.Path, optional): The base path to the processed
+            project data. Defaults to None (auto-find in lab).
     """
 
     atlas_size = 25
@@ -54,7 +54,7 @@ def plot_starter_dilution_densities(
     bg_atlas = bga.bg_atlas.BrainGlobeAtlas("allen_mouse_%dum" % atlas_size)
     cdf = atlas_utils.create_ctx_table(bg_atlas)
     project = "rabies_barcoding"
-    mouse_csv = processed / project / "mice_list.csv"
+    mouse_csv = get_path(project, data_root=data_root) / "mice_list.csv"
     mice_df = pd.read_csv(mouse_csv, skipinitialspace=True)
     mice_df.set_index("Mouse", inplace=True, drop=False)
 
@@ -67,17 +67,23 @@ def plot_starter_dilution_densities(
     for mouse, m_df in mice_df[mice_df["Virus Batch"] == "A87"].iterrows():
         if mouse in []:
             continue
-        mouse_cellfinder_folder = processed / project / mouse / "cellfinder_results"
+        mouse_cellfinder_folder = (
+            get_path(project, data_root=data_root) / mouse / "cellfinder_results"
+        )
         if not mouse_cellfinder_folder.is_dir():
             print("No cellfinder folder for %s" % mouse)
             print(mouse_cellfinder_folder)
             continue
         # print("Doing %s" % mouse)
         density_fig_path = (
-            processed / project / mouse / ("%s_neighbour_by_distance.png" % mouse)
+            get_path(project, data_root=data_root)
+            / mouse
+            / ("%s_neighbour_by_distance.png" % mouse)
         )
         summary_density_mouse_path = (
-            processed / project / mouse / ("%s_summary_density.csv" % mouse)
+            get_path(project, data_root=data_root)
+            / mouse
+            / ("%s_summary_density.csv" % mouse)
         )
 
         REDO = False
