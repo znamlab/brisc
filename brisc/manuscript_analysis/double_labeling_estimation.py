@@ -198,7 +198,7 @@ def observed_barcode_counts(
     adata_region,
     barcode_col: str = "n_unique_barcodes",
     starter_col: str = "is_starter",
-    assume_neuron_density: float | None = 155_000,
+    assume_neuron_density: float | None = 150_000,
     region_volume_mm3: float | None = None,
 ):
     """Count cells with 0, 1, 2, 3, 4, and 5+ barcodes.
@@ -242,7 +242,7 @@ def observed_barcode_counts(
     raw = obs.loc[~is_starter, barcode_col].fillna(0)
     raw = raw.astype(int).values
     raw = np.clip(raw, 0, None)
-
+    n_starters = int(is_starter.sum())
     counts = np.zeros(N_CATEGORIES, dtype=int)
     for k in range(1, 5):
         counts[k] = int((raw == k).sum())
@@ -252,7 +252,7 @@ def observed_barcode_counts(
     if assume_neuron_density is not None and region_volume_mm3 is not None:
         n_neurons = int(round(assume_neuron_density * region_volume_mm3))
         n_barcoded = int(counts[1:].sum())
-        counts[0] = max(0, n_neurons - n_barcoded)
+        counts[0] = max(0, n_neurons - n_barcoded - n_starters)
     else:
         counts[0] = int((raw == 0).sum())
 
@@ -1035,7 +1035,7 @@ def sweep_density_thresholds(
     thresholds=None,
     barcode_col="n_unique_barcodes",
     starter_col="is_starter",
-    assume_neuron_density: float | None = 155_000,
+    assume_neuron_density: float | None = 150_000,
     coord_cols=("ara_x", "ara_y", "ara_z"),
     bin_size_mm=0.1,
     smooth_sigma=2.0,
@@ -1305,7 +1305,7 @@ def run_filtered_analysis_comparison(
     spot_floors=(3, 5, 10),
     density_threshold=0.5,
     starter_col="is_starter",
-    assume_neuron_density: float | None = 155_000,
+    assume_neuron_density: float | None = 150_000,
     n_boot=5_000,
     random_state=0,
     verbose=True,
@@ -1428,7 +1428,7 @@ def run_double_labeling_analysis(
     coord_cols=("ara_x", "ara_y", "ara_z"),
     barcode_col="n_unique_barcodes",
     starter_col="is_starter",
-    assume_neuron_density: float | None = 155_000,
+    assume_neuron_density: float | None = 150_000,
     bin_size_mm=0.1,
     smooth_sigma=2.0,
     excess_categories=(2, 3, 4),
