@@ -39,19 +39,18 @@ def get_output_folder(data_root=None):
     if env_path:
         save_path = Path(env_path)
     else:
-        try:
-            # 2. Try to find the shared lab location (presentations folder)
-            import flexiznam as flz
+        if data_root is not None:
+            save_path = Path(data_root) / "becalick_2025"
+        else:
+            try:
+                # 2. Try to find the shared lab location (presentations folder)
+                import flexiznam as flz
 
-            # Go up two levels from the rabies_barcoding processed path to find the project root
-            # /nemo/project/proj-znamenp-barseq/processed/rabies_barcoding -> /nemo/project/proj-znamenp-barseq/
-            base = flz.get_processed_path("rabies_barcoding").parent.parent
-            save_path = base / "presentations" / "becalick_2025"
-        except Exception:
-            # 3. Fallback to data_root or local directory
-            if data_root is not None:
-                save_path = Path(data_root) / "becalick_2025"
-            else:
+                # Go up two levels from the rabies_barcoding processed path to find the project root
+                # /nemo/project/proj-znamenp-barseq/processed/rabies_barcoding -> /nemo/project/proj-znamenp-barseq/
+                base = flz.get_processed_path("rabies_barcoding").parent.parent
+                save_path = base / "presentations" / "becalick_2025"
+            except Exception:
                 save_path = Path.cwd() / "figures" / "becalick_2025"
 
     save_path.mkdir(exist_ok=True, parents=True)
