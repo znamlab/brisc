@@ -1414,8 +1414,6 @@ def plot_filtered_comparison(
             res["lambda_hat"],
             test_result=res["chi2_test"],
             ax=ax,
-            label_fontsize=label_fontsize,
-            tick_fontsize=tick_fontsize,
             title=f"Min {floor} spots/barcode",
         )
     fig.tight_layout()
