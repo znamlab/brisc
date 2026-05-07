@@ -229,7 +229,20 @@ def load_confocal_image(image_fname):
             - np.ndarray: The image data as a numpy array.
     """
     with CziFile(image_fname) as czi:
-        metadata = czi.metadata(raw=False)
+        try:
+            metadata = czi.metadata(raw=False)
+        except TypeError:
+            # Handle versions where metadata() does not take arguments
+            metadata = czi.metadata()
+            if isinstance(metadata, str):
+                try:
+                    from tifffile import xml2dict
+
+                    metadata = xml2dict(metadata)
+                except ImportError:
+                    raise ImportError(
+                        "tifffile is required to parse CZI metadata. Please install it: pip install tifffile"
+                    )
         img = np.squeeze(czi.asarray())
     return metadata, img
 
