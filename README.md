@@ -8,8 +8,11 @@ To install clone the repository and install it with pip:
 ```bash
 git clone git@github.com:znamlab/brisc.git
 cd brisc
-pip install .
+pip install ".[figures]"
 ```
+
+The `.[figures]` will install jupyter and ipykernel to run the notebooks used to
+generate figures. Use the plain `pip install .` for a minimal installation.
 
 If you want to modify the code, there are a `dev` install option to install the
 requirements for `pre-commit`:
