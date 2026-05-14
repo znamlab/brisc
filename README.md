@@ -30,7 +30,7 @@ the file path to the folder where you extracted the data.
 
 ### Download external data
 
-For Fig S1, data from the previously published viral libraries must be downloaded and
+For Fig 1f, data from the previously published viral libraries must be downloaded and
 preprocessed by running brisc/barcode_library_processing/convert_external_libraries.ipynb.
 
 ## Generate the figures
