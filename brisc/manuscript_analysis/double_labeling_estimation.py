@@ -398,9 +398,11 @@ def bootstrap_excess_test(
     n_boot: int = 5_000,
     categories: tuple = (2, 3, 4),
     random_state: int | None = 0,
+    two_sided: bool = True,
+    reestimate_lambda: bool = False,
 ):
-    """One-sided parametric bootstrap for *excess* of specific
-    barcode-count categories.
+    """One-sided or two-sided parametric bootstrap for *excess* or
+    deviations of specific barcode-count categories.
 
     For each target category *k* the test statistic is the *surplus*::
 
@@ -419,6 +421,9 @@ def bootstrap_excess_test(
         n_boot: Number of bootstrap replicates.
         categories: Which individual *k* values to test.
         random_state: RNG seed (None for non-deterministic).
+        two_sided: Whether to perform two-sided bootstrap.
+        reestimate_lambda: Whether to re-estimate lambda for each
+            bootstrap sample (recommended for goodness-of-fit).
 
     Returns:
         pandas.DataFrame with one row per tested category plus one
@@ -442,10 +447,14 @@ def bootstrap_excess_test(
 
     # Bootstrap replicates
     sim_stats = {k: np.empty(n_boot) for k in list(cats) + ["combined"]}
-
+    boot_lambdas = np.empty(n_boot) if reestimate_lambda else None
     for b in range(n_boot):
         sim = rng.poisson(lam=lambda_hat, size=n)
-        lam_b = float(sim.mean())
+        if reestimate_lambda:
+            lam_b = float(sim.mean())
+            boot_lambdas[b] = lam_b
+        else:
+            lam_b = lambda_hat
 
         comb_count_b = 0
         comb_exp_b = 0.0
@@ -462,30 +471,47 @@ def bootstrap_excess_test(
     for k in cats:
         idx = min(k, 5)
         exp_k = n * _poisson_prob(lambda_hat, k)
-        p = float((1 + np.sum(sim_stats[k] >= obs_stats[k])) / (n_boot + 1))
+        if two_sided:
+            p_excess = float((1 + np.sum(sim_stats[k] >= obs_stats[k])) / (n_boot + 1))
+            p_deficit = float((1 + np.sum(sim_stats[k] <= obs_stats[k])) / (n_boot + 1))
+            p_value = min(1, 2 * min(p_excess, p_deficit))
+        else:
+            p_value = float((1 + np.sum(sim_stats[k] >= obs_stats[k])) / (n_boot + 1))
         rows.append(
             dict(
                 category=str(k),
                 observed=int(observed[idx]),
                 expected=round(exp_k, 2),
                 surplus=round(obs_stats[k], 2),
-                p_value_excess=round(p, 4),
+                p_value=round(p_value, 4),
             )
         )
 
-    p_comb = float(
-        (1 + np.sum(sim_stats["combined"] >= obs_stats["combined"])) / (n_boot + 1)
-    )
+    if two_sided:
+        p_c_excess = float(
+            (1 + np.sum(sim_stats["combined"] >= obs_stats["combined"])) / (n_boot + 1)
+        )
+        p_c_deficit = float(
+            (1 + np.sum(sim_stats["combined"] <= obs_stats["combined"])) / (n_boot + 1)
+        )
+        p_comb = min(1.0, 2 * min(p_c_excess, p_c_deficit))
+    else:
+        p_comb = float(
+            (1 + np.sum(sim_stats["combined"] >= obs_stats["combined"])) / (n_boot + 1)
+        )
     rows.append(
         dict(
             category=("combined(" + "+".join(str(k) for k in cats) + ")"),
             observed=int(obs_combined),
             expected=round(obs_combined_exp, 2),
             surplus=round(obs_stats["combined"], 2),
-            p_value_excess=round(p_comb, 4),
+            p_value=round(p_comb, 4),
         )
     )
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    if boot_lambdas is not None:
+        df.attrs["boot_lambdas"] = boot_lambdas  # Attach as metadata
+    return df
 
 
 def summary_table(observed, expected, lambda_hat):
@@ -1433,6 +1459,8 @@ def run_double_labeling_analysis(
     n_boot=5_000,
     random_state=0,
     verbose=True,
+    two_sided=True,
+    reestimate_lambda=False,
 ):
     """Run the full double-labeling analysis pipeline.
 
@@ -1505,6 +1533,8 @@ def run_double_labeling_analysis(
         n_boot=n_boot,
         categories=excess_categories,
         random_state=random_state,
+        two_sided=two_sided,
+        reestimate_lambda=reestimate_lambda,
     )
 
     # 7.  Summary
