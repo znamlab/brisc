@@ -303,6 +303,15 @@ def plot_confidence_intervals(
     tick_fontsize=12,
     line_width=1,
     orientation="vertical",
+    individual_points_df=None,
+    individual_points_grouping_col=None,
+    jitter_width=0.15,
+    point_size=4,
+    point_color="black",
+    point_alpha=0.4,
+    jitter_seed=None,
+    show_violin=None,
+    show_error=None,
 ):
     """
     Plot confidence intervals in multiple stacked Axes created via make_axes_locatable.
@@ -312,17 +321,46 @@ def plot_confidence_intervals(
     mean_input_frac_df : pandas.DataFrame
         DataFrame of mean input fractions (index = presyn area, columns = target area).
     lower_df : pandas.DataFrame
-        DataFrame of lower confidence bounds matching mean_input_frac_df shape.
+        Unused (kept for signature compatibility).
     upper_df : pandas.DataFrame
-        DataFrame of upper confidence bounds matching mean_input_frac_df shape.
+        Unused (kept for signature compatibility).
     ax : matplotlib.axes.Axes, optional
         The Axes into which the first subplot is drawn. If None, a new figure & Axes are created.
+    individual_points_df : pandas.DataFrame, optional
+        Long-form DataFrame with one row per individual sample (e.g. one starter cell),
+        one column per presyn area matching `mean_input_frac_df.index`, and a grouping
+        column (named by `individual_points_grouping_col`) whose values match
+        `mean_input_frac_df.columns`. When provided, individual points are scattered
+        on top of the bars with random jitter along the category axis.
+    individual_points_grouping_col : str, optional
+        Name of the column in `individual_points_df` identifying the target area group,
+        required when `individual_points_df` is provided.
+    jitter_width : float, optional
+        Half-width of the uniform jitter applied to individual points along the
+        category axis.
+    point_size, point_color, point_alpha : optional
+        Styling for the scattered individual points.
+    jitter_seed : int, optional
+        Seed for the jitter random generator, for reproducible plots.
+    show_violin : bool, optional
+        By default (None), a violin (with a purple mean line) is drawn for
+        presyn areas with more than 5 individual points (requires
+        `individual_points_df`), falling back to a plain jittered scatter of
+        the raw points otherwise. Pass True/False to force violins on/off for
+        all areas.
+    show_error : bool, optional
+        Unused (kept for signature compatibility) — CI error bars were removed.
 
     Returns
     -------
     (fig, axes) : (matplotlib.figure.Figure, list of matplotlib.axes.Axes)
         The figure and list of axes (one per column in mean_input_frac_df).
     """
+    rng = np.random.default_rng(jitter_seed)
+    violin_width = 0.7
+    mean_line_width = 1.5
+    # Default violinplot mean-line half-length is violin_width / 4; make it 50% longer.
+    mean_line_half_len = (violin_width / 4) * 1.5
     # Determine the presynaptic areas (rows) and target areas (columns)
     presyn_area_order = sorted(mean_input_frac_df.index)
     areas = sorted(mean_input_frac_df.columns)
@@ -339,71 +377,142 @@ def plot_confidence_intervals(
     for i, area in enumerate(areas):
         ax_curr = axes[i]
         m = np.array(mean_input_frac_df.loc[presyn_area_order, area])
-        for line in [0.3, 0.6]:
+        idx = np.arange(len(m))
+        group = None
+        violin_mask = np.zeros(len(m), dtype=bool)
+        if individual_points_df is not None:
+            group = individual_points_df[
+                individual_points_df[individual_points_grouping_col] == area
+            ]
+            counts = np.array(
+                [group[presyn_area].notna().sum() for presyn_area in presyn_area_order]
+            )
+            violin_mask = counts > 7
+        if show_violin is not None:
+            violin_mask = np.full(len(m), show_violin, dtype=bool) & (group is not None)
+        for line in [0.5, 1.0]:
             if orientation == "vertical":
                 ax_curr.axhline(line, color="black", linestyle=":", linewidth=0.5)
             else:
                 ax_curr.axvline(line, color="black", linestyle=":", linewidth=0.5)
         if orientation == "vertical":
-            ax_curr.bar(
-                np.arange(len(m)),
-                m,
-                color="mediumorchid",
-                alpha=0.8,
-                edgecolor="darkorchid",
-                linewidth=line_width,
-            )
-            # Error bars
-            ax_curr.errorbar(
-                np.arange(len(m)),
-                m,
-                np.abs(
-                    np.vstack(
-                        [
-                            lower_df.loc[presyn_area_order, area],
-                            upper_df.loc[presyn_area_order, area],
-                        ]
+            if violin_mask.any():
+                parts = ax_curr.violinplot(
+                    [
+                        group[p].dropna().values
+                        for p, show in zip(presyn_area_order, violin_mask)
+                        if show
+                    ],
+                    positions=idx[violin_mask],
+                    vert=True,
+                    widths=violin_width,
+                    showmeans=True,
+                    showmedians=False,
+                    showextrema=False,
+                )
+                for body in parts["bodies"]:
+                    body.set_facecolor("mediumorchid")
+                    body.set_edgecolor("darkorchid")
+                    body.set_alpha(0.6)
+                    body.set_linewidth(line_width)
+                parts["cmeans"].set_segments(
+                    [
+                        [(pos - mean_line_half_len, y), (pos + mean_line_half_len, y)]
+                        for pos, y in zip(idx[violin_mask], m[violin_mask])
+                    ]
+                )
+                parts["cmeans"].set_color("black")
+                parts["cmeans"].set_linewidth(mean_line_width)
+            for xi in idx[~violin_mask]:
+                # Mean line, drawn regardless of how many individual points there are
+                ax_curr.plot(
+                    [xi - mean_line_half_len, xi + mean_line_half_len],
+                    [m[xi], m[xi]],
+                    color="black",
+                    linewidth=mean_line_width,
+                    zorder=4,
+                )
+                if group is not None:
+                    presyn_area = presyn_area_order[xi]
+                    values = group[presyn_area].dropna().values
+                    jitter = rng.uniform(-jitter_width, jitter_width, size=len(values))
+                    # Too few points for a violin: show the raw data instead
+                    ax_curr.scatter(
+                        xi + jitter,
+                        values,
+                        s=point_size * 4,
+                        color="darkorchid",
+                        alpha=0.8,
+                        edgecolors="none",
+                        zorder=3,
                     )
-                    - m[None, :]
-                ),
-                fmt="none",
-                markerfacecolor="mediumorchid",
-                markeredgecolor="darkorchid",
-                markersize=5,
-                ecolor="darkorchid",
-                elinewidth=line_width,
-            )
-            ax_curr.set_ylim(0, 0.6)
-            ax_curr.set_yticks([0, 0.6])
+            ax_curr.set_ylim(0, 1)
+            ax_curr.set_yticks([0, 1])
             ax_curr.set_ylabel(area, fontsize=tick_fontsize)
             ax_curr.set_xticks([])
         else:
-            ax_curr.barh(
-                np.arange(len(m)),
-                m,
-                xerr=np.abs(
-                    np.vstack(
-                        [
-                            lower_df.loc[presyn_area_order, area],
-                            upper_df.loc[presyn_area_order, area],
-                        ]
+            if violin_mask.any():
+                parts = ax_curr.violinplot(
+                    [
+                        group[p].dropna().values
+                        for p, show in zip(presyn_area_order, violin_mask)
+                        if show
+                    ],
+                    positions=idx[violin_mask],
+                    vert=False,
+                    widths=violin_width,
+                    showmeans=True,
+                    showmedians=False,
+                    showextrema=False,
+                )
+                for body in parts["bodies"]:
+                    body.set_facecolor("mediumorchid")
+                    body.set_edgecolor("darkorchid")
+                    body.set_alpha(0.6)
+                    body.set_linewidth(line_width)
+                parts["cmeans"].set_segments(
+                    [
+                        [(x, pos - mean_line_half_len), (x, pos + mean_line_half_len)]
+                        for pos, x in zip(idx[violin_mask], m[violin_mask])
+                    ]
+                )
+                parts["cmeans"].set_color("black")
+                parts["cmeans"].set_linewidth(mean_line_width)
+            for yi in idx[~violin_mask]:
+                # Mean line, drawn regardless of how many individual points there are
+                ax_curr.plot(
+                    [m[yi], m[yi]],
+                    [yi - mean_line_half_len, yi + mean_line_half_len],
+                    color="black",
+                    linewidth=mean_line_width,
+                    zorder=4,
+                )
+                if group is not None:
+                    presyn_area = presyn_area_order[yi]
+                    values = group[presyn_area].dropna().values
+                    jitter = rng.uniform(-jitter_width, jitter_width, size=len(values))
+                    # Too few points for a violin: show the raw data instead
+                    ax_curr.scatter(
+                        values,
+                        yi + jitter,
+                        s=point_size * 4,
+                        color="darkorchid",
+                        alpha=0.8,
+                        edgecolors="none",
+                        zorder=3,
                     )
-                    - m[None, :]
-                ),
-                color="mediumorchid",
-                alpha=0.8,
-                edgecolor="darkorchid",
-                linewidth=line_width,
-            )
-            ax_curr.set_xlim(0, 0.6)
-            ax_curr.set_xticks([0.0, 0.6], labels=["0", "0.6"])
-            for label, x in zip(ax_curr.get_xticklabels(), [0.0, 0.6]):
+            ax_curr.set_xlim(0, 1)
+            ax_curr.set_xticks([0.0, 1.0], labels=["0", "1"])
+            for label, x in zip(ax_curr.get_xticklabels(), [0.0, 1.0]):
                 if x == 0.0:
                     label.set_ha("left")  # left-align the label
-                elif x == 0.6:
+                elif x == 1.0:
                     label.set_ha("right")  # right-align the label
             if i > 0:
                 ax_curr.set_yticks([])
+            # Force the same category range on every subplot, regardless of how many
+            # of them got a violin (which would otherwise autoscale this axis).
+            ax_curr.set_ylim(-0.5, len(presyn_area_order) - 0.5)
             ax_curr.invert_yaxis()
             ax_curr.text(
                 0.3,
