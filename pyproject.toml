@@ -3,13 +3,13 @@ name = "brisc"
 authors = [{name = "Znamenskiy lab", email= "antonin.blot@crick.ac.uk"}]
 description = "BRISC: Barcoded Rabies In-Situ Connectomics"
 readme = "README.md"
-requires-python = ">=3.8.0"
+requires-python = ">=3.10"
 dynamic = ["version"]
 dependencies = [
         "numpy",
-        "pandas",
+        "pandas==2.3.3",
         "pathlib",
-        "matplotlib",
+        "matplotlib==3.10.9",
         "czifile",
         "brainglobe-atlasapi",
         "opencv-python",
@@ -19,10 +19,15 @@ dependencies = [
         "iss_analysis @ git+ssh://git@github.com/znamlab/iss-analysis.git",
         "cricksaw_analysis @ git+ssh://git@github.com/znamlab/cricksaw-analysis.git",
         "flexiznam @ git+ssh://git@github.com/znamlab/flexiznam.git",
+        "flexilims @ git+ssh://git@github.com/znamlab/flexilims.git",
+        "znamutils @ git+ssh://git@github.com/znamlab/znamutils.git",
+        "image-tools @ git+ssh://git@github.com/znamlab/image-tools.git",
+        "pymcms @ git+ssh://git@github.com/znamlab/pymcms.git",
         "scanpy",
         "tables",
         "shapely",
-        "editdistance",]
+        "editdistance",
+        "napari>=0.7",]
 license = {text = "MIT"}
 
 [project.urls]
