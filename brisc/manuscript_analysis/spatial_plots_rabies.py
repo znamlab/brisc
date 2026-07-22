@@ -214,11 +214,11 @@ def plot_example_barcodes(
     ax_flatmap.scatter(
         cells_df["flatmap_x"],
         cells_df["flatmap_y"],
-        s=all_cells_marker_size * 2,
+        s=all_cells_marker_size,
         linewidths=0,
         c="gray",
         zorder=1,
-        alpha=0.2,
+        alpha=0.1,
         rasterized=rasterized,
     )
     if starter2presynaptics_kwargs is not None:

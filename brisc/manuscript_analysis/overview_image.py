@@ -127,12 +127,11 @@ def plot_selected_rounds(
     fontsize=14,
     vmin=None,
     vmax=None,
+    channel_colors=([1, 0, 0], [0, 1, 0], [1, 0, 1], [0, 1, 1]),
 ):
     """
     Here `axes` is an array/list of Axes, one for each round you want to plot.
     """
-    channel_colors = ([1, 0, 0], [0, 1, 0], [1, 0, 1], [0, 1, 1])
-
     for ax, iround in zip(axes, selected_rounds):
         rgb_stack = round_to_rgb(
             stack_part,
@@ -163,6 +162,7 @@ def make_downsampled_rgb(
     channel_colors: list = ([0, 1, 1], [1, 0, 1], [0, 1, 0], [1, 0, 0]),
     vmax: tuple = (15000, 6000, 6000, 6000),
     vmin: tuple = (700, 200, 200, 200),
+    channel_order=None,
 ):
     """
     Create a downsampled RGB image from the processed data.
@@ -173,11 +173,15 @@ def make_downsampled_rgb(
         channel_colors (list, optional): RGB colors. Defaults to ([0, 1, 1], [1, 0, 1], [0, 1, 0], [1, 0, 0]).
         vmax (tuple, optional): vmax per channel. Defaults to (15000,6000,6000,6000).
         vmin (tuple, optional): vmin per channel. Defaults to (700,200,200,200).
+        channel_order (array-like, optional): Channel indices in the order expected by
+            ``channel_colors``, ``vmax``, and ``vmin``. Defaults to the TIFF order.
 
     Returns:
         rgb: Downsampled RGB image.
     """
     stack = load_stack(processed_path)
+    if channel_order is not None:
+        stack = stack[:, :, channel_order]
     small_stack = None
     for ch in range(stack.shape[-1]):
         small_stack_ch = block_reduce(stack[:, :, ch], downsample_factor, np.max)
