@@ -127,12 +127,11 @@ def plot_selected_rounds(
     fontsize=14,
     vmin=None,
     vmax=None,
+    channel_colors=([1, 0, 0], [0, 1, 0], [1, 0, 1], [0, 1, 1]),
 ):
     """
     Here `axes` is an array/list of Axes, one for each round you want to plot.
     """
-    channel_colors = ([1, 0, 0], [0, 1, 0], [1, 0, 1], [0, 1, 1])
-
     for ax, iround in zip(axes, selected_rounds):
         rgb_stack = round_to_rgb(
             stack_part,
