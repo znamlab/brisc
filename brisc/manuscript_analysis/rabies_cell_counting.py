@@ -71,8 +71,8 @@ def plot_rv_coronal_slice(
             instead of computing a Z-projection over z_proj_size slices.
 
     Returns:
-        matplotlib.axes.Axes: Axes object with the plot.
-        matplotlib.axes.Axes: Axes object with the secondary x-axis.
+        None: the displayed RGB arrays are not returned, they are too large to
+            be worth collecting as source data.
     """
 
     # Parameters for BRYC64.2h (mouse used for initial submission)
@@ -220,6 +220,12 @@ def plot_rabies_density(
         Maximum radius (in mm) to plot.
     n_points : int
         Number of radius increments.
+
+    Returns
+    -------
+    dict
+        `plotted_element` with the plotted `x` (distance to injection site, mm)
+        and `y` (cumulative cell density, cells/mm^3).
     """
     if ax is None:
         fig, ax = plt.subplots(figsize=(5, 4))
@@ -274,6 +280,16 @@ def plot_rabies_density(
     # ax.legend(fontsize=tick_fontsize)
     ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
     despine(ax)
+
+    return dict(
+        cumulative_density=dict(
+            x=radii,
+            y=np.array(densities),
+            color="black",
+            xlabel="Distance to injection site (mm)",
+            ylabel="Cell density (cells / mm^3)",
+        )
+    )
 
 
 def rv_cortical_cell_distances(inj_center, project, mouse, data_root=None):

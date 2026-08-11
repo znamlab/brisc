@@ -262,7 +262,9 @@ def plot_starter_confocal(ax, img, metadata):
             get scaling information.
 
     Returns:
-        matplotlib.axes.Axes: The axis with the plot.
+        dict: `plotted_element` with the coordinates of the arrows pointing at
+            the starter cells. The displayed RGB image is not returned, it is
+            too large to be worth collecting as source data.
     """
     if metadata is not None:
         # we are using preprint data
@@ -332,7 +334,12 @@ def plot_starter_confocal(ax, img, metadata):
             ),
         )
     ax.axis("off")
-    return ax
+    return dict(
+        starter_arrows=dict(
+            x=np.array([s[0] for s in starters]),
+            y=np.array([s[1] for s in starters]),
+        )
+    )
 
 
 def plot_tail_vs_local_images(
@@ -359,6 +366,10 @@ def plot_tail_vs_local_images(
         yl (list, optional): y limits for the image crop. Defaults to [100, 1300].
         scale_size (int, optional): Size of the scale bar in micrometers. Defaults to
             250.
+
+    Returns:
+        None: the displayed RGB images are not returned, they are too large to
+            be worth collecting as source data.
     """
     if xl is not None:
         local_img = local_img[:, xl[0] : xl[1]]
@@ -577,23 +588,34 @@ def plot_taillocal_ml_distribution(clicked_cells, ax, colors, fontsize_dict, **k
 
 
 def plot_taillocal_scatter(clicked_cells, ax, colors, fontsize_dict, **kwargs):
-    """"""
+    """Scatter the ML/AP position of clicked cells for both injection routes.
+
+    Returns:
+        dict: `plotted_element`, one entry per injection route with the plotted
+            `x` (ML position, mm) and `y` (AP position, mm).
+    """
     colors = dict(
         local=colors[0],
         tail=colors[1],
     )
     zorder = dict(tail=5, local=1)
-    scatters = []
+    plotted_element = {}
     for where in ["local", "tail"]:
         cells = clicked_cells[where]
-        sc = ax.scatter(
+        ax.scatter(
             cells[:, 0],
             cells[:, 2],
             color=colors[where],
             zorder=zorder[where],
             **kwargs,
         )
-        scatters.append(sc)
+        plotted_element[where] = dict(
+            x=cells[:, 0],
+            y=cells[:, 2],
+            color=colors[where],
+            xlabel="ML position (mm)",
+            ylabel="AP position (mm)",
+        )
 
     ax.set_aspect("equal")
     ax.set_xticks([-0.4, 0, 0.4], labels=[-0.4, 0, 0.4], fontsize=fontsize_dict["tick"])
@@ -603,7 +625,7 @@ def plot_taillocal_scatter(clicked_cells, ax, colors, fontsize_dict, **kwargs):
     despine(ax)
     ax.set_xlabel("ML position (mm)", fontsize=fontsize_dict["label"])
     ax.set_ylabel("AP position (mm)", fontsize=fontsize_dict["label"])
-    return scatters
+    return plotted_element
 
 
 def plot_pairwise_dist_distri(clicked_cells, ax, colors, fontsize_dict, **kwargs):
@@ -625,9 +647,15 @@ def plot_pairwise_dist_distri(clicked_cells, ax, colors, fontsize_dict, **kwargs
             provided, data is loaded using `load_cell_click_data`.
             Defaults to None.
         **kwargs: Additional keyword arguments passed to `ax.plot` for the KDE lines.
+
+    Returns:
+        dict: `plotted_element`, one entry per injection route with the plotted
+            `x` (distance bins, mm), `y` (normalised KDE), the median distance
+            marker and the underlying pairwise distances.
     """
 
     pairwise = {}
+    plotted_element = {}
     bins = np.arange(0, 1, 0.01)
     colors = dict(
         local=colors[0],
@@ -645,6 +673,16 @@ def plot_pairwise_dist_distri(clicked_cells, ax, colors, fontsize_dict, **kwargs
 
         (line,) = ax.plot(bins, kde / kde.max(), color=colors[where], **kwargs)
         line.set_clip_on(False)
+        plotted_element[where] = dict(
+            x=bins,
+            y=kde / kde.max(),
+            color=colors[where],
+            median=dict(x=med, y=1.05),
+            pairwise_distances=pairwise[where],
+            n_cells=len(cells),
+            xlabel="Pairwise distance (mm)",
+            ylabel="Normalised cell density",
+        )
 
     ax.set_xticks([0, 0.5, 1], labels=[0, 0.5, 1], fontsize=fontsize_dict["tick"])
     ax.set_yticks([0, 1], labels=[0, 1], fontsize=fontsize_dict["tick"])
@@ -653,3 +691,4 @@ def plot_pairwise_dist_distri(clicked_cells, ax, colors, fontsize_dict, **kwargs
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     despine(ax)
+    return plotted_element

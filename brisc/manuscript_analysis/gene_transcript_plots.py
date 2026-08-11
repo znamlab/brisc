@@ -38,6 +38,7 @@ def _label_boundaries(label_image: np.ndarray, connectivity: int = 4) -> np.ndar
         boundary[1:, :-1] |= labels[1:, :-1] != labels[:-1, 1:]
     return boundary
 
+
 def _adjacent_label_midlevels(label_image: np.ndarray) -> np.ndarray:
     """Compute unique mid-levels for contours at label adjacencies.
 
@@ -57,15 +58,27 @@ def _adjacent_label_midlevels(label_image: np.ndarray) -> np.ndarray:
     a = labels[1:, :].ravel()
     b = labels[:-1, :].ravel()
     m1 = a != b
-    pairs = np.stack((a[m1], b[m1]), axis=1) if np.any(m1) else np.empty((0, 2), dtype=labels.dtype)
+    pairs = (
+        np.stack((a[m1], b[m1]), axis=1)
+        if np.any(m1)
+        else np.empty((0, 2), dtype=labels.dtype)
+    )
     # horizontal neighbours
     a = labels[:, 1:].ravel()
     b = labels[:, :-1].ravel()
     m2 = a != b
-    pairs2 = np.stack((a[m2], b[m2]), axis=1) if np.any(m2) else np.empty((0, 2), dtype=labels.dtype)
+    pairs2 = (
+        np.stack((a[m2], b[m2]), axis=1)
+        if np.any(m2)
+        else np.empty((0, 2), dtype=labels.dtype)
+    )
     if pairs.size == 0 and pairs2.size == 0:
         return np.asarray([], dtype=float)
-    all_pairs = np.vstack((pairs, pairs2)) if pairs.size and pairs2.size else (pairs if pairs2.size == 0 else pairs2)
+    all_pairs = (
+        np.vstack((pairs, pairs2))
+        if pairs.size and pairs2.size
+        else (pairs if pairs2.size == 0 else pairs2)
+    )
     # sort each pair so (a,b) and (b,a) collapse
     all_pairs = np.sort(all_pairs.astype(float), axis=1)
     # unique rows → mid-levels, ensure unique and strictly increasing
@@ -304,6 +317,12 @@ def plot_gene_expression_mosaic(
         The genes that were plotted.
     axes : list[matplotlib.axes.Axes]
         One axis per gene.
+    plotted_element : dict
+        One entry per gene, with the plotted cell coordinates `x` (ara_z) and
+        `y` (ara_y), the `expression` used to colour each cell, the colormap
+        and `vmax` it was mapped through, and `order`, the permutation of the
+        cells used to draw low-expression cells first. The brain-area contours
+        are not returned, they are derived from the atlas label image.
     """
     # ---- filter cells ----
     mask = np.ones(adata.n_obs, dtype=bool)
@@ -332,13 +351,18 @@ def plot_gene_expression_mosaic(
         # default colormaps – monochrome sequential, arranged so
         # adjacent panels (horiz & vert in a 4-col grid) differ
         _default_cmaps = [
-            "GnBu", "Oranges", "Greys", "Blues", "Reds",
-            "pink_r", "Purples", "Greens", "Wistia", "RdPu",
+            "GnBu",
+            "Oranges",
+            "Greys",
+            "Blues",
+            "Reds",
+            "pink_r",
+            "Purples",
+            "Greens",
+            "Wistia",
+            "RdPu",
         ]
-        cmaps = [
-            _default_cmaps[i % len(_default_cmaps)]
-            for i in range(len(genes))
-        ]
+        cmaps = [_default_cmaps[i % len(_default_cmaps)] for i in range(len(genes))]
 
     # cell coordinates (atlas-scaled)
     z_coords = adata.obs["ara_z"].values * 1000 / atlas_size
@@ -352,6 +376,7 @@ def plot_gene_expression_mosaic(
     )
 
     axes = []
+    plotted_element = {}
     for i, gene in enumerate(genes):
         r = i // ncols
         c = i % ncols
@@ -376,7 +401,11 @@ def plot_gene_expression_mosaic(
         else:
             gene_idx = list(adata.var_names).index(gene)
             col = adata.X[:, gene_idx]
-            expr = np.asarray(col.todense()).ravel().astype(float) if hasattr(col, "todense") else np.asarray(col).ravel().astype(float)
+            expr = (
+                np.asarray(col.todense()).ravel().astype(float)
+                if hasattr(col, "todense")
+                else np.asarray(col).ravel().astype(float)
+            )
 
         # compute alpha: 0 for zero-count, linearly scaled to 1 at
         # the chosen percentile of non-zero values
@@ -406,6 +435,16 @@ def plot_gene_expression_mosaic(
             linewidths=0,
             zorder=2,
         )
+        plotted_element[gene] = dict(
+            x=z_coords[order],
+            y=y_coords[order],
+            expression=expr[order],
+            order=order,
+            cmap=cmaps[i],
+            vmax=vmax,
+            xlabel="ara_z (atlas voxels)",
+            ylabel="ara_y (atlas voxels)",
+        )
 
         ax.set_title(
             gene,
@@ -427,4 +466,4 @@ def plot_gene_expression_mosaic(
         ax_empty = fig.add_subplot(subgs[r, c])
         ax_empty.axis("off")
 
-    return genes, axes
+    return genes, axes, plotted_element

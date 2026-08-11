@@ -162,17 +162,28 @@ def plot_barcode_counts_and_percentage(
         show_legend (bool): display legend
 
     Returns:
-        matplotlib.axes.Axes: Axes containing the plot.
+        dict: `plotted_element`, one entry per library, each a dict with the
+            plotted `x` (barcode index), `y` (barcode abundance) and `color`.
     """
+    plotted_element = {}
     for library_label, color in zip(libraries.keys(), colors):
+        x = libraries[library_label][:, 0]
+        y = libraries[library_label][:, 1]
         ax.plot(
-            libraries[library_label][:, 0],
-            libraries[library_label][:, 1],
+            x,
+            y,
             drawstyle="steps-pre",
             alpha=line_alpha,
             linewidth=line_width,
             color=color,
             label=library_label,
+        )
+        plotted_element[library_label] = dict(
+            x=x,
+            y=y,
+            color=color,
+            xlabel="Barcode index",
+            ylabel="Barcode abundance",
         )
 
     # Format ax_left
@@ -209,6 +220,7 @@ def plot_barcode_counts_and_percentage(
             borderpad=0.0,
         )
     despine(ax)
+    return plotted_element
 
 
 def find_max_cell_below_percprop(
@@ -291,12 +303,16 @@ def plot_unique_label_fraction(
 
 
     Returns:
-        matplotlib.axes.Axes: Axes containing the plot.
+        dict: `plotted_element`, one entry per library, each a dict with the
+            plotted `x` (number of infections), `y` (proportion of uniquely
+            labeled cells), `color` and, when computed, the number of cells at
+            which 95% and 99% of cells are uniquely labeled.
     """
     if not log_scale:
         evaluation_points = np.linspace(1, max_cells, stride, dtype=int)
     else:
         evaluation_points = np.logspace(0, np.log10(max_cells), dtype=int)
+    plotted_element = {}
     # Plot plasmid data
     for library_label, color in zip(libraries.keys(), colors):
         barcode_probability = probability_distribution(libraries[library_label])
@@ -304,6 +320,13 @@ def plot_unique_label_fraction(
         fractions = [
             fraction_unique(barcode_probability, num) for num in evaluation_points
         ]
+        plotted_element[library_label] = dict(
+            x=evaluation_points,
+            y=np.array(fractions),
+            color=color,
+            xlabel="Number of infections",
+            ylabel="Proportion of uniquely labeled cells",
+        )
 
         if verbose:
             # We want to print the number of cells that can be picked to have 95% unique
@@ -317,6 +340,8 @@ def plot_unique_label_fraction(
             txt = f"For {library_label}, 95% unique at {max_95cells:.0f} cells"
             txt += f"-- 99% unique at {max_99cells:.0f} cells"
             print(txt)
+            plotted_element[library_label]["max_95cells"] = max_95cells
+            plotted_element[library_label]["max_99cells"] = max_99cells
 
         if not log_scale:
             ax.plot(
@@ -362,3 +387,4 @@ def plot_unique_label_fraction(
         ax.legend(loc="best", fontsize=tick_fontsize, frameon=False)
 
     despine(ax)
+    return plotted_element

@@ -30,9 +30,12 @@ def plot_starter_spread_sim(
         tick_fontsize (int): Font size for ticks.
 
     Returns:
-        matplotlib.axes.Axes: Axes object with the plot.
-        matplotlib.axes.Axes: Axes object with the secondary x-axis.
+        dict: `plotted_element`, with one entry per presynaptic cell number
+            (`"n=10"`, ...) holding the plotted `x` (proportion of starter
+            neurons) and `y` (probability of spread), plus the horizontal and
+            vertical threshold lines.
     """
+    plotted_element = {}
 
     # Horizontal dashed line at starter_spread_probability
     ax.axhline(
@@ -55,10 +58,20 @@ def plot_starter_spread_sim(
         color="black",
         lw=line_width * 0.7,
     )
+    plotted_element["hline_spread_probability"] = dict(y=starter_spread_probability)
+    plotted_element["vline_density_threshold"] = dict(x=density_threshold)
+
     # Lines for different cell/starter number
     for n, color in zip(ns, colors):
         p = 1 - (1 - density) ** n
         ax.loglog(density, p, label=str(n), lw=line_width, c=color)
+        plotted_element[f"n={n}"] = dict(
+            x=np.asarray(density),
+            y=p,
+            color=color,
+            xlabel="Proportion of starter neurons",
+            ylabel="Probability of spread between starter neurons",
+        )
 
     ax.set_xlim(x_range[0], x_range[1])
     ax.set_xscale("log")
@@ -123,3 +136,7 @@ def plot_starter_spread_sim(
         which="major",
         labelsize=tick_fontsize,
     )
+    plotted_element["vline_density_threshold"]["density_per_mm3"] = fraction_to_density(
+        density_threshold
+    )
+    return plotted_element
