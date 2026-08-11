@@ -10,9 +10,8 @@ from matplotlib import colors
 import matplotlib
 from .utils import despine
 
-matplotlib.rcParams[
-    "pdf.fonttype"
-] = 42  # Use Type 3 fonts (TrueType) for selectable text
+# Use Type 3 fonts (TrueType) for selectable text
+matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["ps.fonttype"] = 42  # For EPS, if relevant
 plt.rcParams.update({"mathtext.default": "regular"})  # make math mode also Arial
 
@@ -148,6 +147,18 @@ def plot_matches_to_library(
     num_bins=20,
     alpha=1,
 ):
+    """Plot how in situ, random and viral library barcodes are distributed over the
+    number of reads they have in the viral library.
+
+    Returns:
+        dict: `plotted_element` with one entry per drawn series (`viral_library`,
+            `in_situ` and `random`), each holding the plotted proportions `y`, the
+            `bin_edges` handed to `stairs` (in library reads), the `color` and, for the
+            two barcode sets, the proportion of barcodes absent from the library
+            (`zero_bin_y`), drawn as a separate bar between `zero_bin_edges`. Every
+            entry also carries `total_reads_in_library`, the factor turning the read
+            axis into the proportion of unique reads the panel is labelled with.
+    """
     # Define bin edges for consistent binning
     bin_edges = np.logspace(0, 6, num=num_bins)
     bin_edges = np.insert(bin_edges, 0, 0)
@@ -182,6 +193,35 @@ def plot_matches_to_library(
         counts[i] = sequences[parts[0] : parts[1]].sum()
 
     counts = counts / np.sum(counts)  # Normalize to max 1
+
+    total_read_in_library = np.sum(rv35_library["counts"])
+    plotted_element = dict(
+        viral_library=dict(
+            y=counts[1:],
+            bin_edges=bin_edges[1:],
+            color="black",
+            ylabel="Proportion of unique reads",
+        ),
+        in_situ=dict(
+            y=in_situ_hist[1:],
+            bin_edges=bin_edges[1:],
+            zero_bin_y=in_situ_hist[0],
+            zero_bin_edges=np.array([0.03, 0.06]),
+            color="dodgerblue",
+            ylabel="Proportion of barcodes",
+        ),
+        random=dict(
+            y=random_hist[1:],
+            bin_edges=bin_edges[1:],
+            zero_bin_y=random_hist[0],
+            zero_bin_edges=np.array([0.03, 0.06]),
+            color="dodgerblue",
+            ylabel="Proportion of barcodes",
+        ),
+    )
+    for series in plotted_element.values():
+        series["xlabel"] = "Proportion of unique reads in viral library per barcode"
+        series["total_reads_in_library"] = total_read_in_library
 
     # Plot normalized histograms as step-line plots
     for this_ax in ax:
@@ -290,3 +330,4 @@ def plot_matches_to_library(
         x[1].spines.right.set_visible(True)
 
     ax[1].legend(loc="upper right", fontsize=tick_fontsize, frameon=False)
+    return plotted_element

@@ -2,6 +2,7 @@ import iss_analysis as issa
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.collections import PolyCollection
 from scipy.stats import linregress
 import flexiznam as flz
 import seaborn as sns
@@ -67,9 +68,21 @@ def plot_mcherry_intensity_presyn(
     xcol="intensity_mean-0",
     set_ticks=True,
 ):
+    """Plot the number of presynaptic cells of each starter against its mCherry
+    fluorescence, with a robust linear fit of the log-log relationship.
+
+    Returns:
+        dict: `plotted_element` with a `starter_cells` entry holding the plotted
+            coordinates of every starter (the natural logarithm of its mCherry
+            fluorescence `x` and of its presynaptic-cell count `y`) and a `robust_fit`
+            entry holding the fitted line as drawn by seaborn, with the bounds of its
+            bootstrap confidence band (`ci_lower`, `ci_upper`).
+    """
     if ax is None:
         ax = plt.gca()
     # ax.set(xscale="log", yscale="log")
+    n_lines_before = len(ax.lines)
+    n_collections_before = len(ax.collections)
     sns.regplot(
         x=np.log(valid[xcol]),
         y=np.log(valid["n_presynaptic"]),
@@ -82,6 +95,9 @@ def plot_mcherry_intensity_presyn(
         line_kws={"color": "darkslategray"},
         robust=True,
         ax=ax,
+    )
+    plotted_element = _mcherry_plotted_element(
+        ax, valid, xcol, n_lines_before, n_collections_before
     )
     slope, intercept, rvalue, pvalue, stderr = linregress(
         x=np.log(valid[xcol].values), y=np.log(valid["n_presynaptic"].values)
@@ -113,3 +129,63 @@ def plot_mcherry_intensity_presyn(
         labelsize=tick_fontsize,
     )
     sns.despine(ax=ax)
+    return plotted_element
+
+
+def _mcherry_plotted_element(ax, valid, xcol, n_lines_before, n_collections_before):
+    """Collect what `sns.regplot` just drew on `ax`, for the Source Data workbook.
+
+    Seaborn fits and resamples internally, so the fitted line and its confidence band
+    are read back from the artists it added rather than recomputed.
+
+    Args:
+        ax (matplotlib.axes.Axes): Axes `sns.regplot` drew on.
+        valid (pd.DataFrame): Starter cells that were plotted.
+        xcol (str): Column holding the mCherry fluorescence.
+        n_lines_before (int): Number of lines on `ax` before the regplot call.
+        n_collections_before (int): Number of collections on `ax` before the call.
+
+    Returns:
+        dict: `plotted_element`, see `plot_mcherry_intensity_presyn`.
+    """
+    labels = dict(
+        xlabel="Starter mCherry fluorescence (AU)",
+        ylabel="Number of presynaptic cells + 1",
+    )
+    plotted_element = dict(
+        starter_cells=dict(
+            x=np.log(valid[xcol].values.astype(float)),
+            y=np.log(valid["n_presynaptic"].values.astype(float)),
+            color="darkslategray",
+            **labels,
+        )
+    )
+    new_lines = ax.lines[n_lines_before:]
+    if not new_lines:
+        return plotted_element
+    line = new_lines[-1]
+    grid = np.asarray(line.get_xdata(), dtype=float)
+    fit = dict(
+        x=grid,
+        y=np.asarray(line.get_ydata(), dtype=float),
+        color="darkslategray",
+    )
+    bands = [
+        collection
+        for collection in ax.collections[n_collections_before:]
+        if isinstance(collection, PolyCollection)
+    ]
+    if bands:
+        # `fill_between` closes the band into one polygon, so the two bounds are the
+        # lowest and highest vertex at each point of the fitted grid.
+        vertices = bands[-1].get_paths()[0].vertices
+        lower, upper = [], []
+        for x in grid:
+            at_x = vertices[vertices[:, 0] == x, 1]
+            lower.append(at_x.min() if at_x.size else np.nan)
+            upper.append(at_x.max() if at_x.size else np.nan)
+        fit["ci_lower"] = np.array(lower)
+        fit["ci_upper"] = np.array(upper)
+    fit.update(labels)
+    plotted_element["robust_fit"] = fit
+    return plotted_element

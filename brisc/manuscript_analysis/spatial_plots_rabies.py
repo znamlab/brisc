@@ -68,6 +68,30 @@ def plot_all_rv_cells(
     drop_areas=("hippocampal", "fiber_tract"),
     rasterized=True,
 ):
+    """Plot every barcoded cell on a coronal section and on the cortical flatmap.
+
+    Args:
+        cells_df (pd.DataFrame): Barcoded cells, with atlas and flatmap coordinates.
+        ax_coronal (matplotlib.axes.Axes): Axes of the coronal panel.
+        ax_flatmap (matplotlib.axes.Axes): Axes of the flatmap panel.
+        bin_image (np.ndarray): Area labels of the coronal section, drawn as contours.
+        legend_fontsize (int): Font size of the area legend.
+        atlas_size (int): Atlas voxel size in microns.
+        area_colors (dict): Colour of each cortical area.
+        presynaptic_marker_size (int): Marker size of the barcoded cells.
+        starter_marker_size (int): Marker size of the starter cells.
+        invert_xaxis (bool): Invert the medio-lateral axis of both panels.
+        drop_areas (tuple): Areas excluded from the plot.
+        rasterized (bool): Rasterize the scatters.
+
+    Returns:
+        dict: `plotted_element` with one entry per panel, ``"coronal"`` and
+            ``"flatmap"``, each holding the plotted `x` and `y` of every cell, its
+            `cortical_area` and `is_starter` flag, the per-cell `color`, the
+            `starter_color` the starter subset is redrawn in on top, and the axis
+            labels. The atlas contours and the flatmap outline are images and are not
+            reported.
+    """
     ax_coronal.contour(
         bin_image,
         levels=np.arange(0.5, np.max(bin_image) + 1, 0.5),
@@ -86,6 +110,31 @@ def plot_all_rv_cells(
     starters = cells_inside[cells_inside["is_starter"] == True]
 
     areas = cells_inside["cortical_area"].cat.categories
+    cell_colors = cells_inside["cortical_area"].cat.codes.map(
+        lambda x: area_colors[areas[x]]
+    )
+    plotted_element = {
+        "coronal": dict(
+            x=(cells_inside["ara_z"] * 1000 / atlas_size).values,
+            y=(cells_inside["ara_y"] * 1000 / atlas_size).values,
+            cortical_area=cells_inside["cortical_area"].astype(str).values,
+            is_starter=cells_inside["is_starter"].values.astype(bool),
+            color=cell_colors.values,
+            starter_color="black",
+            xlabel=f"ARA medio-lateral position ({atlas_size} um voxels)",
+            ylabel=f"ARA dorso-ventral position ({atlas_size} um voxels)",
+        ),
+        "flatmap": dict(
+            x=cells_inside["flatmap_x"].values,
+            y=cells_inside["flatmap_y"].values,
+            cortical_area=cells_inside["cortical_area"].astype(str).values,
+            is_starter=cells_inside["is_starter"].values.astype(bool),
+            color=cell_colors.values,
+            starter_color="black",
+            xlabel="Flatmap x (10 um voxels)",
+            ylabel="Flatmap y (10 um voxels)",
+        ),
+    }
     ax_coronal.scatter(
         cells_inside["ara_z"] * 1000 / atlas_size,
         cells_inside["ara_y"] * 1000 / atlas_size,
@@ -163,6 +212,7 @@ def plot_all_rv_cells(
         ncols=3,
         fontsize=legend_fontsize,
     )
+    return plotted_element
 
 
 def plot_example_barcodes(
@@ -182,10 +232,50 @@ def plot_example_barcodes(
     rasterized=True,
     starter2presynaptics_kwargs=None,
 ):
+    """Plot the cells of a few example barcodes on a coronal section and the flatmap.
+
+    Args:
+        cells_df (pd.DataFrame): Barcoded cells, with atlas and flatmap coordinates.
+        ax_coronal (matplotlib.axes.Axes): Axes of the coronal panel.
+        ax_flatmap (matplotlib.axes.Axes): Axes of the flatmap panel.
+        bin_image (np.ndarray): Area labels of the coronal section, drawn as contours.
+        barcodes (tuple): Barcodes to highlight.
+        barcode_colors (tuple): Colour of each highlighted barcode.
+        legend_fontsize (int): Font size of the barcode legend.
+        atlas_size (int): Atlas voxel size in microns.
+        starter_marker_size (int): Marker size of the starter cells.
+        presynaptic_marker_size (int): Marker size of the presynaptic cells.
+        all_cells_marker_size (int): Marker size of the grey background cells.
+        starter_marker (str): Marker of the starter cells.
+        invert_xaxis (bool): Invert the medio-lateral axis of both panels.
+        rasterized (bool): Rasterize the scatters.
+        starter2presynaptics_kwargs (dict): If given, a line is drawn from the starter
+            to each of its presynaptic cells with these keyword arguments.
+
+    Returns:
+        dict: `plotted_element` with one entry per drawn series: ``"all_cells"`` (the
+            grey background of every barcoded cell) and one entry per barcode, each
+            holding the coronal `x`/`y` and the flatmap `flatmap_x`/`flatmap_y` of its
+            cells, their `is_starter` flag and their `color`. The lines drawn from a
+            starter to its presynaptic cells join those coordinates and are not reported
+            separately. The atlas contours and the flatmap outline are images and are
+            not reported.
+    """
     # cells_df = cells_df[
     #     cells_df["cortical_area"].apply(lambda area: not pd.isnull(area))
     # ]
 
+    plotted_element = {
+        "all_cells": dict(
+            x=(cells_df["ara_z"] * 1000 / atlas_size).values,
+            y=(cells_df["ara_y"] * 1000 / atlas_size).values,
+            flatmap_x=cells_df["flatmap_x"].values,
+            flatmap_y=cells_df["flatmap_y"].values,
+            color="gray",
+            xlabel=f"ARA medio-lateral position ({atlas_size} um voxels)",
+            ylabel=f"ARA dorso-ventral position ({atlas_size} um voxels)",
+        )
+    }
     ax_coronal.contour(
         bin_image,
         levels=np.arange(0.5, np.max(bin_image) + 1, 0.5),
@@ -233,6 +323,16 @@ def plot_example_barcodes(
         this_barcode = cells_df[
             cells_df["all_barcodes"].apply(lambda bcs: barcode in bcs)
         ]
+        plotted_element[barcode] = dict(
+            x=(this_barcode["ara_z"] * 1000 / atlas_size).values,
+            y=(this_barcode["ara_y"] * 1000 / atlas_size).values,
+            flatmap_x=this_barcode["flatmap_x"].values,
+            flatmap_y=this_barcode["flatmap_y"].values,
+            is_starter=this_barcode["is_starter"].values.astype(bool),
+            color=color,
+            xlabel=f"ARA medio-lateral position ({atlas_size} um voxels)",
+            ylabel=f"ARA dorso-ventral position ({atlas_size} um voxels)",
+        )
         ax_coronal.scatter(
             this_barcode["ara_z"] * 1000 / atlas_size,
             this_barcode["ara_y"] * 1000 / atlas_size,
@@ -325,6 +425,7 @@ def plot_example_barcodes(
         fontsize=legend_fontsize,
         ncols=2,
     )
+    return plotted_element
 
 
 def plot_flat_ml_rv_cells(
@@ -405,13 +506,69 @@ def plot_layer_distribution(
     show_cells=True,
     rasterized=True,
 ):
+    """Plot the cortical depth of the barcoded cells of VISp as a split violin.
+
+    Args:
+        ax_interest (matplotlib.axes.Axes): Axes of the cell scatter, only used when
+            ``show_cells`` is True.
+        ax_density (matplotlib.axes.Axes): Axes of the split violin plot.
+        cells_df (pd.DataFrame): Barcoded cells, with ``normalised_layers``.
+        label_fontsize (int): Font size of the axis labels.
+        tick_fontsize (int): Font size of the ticks and of the legend.
+        show_cells (bool): Also draw the cells themselves on ``ax_interest``.
+        rasterized (bool): Rasterize the scatters.
+
+    Returns:
+        dict: `plotted_element` with one entry per drawn series. ``"starter_cells"`` and
+            ``"presynaptic_cells"`` hold the cortical depth in microns (`values`) of the
+            cells of each population, which are the numbers the split violin is drawn
+            from, and ``"layer_boundaries"`` holds the depth of each dashed layer
+            boundary. When ``show_cells`` is True, ``"all_cells_scatter"`` and
+            ``"starter_cells_scatter"`` hold the plotted cell positions as well.
+    """
     layer_tops = get_avg_layer_depth()
     layer_tops["1"] = 0.0
 
     y_min, y_max = 1000, 0
     cells_df = cells_df[cells_df["cortical_area"] == "VISp"]
     scale = 10  # micron per px
+    is_starter = cells_df["is_starter"].values.astype(bool)
+    depth = (cells_df["normalised_layers"] * scale).values
+    plotted_element = {
+        "starter_cells": dict(
+            values=depth[is_starter],
+            color="black",
+            xlabel="Cell density",
+            ylabel="Cortical depth (um)",
+        ),
+        "presynaptic_cells": dict(
+            values=depth[~is_starter],
+            color="gray",
+            xlabel="Cell density",
+            ylabel="Cortical depth (um)",
+        ),
+        "layer_boundaries": dict(
+            y=np.array(list(layer_tops.values()), dtype=float),
+            layer=np.array(list(layer_tops.keys())),
+            color="black",
+            ylabel="Cortical depth (um)",
+        ),
+    }
     if show_cells:
+        plotted_element["all_cells_scatter"] = dict(
+            x=(cells_df["flatmap_x"] * scale).values,
+            y=depth,
+            color="gray",
+            xlabel="Medio-lateral location (um)",
+            ylabel="Cortical depth (um)",
+        )
+        plotted_element["starter_cells_scatter"] = dict(
+            x=(cells_df["flatmap_x"] * scale).values[is_starter],
+            y=depth[is_starter],
+            color="black",
+            xlabel="Medio-lateral location (um)",
+            ylabel="Cortical depth (um)",
+        )
         ax_interest.scatter(
             cells_df["flatmap_x"] * scale,
             cells_df["normalised_layers"] * scale,
@@ -483,3 +640,4 @@ def plot_layer_distribution(
     layer_centres = (layer_edges[1:] + layer_edges[:-1]) / 2
     ax_right.set_yticks(layer_centres, labels=list(layer_tops.keys())[:-1])
     ax_right.tick_params(axis="both", labelsize=tick_fontsize, length=0)
+    return plotted_element

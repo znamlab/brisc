@@ -163,10 +163,25 @@ def plot_relative_coors(
         label_fontsize (int): Font size for labels.
         tick_fontsize (int): Font size for ticks
 
+    Returns:
+        dict: `plotted_element` with a single `relative_coors` entry holding the plotted
+            `x` and `y` (the two columns of `coors_to_plot`, in the units they are
+            passed in), the `color` of the markers and the axis labels.
     """
+    x = relative_presyn_coors[:, coors_to_plot[0]]
+    y = relative_presyn_coors[:, coors_to_plot[1]]
+    plotted_element = dict(
+        relative_coors=dict(
+            x=x,
+            y=y,
+            color=color,
+            xlabel=labels[0],
+            ylabel=labels[1],
+        )
+    )
     ax.scatter(
-        relative_presyn_coors[:, coors_to_plot[0]],
-        relative_presyn_coors[:, coors_to_plot[1]],
+        x,
+        y,
         s=s,
         alpha=alpha,
         color=color,
@@ -185,6 +200,7 @@ def plot_relative_coors(
     ax.set_ylim(lims[1])
     ax.set_aspect("equal", adjustable="box")
     ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
+    return plotted_element
 
 
 def shuffle_iteration(args):

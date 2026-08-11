@@ -333,53 +333,8 @@ def _plot_hist_grid(df, numeric_cols, hue, sheet_name, source_name):
 
 
 # ---------------------------------------------------------------------------
-# Figure 1 -- panels whose geometry cannot be inferred from the sheet alone
+# Panel geometry shared by the redrawn figures
 # ---------------------------------------------------------------------------
-
-#: Height/width ratio of each Figure 1 panel's axes box, keyed by panel letter. Figure 1
-#: is laid out at 17.4 x 20.0 cm with `fig.add_axes`, so a panel of width ``w`` and
-#: height ``h`` in figure fractions has a box aspect of ``h * 20.0 / (w * 17.4)``. The
-#: redrawn panels keep those proportions.
-FIG1_BOX_ASPECT = {
-    "1d": 1.15,  # [0.13, 0.13]
-    "1e": 1.15,
-    "1f": 1.07,  # [0.14, 0.13]
-    "1g": 1.07,
-    "1h": 1.07,
-    "1i": 1.07,
-    "1j": 1.59,  # [0.13, 0.18]
-    "1m": 1.15,  # [0.10, 0.10]
-    "1p": 0.72,  # [0.24, 0.15]
-}
-
-#: Colours of the library curves, in the order the libraries appear in the sheet, which
-#: is the order the notebook passed them to the plotting call. Panels d/e, f/g and h/i
-#: draw the same libraries in the same colours.
-FIG1_LIBRARY_COLORS = {
-    "1d": ("dodgerblue", "darkorange"),
-    "1e": ("dodgerblue", "darkorange"),
-    "1f": ("darkorchid", "darkorange"),
-    "1g": ("darkorchid", "darkorange"),
-    "1h": (
-        "dodgerblue",
-        "darkgreen",
-        "brown",
-        "teal",
-        "darkgrey",
-        "violet",
-        "darkorchid",
-        "darkorange",
-    ),
-}
-FIG1_LIBRARY_COLORS["1i"] = FIG1_LIBRARY_COLORS["1h"]
-
-#: Colours of the three simulated presynaptic-cell numbers of panel j, in sheet order.
-FIG1J_COLORS = ("lightsalmon", "tomato", "red")
-
-#: Colour and drawing order of the two AAV-Cre delivery routes of panels o and p.
-FIG1_ROUTE_COLORS = {"Intracerebral": "yellowgreen", "Intravenous": "midnightblue"}
-FIG1_ROUTE_ZORDER = {"Intracerebral": 1, "Intravenous": 5}
-
 
 #: Trailing words of a column name that are a unit, and so belong in brackets.
 UNIT_WORDS = ("mm", "um", "px", "deg", "AU")
@@ -409,17 +364,17 @@ def _decade_ticks(upper, n_max=4):
     return 10.0 ** np.arange(0, decades + 1, step)
 
 
-def _fig1_figsize(box_aspect, width=3.4):
+def _panel_figsize(box_aspect, width=3.4):
     """Figure size fitting an axes box of the given aspect, with room for the labels.
 
-    The box aspect is fixed, so the figure has to be tall enough for it or the panel ends
-    up floating in white space: about 1.2 inch of the width goes to the y label and
+    The box aspect is fixed, so the figure has to be tall enough for it or the panel
+    ends up floating in white space: about 1.2 inch of the width goes to the y label and
     ticks, and 1.8 inch of the height to the title, x label and footer.
     """
     return (width, float(np.clip((width - 1.2) * box_aspect + 1.8, 2.6, 6.2)))
 
 
-def _style_fig1_axes(
+def _style_panel_axes(
     ax,
     xlabel=None,
     ylabel=None,
@@ -456,7 +411,7 @@ def _style_fig1_axes(
     ax.spines["right"].set_visible(False)
 
 
-def _plot_fig1_curves(
+def _plot_panel_curves(
     df,
     sheet_name,
     source_name,
@@ -468,33 +423,90 @@ def _plot_fig1_curves(
     legend=True,
     **axes_options,
 ):
-    """A line panel of Figure 1, on the axes of the published panel.
+    """A one-line-per-series panel, on the axes of the published panel.
 
-    Colours are taken in the order the series appear in the sheet, which is the order
-    the notebook handed them to the plotting call.
+    ``colors`` is either a mapping of series label to colour, which is what a panel
+    whose sheet holds a subset of the drawn series needs, or a sequence taken in the
+    order the series appear in the sheet — the order the notebook passed them in.
     """
-    palette = list(colors)
-    fig, ax = plt.subplots(figsize=_fig1_figsize(axes_options.get("box_aspect", 1.0)))
+    by_name = isinstance(colors, dict)
+    palette = dict(colors) if by_name else list(colors)
+    fig, ax = plt.subplots(figsize=_panel_figsize(axes_options.get("box_aspect", 1.0)))
     for i, (label, sub) in enumerate(_groups(df, group_col)):
+        if by_name:
+            color = palette.get(label)
+        else:
+            color = palette[i % len(palette)] if palette else None
         ax.plot(
             sub[xcol],
             sub[ycol],
             lw=1.2,
             drawstyle=drawstyle,
-            color=palette[i % len(palette)] if palette else None,
+            color=color,
             label=str(label),
         )
-    _style_fig1_axes(ax, xlabel=xcol, ylabel=ycol, **axes_options)
+    _style_panel_axes(ax, xlabel=xcol, ylabel=ycol, **axes_options)
     if legend and group_col is not None:
         ax.legend(fontsize=6, frameon=False, handlelength=1)
     _finish(fig, sheet_name, source_name, len(df))
     return fig
 
 
+# ---------------------------------------------------------------------------
+# Figure 1 -- panels whose geometry cannot be inferred from the sheet alone
+# ---------------------------------------------------------------------------
+
+#: Height/width ratio of each Figure 1 panel's axes box, keyed by panel letter. Figure 1
+#: is laid out at 17.4 x 20.0 cm with `fig.add_axes`, so a panel of width ``w`` and
+#: height ``h`` in figure fractions has a box aspect of ``h * 20.0 / (w * 17.4)``. The
+#: redrawn panels keep those proportions.
+FIG1_BOX_ASPECT = {
+    "1d": 1.15,  # [0.13, 0.13]
+    "1e": 1.15,
+    "1f": 1.07,  # [0.14, 0.13]
+    "1g": 1.07,
+    "1h": 1.07,
+    "1i": 1.07,
+    "1j": 1.59,  # [0.13, 0.18]
+    "1m": 1.15,  # [0.10, 0.10]
+    "1p": 0.72,  # [0.24, 0.15]
+}
+
+#: Colour of every library curve, by the library label the sheet carries. Keyed by name
+#: rather than by position because the workbook holds only the libraries made in this
+#: study: panels h and i also draw published libraries, which are not tabulated, so
+#: their colours are listed here only to keep ours on the right hue. Panels d/e, f/g
+#: and h/i draw the same libraries in the same colours.
+FIG1_LIBRARY_COLORS = {
+    "1d": {"Plasmid library": "dodgerblue", "Virus library": "darkorange"},
+    "1f": {"2 wells": "darkorchid", "12 wells": "darkorange"},
+    "1h": {
+        "Clark, 2021": "dodgerblue",
+        "Saunders, 2022": "darkgreen",
+        "Zhang, 2024": "brown",
+        "Tan, 2025 N2c": "teal",
+        "Shin, 2024 N2c": "darkgrey",
+        "Shin, 2024 SADB19": "violet",
+        "RV2": "darkorchid",
+        "RV35": "darkorange",
+    },
+}
+FIG1_LIBRARY_COLORS["1e"] = FIG1_LIBRARY_COLORS["1d"]
+FIG1_LIBRARY_COLORS["1g"] = FIG1_LIBRARY_COLORS["1f"]
+FIG1_LIBRARY_COLORS["1i"] = FIG1_LIBRARY_COLORS["1h"]
+
+#: Colours of the three simulated presynaptic-cell numbers of panel j, in sheet order.
+FIG1J_COLORS = ("lightsalmon", "tomato", "red")
+
+#: Colour and drawing order of the two AAV-Cre delivery routes of panels o and p.
+FIG1_ROUTE_COLORS = {"Intracerebral": "yellowgreen", "Intravenous": "midnightblue"}
+FIG1_ROUTE_ZORDER = {"Intracerebral": 1, "Intravenous": 5}
+
+
 def _plot_starter_spread_sim(df, sheet_name, source_name):
     """Fig 1j -- the spread simulation, with its density axis and dashed thresholds."""
     box_aspect = FIG1_BOX_ASPECT["1j"]
-    fig, ax = plt.subplots(figsize=_fig1_figsize(box_aspect))
+    fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect))
     for i, (n, sub) in enumerate(_groups(df, "Presynaptic_Cells_Per_Starter")):
         ax.plot(
             sub["Starter_Proportion"],
@@ -510,7 +522,7 @@ def _plot_starter_spread_sim(df, sheet_name, source_name):
         if column in df.columns:  # constant columns: the dashed reference lines
             line(float(df[column].iloc[0]), linestyle="dashed", color="black", lw=0.8)
 
-    _style_fig1_axes(
+    _style_panel_axes(
         ax,
         xlabel="Proportion of starter neurons",
         ylabel="Probability of spread\nbetween starter neurons",
@@ -563,7 +575,7 @@ def _plot_starter_positions(df, sheet_name, source_name):
             zorder=FIG1_ROUTE_ZORDER.get(route, 1),
             label=str(route),
         )
-    _style_fig1_axes(
+    _style_panel_axes(
         ax,
         xlabel="ML position (mm)",
         ylabel="AP position (mm)",
@@ -579,7 +591,7 @@ def _plot_starter_positions(df, sheet_name, source_name):
 def _plot_pairwise_distances(df, sheet_name, source_name):
     """Fig 1p -- the pairwise-distance densities, each with its median marker."""
     box_aspect = FIG1_BOX_ASPECT["1p"]
-    fig, ax = plt.subplots(figsize=_fig1_figsize(box_aspect, width=4.4))
+    fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect, width=4.4))
     for route, sub in _groups(df, "Delivery_Route"):
         color = FIG1_ROUTE_COLORS.get(route, "0.5")
         (line,) = ax.plot(
@@ -599,7 +611,7 @@ def _plot_pairwise_distances(df, sheet_name, source_name):
                 markersize=4,
                 clip_on=False,
             )
-    _style_fig1_axes(
+    _style_panel_axes(
         ax,
         xlabel="Pairwise distance (mm)",
         ylabel="Normalised cell density",
@@ -617,7 +629,7 @@ def _plot_pairwise_distances(df, sheet_name, source_name):
 def _fig1_abundance_draw(panel):
     """The draw callable of the rank-abundance panel ``panel`` (``"1d"``, ...)."""
     return partial(
-        _plot_fig1_curves,
+        _plot_panel_curves,
         xcol="Barcode_Index",
         ycol="Barcode_Abundance",
         group_col="Library",
@@ -636,7 +648,7 @@ def _fig1_abundance_draw(panel):
 def _fig1_unique_draw(panel, max_cells):
     """The draw callable of the unique-fraction panel ``panel`` (``"1e"``, ...)."""
     return partial(
-        _plot_fig1_curves,
+        _plot_panel_curves,
         xcol="Number_Of_Infections",
         ycol="Proportion_Uniquely_Labeled",
         group_col="Library",
@@ -796,6 +808,1354 @@ def _plot_gene_expression_mosaic(df, sheet_name, source_name):
 
 
 # ---------------------------------------------------------------------------
+# Figure 3 -- panels whose geometry cannot be inferred from the sheet alone
+# ---------------------------------------------------------------------------
+
+#: Height/width ratio of each Figure 3 panel's axes box, keyed by panel letter. Figure 3
+#: is laid out at 17.4 x 17.4 cm with `fig.add_axes`, so a panel of width ``w`` and
+#: height ``h`` in figure fractions has a box aspect of ``h / w``. The redrawn panels
+#: keep those proportions; panel b is the two axes of its broken y axis.
+FIG3_BOX_ASPECT = {
+    "3a": 0.62,  # [0.13, 0.08], one per cell population
+    "3b": 0.61,  # [0.23, 0.14]
+    "3b_top": 0.15,  # [0.23, 0.14 / 4]
+    "3c": 0.91,  # [0.22, 0.20]
+    "3d": 1.20,  # [0.15, 0.18]
+    "3e": 1.20,  # [0.15, 0.18]
+    "3f": 1.00,  # [0.18, 0.18]
+}
+
+#: Fill and edge colour of the barcode-count histograms of panels a, c and e.
+FIG3_HIST_FACECOLOR = "slategray"
+FIG3_HIST_EDGECOLOR = "black"
+
+#: Colour of each series of panel b, and the line style telling the two barcode sets
+#: apart, as drawn by `match_to_library.plot_matches_to_library`.
+FIG3B_STYLE = {
+    "Library_Read_Proportion": ("black", "-", "Viral library barcodes"),
+    "In_Situ_Barcode_Proportion": ("dodgerblue", "-", "In situ barcodes"),
+    "Random_Barcode_Proportion": ("dodgerblue", (0, (2, 1)), "Random barcodes"),
+}
+
+#: The bar of barcodes absent from the library sits here, left of the log axis, and its
+#: centre carries the "0" tick.
+FIG3B_ZERO_BAR = (0.03, 0.06)
+
+#: The two y ranges of the broken y axis of panel b, bottom first, and their ticks.
+FIG3B_YLIMS = ((0, 0.2), (0.6, 0.65))
+FIG3B_YTICKS = ((0, 0.1, 0.2), (0.6, 0.65))
+
+#: Proportions of unique library reads the x axis of panel b is labelled with.
+FIG3B_XTICK_PROPORTIONS = (1e-8, 1e-5, 1e-2)
+
+#: Colour of the two barcode types of panel d, and the bar holding the barcodes with no
+#: presynaptic cell, drawn left of the log axis.
+FIG3D_COLORS = {"Orphan barcodes": "darkorange", "Non-orphan barcodes": "dodgerblue"}
+FIG3D_ZERO_BAR = (0.48, 0.69)
+FIG3D_ALPHA = 0.5
+
+#: Colour of the starter cells and of the robust fit of panel f.
+FIG3F_COLOR = "darkslategray"
+
+
+def _fig3_stairs(ax, values, proportions, counts=None, y_offset=0.05):
+    """Draw one `barcodes_in_cells.plot_hist` histogram back onto ``ax``.
+
+    Integer values are drawn as bars covering ``value +/- 0.5``; the counts, when the
+    sheet holds them, are the numbers annotating the bars of the published panel.
+    """
+    values = np.asarray(pd.to_numeric(values, errors="coerce"), dtype=float)
+    proportions = np.asarray(pd.to_numeric(proportions, errors="coerce"), dtype=float)
+    ax.stairs(
+        proportions,
+        np.append(values - 0.5, values[-1] + 0.5),
+        fill=True,
+        edgecolor=FIG3_HIST_EDGECOLOR,
+        facecolor=FIG3_HIST_FACECOLOR,
+        linewidth=0.5,
+    )
+    if counts is None:
+        return
+    for value, proportion, count in zip(values, proportions, np.asarray(counts)):
+        ax.text(
+            value - 0.2,
+            proportion + y_offset,
+            f"{int(count)}",
+            ha="left",
+            fontsize=5,
+            color="black",
+            alpha=0.8,
+            rotation=35,
+        )
+
+
+def _plot_fig3_barcodes_per_cell(df, sheet_name, source_name):
+    """Fig 3a -- barcodes per cell, presynaptic cells above starter cells."""
+    box_aspect = FIG3_BOX_ASPECT["3a"]
+    populations = list(pd.unique(df["Cell_Population"]))
+    width = 3.4
+    fig, axes = plt.subplots(
+        len(populations),
+        1,
+        figsize=(width, (width - 1.2) * box_aspect * len(populations) + 1.8),
+        sharex=True,
+    )
+    axes = np.atleast_1d(np.asarray(axes)).ravel()
+    values = pd.to_numeric(df["Barcodes_Per_Cell"], errors="coerce")
+    for ax, population in zip(axes, populations):
+        sub = df[df["Cell_Population"] == population]
+        _fig3_stairs(
+            ax,
+            sub["Barcodes_Per_Cell"],
+            sub["Proportion_Of_Barcodes"],
+            sub["Cell_Count"] if "Cell_Count" in sub.columns else None,
+        )
+        _style_panel_axes(
+            ax,
+            ylabel="Proportion_Of_Barcodes",
+            xlim=(values.min() - 0.5, values.max() + 0.5),
+            ylim=(0, 1),
+            xticks=np.arange(int(values.min()), int(values.max()) + 1),
+            yticks=[0, 0.5, 1.0],
+            box_aspect=box_aspect,
+        )
+        ax.text(
+            values.max() + 0.5,
+            1,
+            str(population).replace(" ", "\n"),
+            ha="right",
+            va="top",
+            fontsize=6,
+        )
+    axes[-1].set_xlabel(_axis_label("Barcodes_Per_Cell"), fontsize=9)
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_fig3_match_to_library(df, sheet_name, source_name):
+    """Fig 3b -- library reads per barcode, on the broken y axis of the panel.
+
+    The three histograms are drawn on both halves of the broken axis, as the notebook
+    does, so a bar taller than the lower range is still readable.
+    """
+    edges = np.append(
+        pd.to_numeric(df["Bin_Min_Reads"], errors="coerce").to_numpy()[1:],
+        pd.to_numeric(df["Bin_Max_Reads"], errors="coerce").to_numpy()[-1],
+    )
+    box_aspects = (FIG3_BOX_ASPECT["3b_top"], FIG3_BOX_ASPECT["3b"])
+    width = 4.0
+    fig, axes = plt.subplots(
+        2,
+        1,
+        figsize=(width, (width - 1.2) * sum(box_aspects) + 1.8),
+        sharex=True,
+        gridspec_kw=dict(height_ratios=list(box_aspects)),
+    )
+    for ax, box_aspect, ylim, yticks in zip(
+        axes, box_aspects, FIG3B_YLIMS[::-1], FIG3B_YTICKS[::-1]
+    ):
+        for column, (color, linestyle, label) in FIG3B_STYLE.items():
+            if column not in df.columns:
+                continue
+            values = pd.to_numeric(df[column], errors="coerce").to_numpy()
+            ax.stairs(
+                values[1:],
+                edges,
+                color=color,
+                linestyle=linestyle,
+                linewidth=1.0,
+                fill=False,
+                label=label,
+            )
+            if np.isfinite(values[0]):  # barcodes absent from the library
+                ax.stairs(
+                    [values[0]],
+                    list(FIG3B_ZERO_BAR),
+                    color=color,
+                    linestyle=linestyle,
+                    linewidth=1.0,
+                    fill=False,
+                )
+        _style_panel_axes(
+            ax,
+            xscale="log",
+            xlim=(FIG3B_ZERO_BAR[0] * 0.6, edges[-1] * 1.5),
+            ylim=ylim,
+            yticks=list(yticks),
+            box_aspect=box_aspect,
+        )
+
+    total_reads = float(
+        pd.to_numeric(df["Library_Total_Reads"], errors="coerce").iloc[0]
+    )
+    ticks = [np.sqrt(FIG3B_ZERO_BAR[0] * FIG3B_ZERO_BAR[1])]
+    ticks += [proportion * total_reads for proportion in FIG3B_XTICK_PROPORTIONS]
+    labels = ["$0$"] + [
+        f"$10^{{{int(np.log10(proportion))}}}$"
+        for proportion in FIG3B_XTICK_PROPORTIONS
+    ]
+    axes[1].set_xticks(ticks, labels=labels)
+    axes[1].set_xlabel(
+        "Proportion of unique reads in viral library per barcode", fontsize=9
+    )
+    axes[1].set_ylabel("Proportion of barcodes / of unique reads", fontsize=9)
+    axes[0].spines["bottom"].set_visible(False)
+    axes[0].tick_params(axis="x", which="both", bottom=False)
+    axes[0].legend(loc="upper right", fontsize=6, frameon=False)
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_fig3_starters_per_barcode(df, sheet_name, source_name):
+    """Fig 3c -- starter cells per barcode, with the counts above the bars."""
+    box_aspect = FIG3_BOX_ASPECT["3c"]
+    fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect))
+    values = pd.to_numeric(df["Starters_Per_Barcode"], errors="coerce")
+    _fig3_stairs(
+        ax,
+        values,
+        df["Proportion_Of_Barcodes"],
+        df["Barcode_Count"] if "Barcode_Count" in df.columns else None,
+    )
+    _style_panel_axes(
+        ax,
+        xlabel="Starters_Per_Barcode",
+        ylabel="Proportion_Of_Barcodes",
+        xlim=(values.min() - 0.5, values.max() + 0.5),
+        ylim=(0, 1),
+        xticks=np.arange(int(values.min()), int(values.max()) + 1),
+        box_aspect=box_aspect,
+    )
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_fig3_presyn_per_barcode(df, sheet_name, source_name):
+    """Fig 3d -- presynaptic cells per barcode, orphan against non-orphan barcodes."""
+    box_aspect = FIG3_BOX_ASPECT["3d"]
+    fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect))
+    upper = 1.0
+    for barcode_type, sub in _groups(df, "Barcode_Type"):
+        color = FIG3D_COLORS.get(barcode_type, "0.5")
+        proportions = pd.to_numeric(
+            sub["Proportion_Of_Barcodes"], errors="coerce"
+        ).to_numpy()
+        edges = np.append(
+            pd.to_numeric(sub["Bin_Min"], errors="coerce").to_numpy()[1:],
+            pd.to_numeric(sub["Bin_Max"], errors="coerce").to_numpy()[-1],
+        )
+        upper = max(upper, edges[-1])
+        for fill, alpha, lw in ((True, FIG3D_ALPHA, 0), (False, 1, 1.0)):
+            ax.stairs(
+                proportions[1:],
+                edges,
+                fill=fill,
+                color=color,
+                lw=lw,
+                alpha=alpha,
+                label=str(barcode_type) if fill else None,
+            )
+            # the barcodes with no presynaptic cell, drawn left of the log axis
+            ax.stairs(
+                [proportions[0]],
+                list(FIG3D_ZERO_BAR),
+                fill=fill,
+                color=color,
+                lw=max(lw, 0.5),
+                alpha=alpha,
+            )
+    _style_panel_axes(
+        ax,
+        xlabel="Presynaptic cells per barcode",
+        ylabel="Proportion_Of_Barcodes",
+        xscale="log",
+        xlim=(FIG3D_ZERO_BAR[0], upper),
+        box_aspect=box_aspect,
+    )
+    ax.set_xticks(
+        [np.sqrt(FIG3D_ZERO_BAR[0] * FIG3D_ZERO_BAR[1]), 1, 10, 100],
+        labels=["0", "1", "10", "100"],
+    )
+    ax.legend(fontsize=6, frameon=False, handlelength=1, loc="upper right")
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_fig3_spots_per_cell(df, sheet_name, source_name):
+    """Fig 3e -- barcode spots per cell, with the dotted detection threshold."""
+    box_aspect = FIG3_BOX_ASPECT["3e"]
+    fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect))
+    values = pd.to_numeric(df["Barcode_Spots_Per_Cell"], errors="coerce")
+    _fig3_stairs(ax, values, df["Proportion_Of_Cells"])
+    if "Min_Spots_Threshold" in df.columns:  # a constant column: the dotted line
+        ax.axvline(
+            float(df["Min_Spots_Threshold"].iloc[0]),
+            color="k",
+            linestyle="dotted",
+            lw=1,
+        )
+    _style_panel_axes(
+        ax,
+        xlabel="Barcode_Spots_Per_Cell",
+        ylabel="Proportion_Of_Cells",
+        xlim=(values.min() - 0.5, values.max() + 0.5),
+        ylim=(0, 0.08),
+        xticks=np.arange(0, values.max() + 10, 10),
+        box_aspect=box_aspect,
+    )
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_fig3_mcherry(df, sheet_name, source_name):
+    """Fig 3f -- presynaptic cells against starter mCherry fluorescence, and its fit.
+
+    Both axes hold natural logarithms, which the panel labels with the fluorescence and
+    the cell numbers themselves.
+    """
+    box_aspect = FIG3_BOX_ASPECT["3f"]
+    fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect))
+    cells = df[df["Series_Type"] == "Individual starter cell"]
+    ax.scatter(
+        cells["Log_mCherry_Fluorescence"],
+        cells["Log_Presynaptic_Cells"],
+        s=3,
+        color=FIG3F_COLOR,
+        edgecolor="black",
+        linewidths=0.2,
+        alpha=0.5,
+    )
+    fit = df[df["Series_Type"] == "Robust fit"]
+    if not fit.empty:
+        if {"Fit_CI_Lower", "Fit_CI_Upper"} <= set(fit.columns):
+            ax.fill_between(
+                fit["Log_mCherry_Fluorescence"],
+                fit["Fit_CI_Lower"],
+                fit["Fit_CI_Upper"],
+                color=FIG3F_COLOR,
+                alpha=0.15,
+                lw=0,
+            )
+        ax.plot(
+            fit["Log_mCherry_Fluorescence"],
+            fit["Log_Presynaptic_Cells"],
+            color=FIG3F_COLOR,
+            lw=2,
+        )
+    _style_panel_axes(
+        ax,
+        xlabel="Starter mCherry fluorescence (AU)",
+        ylabel="Number of presynaptic cells + 1",
+        box_aspect=box_aspect,
+    )
+    ax.set_xticks(np.log([100, 1000]), labels=[100, 1000])
+    ax.set_yticks(np.log([1, 10, 100]), labels=[1, 10, 100])
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Figure 6 -- panels whose geometry cannot be inferred from the sheet alone
+# ---------------------------------------------------------------------------
+
+#: Colour map and value range shared by the starter medio-lateral position of panels b,
+#: c and d, as the notebook draws them.
+FIG6_CMAP = "turbo_r"
+FIG6_CLIM = (-1.0, 1.0)
+
+#: Flatmap window of each panel, ``(xlim, ylim)`` in flatmap pixels and in the order the
+#: notebook sets them: both axes are inverted, so the redrawn panel keeps the
+#: orientation of the published one. Panel b is the zoomed inset around V1.
+FIG6_FLATMAP_WINDOW = {
+    "6b": ((800, 400), (1200, 950)),
+    "6c": ((1050, 150), (1330, 810)),
+    "6d": ((1050, 150), (1330, 810)),
+}
+
+#: Height/width ratio of the two graph panels' axes boxes. Figure 6 is laid out at
+#: 8.8 x 20.0 cm with `fig.add_axes`, so a panel of width ``w`` and height ``h`` in
+#: figure fractions has a box aspect of ``h * 20.0 / (w * 8.8)``.
+FIG6_BOX_ASPECT = {
+    "6e": 0.57,  # [0.8, 0.20]
+    "6f": 0.26,  # [0.8, 0.09]
+}
+
+#: Colour of the running average and of its shuffle band in panel e.
+FIG6E_COLOR = "darkorchid"
+
+
+def _fig6_flatmap_figsize(window, width=4.2):
+    """Figure size holding the given flatmap window at an equal aspect ratio."""
+    (x0, x1), (y0, y1) = window
+    # the extra height is the title, the x label and the colour bar below it
+    return (width, (width - 1.2) * abs(y1 - y0) / abs(x1 - x0) + 2.2)
+
+
+def _fig6_colorbar(fig, mappable, ax):
+    """The horizontal colour bar of the starter medio-lateral position."""
+    bar = fig.colorbar(mappable, ax=ax, orientation="horizontal", shrink=0.5, pad=0.22)
+    bar.set_label("Starter ML position (mm)", fontsize=8)
+    bar.set_ticks([FIG6_CLIM[0], 0, FIG6_CLIM[1]])
+    bar.ax.tick_params(labelsize=7)
+    return bar
+
+
+def _plot_fig6_flatmap_scatter(df, sheet_name, source_name, panel, marker_size):
+    """Panels b and c -- flatmap cell positions coloured by starter ML position."""
+    window = FIG6_FLATMAP_WINDOW[panel]
+    fig, ax = plt.subplots(figsize=_fig6_flatmap_figsize(window))
+    points = ax.scatter(
+        df["Flatmap_X"],
+        df["Flatmap_Y"],
+        c=pd.to_numeric(df["Starter_ML_Position_mm"], errors="coerce"),
+        cmap=FIG6_CMAP,
+        vmin=FIG6_CLIM[0],
+        vmax=FIG6_CLIM[1],
+        s=marker_size,
+        linewidths=0,
+        alpha=0.8 if panel == "6b" else 0.4,
+        rasterized=True,
+    )
+    _style_panel_axes(
+        ax,
+        xlabel="Flatmap X",
+        ylabel="Flatmap Y",
+        xlim=window[0],
+        ylim=window[1],
+        aspect="equal",
+    )
+    _fig6_colorbar(fig, points, ax)
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_fig6_smoothed_map(df, sheet_name, source_name):
+    """Fig 6d -- the smoothed starter map, redrawn as the image the panel shows."""
+    y = pd.to_numeric(df["Flatmap_Y"], errors="coerce").to_numpy(dtype=float)
+    columns = [c for c in df.columns if c != "Flatmap_Y"]
+    x = np.asarray([float(c) for c in columns], dtype=float)
+    image = df[columns].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+
+    window = FIG6_FLATMAP_WINDOW["6d"]
+    fig, ax = plt.subplots(figsize=_fig6_flatmap_figsize(window))
+    # The sheet is written bottom row first, as the panel draws it.
+    picture = ax.imshow(
+        image,
+        cmap=FIG6_CMAP,
+        origin="lower",
+        extent=[x[0], x[-1], y[0], y[-1]],
+        vmin=FIG6_CLIM[0],
+        vmax=FIG6_CLIM[1],
+        interpolation="nearest",
+    )
+    _style_panel_axes(
+        ax,
+        xlabel="Flatmap X",
+        ylabel="Flatmap Y",
+        xlim=window[0],
+        ylim=window[1],
+        aspect="equal",
+    )
+    _fig6_colorbar(fig, picture, ax)
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_fig6_starter_vs_presyn(df, sheet_name, source_name):
+    """Fig 6e -- one point per presynaptic cell, on the axes of the published panel."""
+    box_aspect = FIG6_BOX_ASPECT["6e"]
+    fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect, width=4.6))
+    ax.scatter(
+        df["Presynaptic_ML_mm"],
+        df["Starter_ML_Position_mm"],
+        s=3,
+        alpha=0.3,
+        linewidths=0,
+        color="k",
+        rasterized=True,
+    )
+    _style_panel_axes(
+        ax,
+        xlabel="Presynaptic ML position (mm)",
+        ylabel="Starter ML position (mm)",
+        xlim=(-4.5, 4.5),
+        ylim=(-1, 1),
+        xticks=[-4, 0, 4],
+        yticks=[-1, 0, 1],
+        box_aspect=box_aspect,
+    )
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_fig6_running_average(df, sheet_name, source_name):
+    """Fig 6e -- the running average with its shuffle band and mean-position line."""
+    box_aspect = FIG6_BOX_ASPECT["6e"]
+    fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect, width=4.6))
+    x = pd.to_numeric(df["Presynaptic_ML_mm"], errors="coerce")
+    if {"Shuffle_Lower", "Shuffle_Upper"} <= set(df.columns):
+        ax.fill_between(
+            x,
+            pd.to_numeric(df["Shuffle_Lower"], errors="coerce"),
+            pd.to_numeric(df["Shuffle_Upper"], errors="coerce"),
+            color=FIG6E_COLOR,
+            alpha=0.4,
+            linewidth=0,
+        )
+    ax.plot(
+        x,
+        pd.to_numeric(df["Running_Average_Starter_ML_mm"], errors="coerce"),
+        color=FIG6E_COLOR,
+        lw=2,
+    )
+    if "Mean_Starter_ML_Position_mm" in df.columns:  # constant column: the dashed line
+        ax.axhline(
+            float(df["Mean_Starter_ML_Position_mm"].iloc[0]),
+            color="k",
+            linestyle="dashed",
+            lw=1.5,
+        )
+    _style_panel_axes(
+        ax,
+        xlabel="Presynaptic ML position (mm)",
+        ylabel="Starter ML position (mm)",
+        xlim=(-4.5, 4.5),
+        ylim=(-1, 1),
+        xticks=[-4, 0, 4],
+        yticks=[-1, 0, 1],
+        box_aspect=box_aspect,
+    )
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_fig6_azimuth_average(df, sheet_name, source_name):
+    """Fig 6f -- the running average of receptive-field azimuth."""
+    box_aspect = FIG6_BOX_ASPECT["6f"]
+    fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect, width=4.6))
+    ax.plot(
+        pd.to_numeric(df["Presynaptic_ML_mm"], errors="coerce"),
+        pd.to_numeric(df["Running_Average_Azimuth_deg"], errors="coerce"),
+        color="k",
+        lw=2,
+    )
+    _style_panel_axes(
+        ax,
+        xlabel="Presynaptic ML position (mm)",
+        ylabel="Receptive field azimuth (degrees)",
+        xlim=(-4.5, 4.5),
+        ylim=(0, 60),
+        xticks=[-4, 0, 4],
+        yticks=[0, 30, 60],
+        box_aspect=box_aspect,
+    )
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Figure 5 -- panels whose geometry cannot be inferred from the sheet alone
+# ---------------------------------------------------------------------------
+
+#: Height/width ratio of the Figure 5 panels whose proportions are not fixed by their
+#: own data. Figure 5 is laid out at 17.4 x 17.4 cm with `fig.add_axes`, so a panel of
+#: width ``w`` and height ``h`` in figure fractions has a box aspect of ``h / w``. The
+#: matrices, bubble plots and diagrams are all drawn with an equal aspect instead.
+FIG5_BOX_ASPECT = {
+    "5d": 0.18 / 0.17,  # [0.17, 0.18], five stacked sub-axes side by side
+}
+
+#: Colour map of every Figure 5 matrix panel, as passed to `seaborn.heatmap`.
+FIG5_MATRIX_CMAP = "inferno"
+
+#: Value range of each matrix panel. ``None`` is a limit the published panel let follow
+#: the data, which `plot_area_by_area_connectivity` takes as 0.7 times the smallest
+#: value for `vmin` and the largest value for `vmax`; both are recomputed from the
+#: sheet.
+FIG5_MATRIX_VLIM = {
+    "5b": (None, None),
+    "5c": (0.0, 0.40),
+    "5g": (0.0, None),
+    "5i": (None, None),
+    "5j": (0.0, 0.70),
+}
+
+#: Colour-bar title of each matrix panel. The two count matrices have no colour bar.
+FIG5_MATRIX_CBAR = {
+    "5c": "Input\nfraction",
+    "5g": "Output\nfraction",
+    "5j": "Input\nfraction",
+}
+
+#: Window of every panel a scatter, in microns, as the figure sets it. The depth axis is
+#: inverted: the pia is at the top.
+FIG5A_XLIM = (-800, 800)
+FIG5A_YLIM = (1000, -50)
+
+#: Node layout and edge scaling of the two connectivity diagrams, keyed by panel. The
+#: positions are arbitrary drawing coordinates rather than measurements, so they belong
+#: here and not in the workbook.
+FIG5_DIAGRAM = {
+    "5e": dict(
+        positions={
+            "2/3": (0, 6),
+            "4": (2, 5),
+            "5": (0, 4),
+            "6a": (2, 3),
+            "6b": (0, 2),
+        },
+        radius=0.5,
+        edge_width_scale=20,
+        arrow_head_scale=30,
+        vmin=0.0,
+        vmax=0.4,
+    ),
+    "5k": dict(
+        positions={
+            "Pvalb": (0, 1.5),
+            "Sst": (3, 1.5),
+            "Vip": (1.5, 0),
+            "Lamp5": (1.5, 3),
+        },
+        radius=0.6,
+        edge_width_scale=10,
+        arrow_head_scale=20,
+        vmin=0.0,
+        vmax=0.5,
+    ),
+}
+
+#: Colour map of the confidence-interval width of the connectivity diagrams, and the
+#: smallest input fraction they draw an arrow for.
+FIG5_DIAGRAM_CMAP = "RdPu_r"
+FIG5_DIAGRAM_CUTOFF = 0.2
+
+#: Colour map, colour range, bubble scaling and significance level of the two bubble
+#: plots, as the figure passes them to `bubble_plot`.
+FIG5_BUBBLE_VLIM = (-2, 2)
+FIG5_BUBBLE_SIZE_SCALE = 80
+FIG5_BUBBLE_ALPHA = 0.05
+
+
+def _fig5_matrix(df):
+    """Split a Figure 5 matrix sheet into its matrix and its starter-count row."""
+    label_col = df.columns[0]
+    is_counts = df[label_col].astype(str).str.startswith("Starter cell count")
+    matrix = df[~is_counts].set_index(label_col)
+    matrix = matrix.apply(pd.to_numeric, errors="coerce")
+    matrix.index = matrix.index.astype(str)
+    starter_counts = None
+    if is_counts.any():
+        row = df[is_counts].iloc[0].drop(label_col)
+        starter_counts = pd.to_numeric(row, errors="coerce")
+    return matrix, starter_counts, label_col
+
+
+def _plot_fig5_matrix(
+    df, sheet_name, source_name, panel, value_format="{:.2f}", xlabel="Starter layer"
+):
+    """Panels b/c/g/i/j -- a connectivity matrix, on the colour scale of the figure.
+
+    Drawn as the published panel is: `inferno`, white lines between the cells, a black
+    frame, the value in every cell, the column labels on top and, for the count
+    matrices, the number of starter cells under each column.
+    """
+    matrix, starter_counts, label_col = _fig5_matrix(df)
+    values = matrix.to_numpy(dtype=float)
+    finite = values[np.isfinite(values)]
+    vmin, vmax = FIG5_MATRIX_VLIM[panel]
+    if vmin is None:
+        vmin = float(np.min(finite)) * 0.7
+    if vmax is None:
+        vmax = float(np.max(finite))
+
+    fig, ax = plt.subplots(figsize=(3.8, 3.8))
+    image = ax.imshow(values, cmap=FIG5_MATRIX_CMAP, vmin=vmin, vmax=vmax)
+    threshold = float(np.max(finite)) / 2
+    for (row, column), value in np.ndenumerate(values):
+        ax.text(
+            column,
+            row,
+            value_format.format(value),
+            ha="center",
+            va="center",
+            fontsize=7,
+            color="white" if value < threshold else "black",
+        )
+    # White grid lines between the cells and a black frame, as the heatmap draws them.
+    ax.set_xticks(np.arange(-0.5, matrix.shape[1]), minor=True)
+    ax.set_yticks(np.arange(-0.5, matrix.shape[0]), minor=True)
+    ax.grid(which="minor", color="white", linewidth=0.9)
+    ax.set_axisbelow(False)  # the lines separate the cells, so they go over the image
+    ax.tick_params(which="minor", length=0)
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_color("black")
+
+    _style_panel_axes(
+        ax,
+        xlabel=xlabel,
+        ylabel=label_col,
+        xticks=np.arange(matrix.shape[1]),
+        yticks=np.arange(matrix.shape[0]),
+        aspect="equal",
+    )
+    ax.set_xticklabels([str(c) for c in matrix.columns])
+    ax.set_yticklabels(list(matrix.index))
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position("top")
+    ax.tick_params(axis="both", which="major", length=0)
+
+    if starter_counts is not None:
+        for column, count in enumerate(starter_counts.to_numpy()):
+            ax.text(
+                column,
+                matrix.shape[0] - 0.35,
+                "" if not np.isfinite(count) else f"{count:.0f}",
+                ha="center",
+                va="top",
+                fontsize=7,
+                transform=ax.transData,
+            )
+        ax.text(
+            -0.65,
+            matrix.shape[0] - 0.35,
+            "N starters:",
+            ha="right",
+            va="top",
+            fontsize=7,
+        )
+    if panel in FIG5_MATRIX_CBAR:
+        bar = fig.colorbar(image, ax=ax, shrink=0.35, aspect=8, pad=0.04)
+        bar.ax.set_title(FIG5_MATRIX_CBAR[panel], fontsize=7, loc="left")
+        bar.ax.tick_params(labelsize=7)
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_fig5_presyn_positions(df, sheet_name, source_name):
+    """Panel a -- the presynaptic cells of every starter layer, in the panel's window.
+
+    One sub-panel per starter layer, presynaptic cells in dark red against the
+    medio-lateral offset from their starter, the starters themselves in black at an
+    offset of zero, on an inverted (pia at the top) equal-aspect depth axis.
+    """
+    layers = list(dict.fromkeys(df["Starter_Layer"].astype(str)))
+    fig, axes = plt.subplots(1, len(layers), figsize=(7.6, 2.6), sharey=True)
+    axes = np.atleast_1d(axes)
+    for ax, layer in zip(axes, layers):
+        sub = df[df["Starter_Layer"].astype(str) == layer]
+        for point_type, color, size, alpha in (
+            ("Presynaptic cell", "darkred", 3, 0.5),
+            ("Starter cell", "black", 6, 0.3),
+        ):
+            points = sub[sub["Point_Type"] == point_type]
+            ax.scatter(
+                points["Relative_ML_um"],
+                points["Cortical_Depth_um"],
+                marker=".",
+                s=size,
+                color=color,
+                alpha=alpha,
+                linewidths=0,
+            )
+        _style_panel_axes(
+            ax,
+            xlim=FIG5A_XLIM,
+            ylim=FIG5A_YLIM,
+            xticks=[-800, 0, 800],
+            aspect="equal",
+        )
+        ax.set_title(layer, fontsize=8)
+    axes[0].set_ylabel(_axis_label("Cortical_Depth_um"), fontsize=9)
+    axes[len(axes) // 2].set_xlabel(_axis_label("Relative_ML_um"), fontsize=9)
+    fig.suptitle("")
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_fig5_input_fraction_ci(df, sheet_name, source_name):
+    """Panel d -- the per-starter input fractions, redrawn by the plotting function.
+
+    The sheet holds every individual value and every mean the panel draws, so the panel
+    is redrawn by `bootstrapping.plot_confidence_intervals` itself, which decides
+    between a violin and a jittered scatter exactly as it did for the figure.
+    """
+    from brisc.manuscript_analysis import bootstrapping as boot
+
+    individual = df[df["Series_Type"] == "Individual"]
+    means = df[df["Series_Type"] == "Mean"]
+    presyn = list(dict.fromkeys(means["Presynaptic_Layer"].astype(str)))
+    starters = list(dict.fromkeys(means["Starter_Layer"].astype(str)))
+    mean_df = means.pivot_table(
+        index="Presynaptic_Layer", columns="Starter_Layer", values="Input_Fraction"
+    ).reindex(index=presyn, columns=starters)
+
+    # One wide frame per starter layer; the columns are padded to a common length
+    # because the sheet does not say which starter cell each value belongs to, and the
+    # plotting function takes each column independently anyway.
+    frames = []
+    for starter in starters:
+        group = individual[individual["Starter_Layer"].astype(str) == starter]
+        columns = {
+            layer: group.loc[
+                group["Presynaptic_Layer"].astype(str) == layer, "Input_Fraction"
+            ].to_numpy(dtype=float)
+            for layer in presyn
+        }
+        height = max((len(values) for values in columns.values()), default=0)
+        wide = pd.DataFrame(
+            {
+                layer: np.append(values, np.full(height - len(values), np.nan))
+                for layer, values in columns.items()
+            }
+        )
+        wide["Starter_Layer"] = starter
+        frames.append(wide)
+    points = pd.concat(frames, ignore_index=True)
+
+    # `plot_confidence_intervals` divides the axes it is given into one sub-axes per
+    # starter layer, so the rectangle below is the whole panel; its proportions are the
+    # published ones.
+    width, height = 4.8, 5.6
+    box_width = 0.72
+    fig = plt.figure(figsize=(width, height))
+    ax = fig.add_axes(
+        [
+            0.15,
+            0.11,
+            box_width,
+            box_width * FIG5_BOX_ASPECT["5d"] * width / height,
+        ]
+    )
+    boot.plot_confidence_intervals(
+        mean_df,
+        mean_df,
+        mean_df,
+        ax,
+        label_fontsize=9,
+        tick_fontsize=7,
+        line_width=0.9,
+        orientation="horizontal",
+        individual_points_df=points,
+        individual_points_grouping_col="Starter_Layer",
+        jitter_width=0.15,
+        point_size=3,
+        point_alpha=0.4,
+        show_violin=None,
+        show_error=None,
+    )
+    fig.suptitle(sheet_name, fontsize=11)
+    footer = f"{source_name} — {len(df):,} rows" if source_name else f"{len(df):,} rows"
+    fig.text(0.99, 0.01, footer, ha="right", va="bottom", fontsize=6, color="0.4")
+    return fig
+
+
+def _plot_fig5_bubbles(df, sheet_name, source_name, show_legend=True):
+    """Panels f/h -- the observed-versus-shuffle bubble plot, as the figure draws it.
+
+    The log ratios and p-values of the sheet are pivoted back to the two matrices
+    `bubble_plot` takes, so the redrawn panel is the published one.
+    """
+    from brisc.manuscript_analysis import connectivity_matrices as conn_mat
+
+    rows = list(dict.fromkeys(df["Presynaptic_Group"].astype(str)))
+    columns = list(dict.fromkeys(df["Starter_Group"].astype(str)))
+
+    def _pivot(column):
+        return df.pivot_table(
+            index="Presynaptic_Group", columns="Starter_Group", values=column
+        ).reindex(index=rows, columns=columns)
+
+    log_ratio = _pivot("Log2_Observed_Over_Shuffle")
+    pvalues = _pivot("FDR_Corrected_P_Value")
+
+    fig = plt.figure(figsize=(4.6 if show_legend else 3.8, 3.8))
+    ax = fig.add_axes([0.16, 0.08, 0.5, 0.74])
+    cbax = fig.add_axes([0.72, 0.5, 0.025, 0.16]) if show_legend else None
+    conn_mat.bubble_plot(
+        log_ratio,
+        pvalues,
+        alpha=FIG5_BUBBLE_ALPHA,
+        size_scale=FIG5_BUBBLE_SIZE_SCALE,
+        ax=ax,
+        cbax=cbax,
+        show_legend=show_legend,
+        label_fontsize=9,
+        tick_fontsize=7,
+        vmin=FIG5_BUBBLE_VLIM[0],
+        vmax=FIG5_BUBBLE_VLIM[1],
+        bubble_lw=1,
+    )
+    fig.suptitle(sheet_name, fontsize=11)
+    footer = f"{source_name} — {len(df):,} rows" if source_name else f"{len(df):,} rows"
+    fig.text(0.99, 0.01, footer, ha="right", va="bottom", fontsize=6, color="0.4")
+    return fig
+
+
+def _plot_fig5_diagram(df, sheet_name, source_name, panel):
+    """Panels e/k -- the connectivity diagram, redrawn by the plotting function.
+
+    The drawn arrows of the sheet are put back into the input-fraction and
+    confidence-bound matrices `connectivity_diagram_mpl` takes, with a zero for every
+    connection the panel does not draw, so the diagram comes out as published.
+    """
+    from brisc.manuscript_analysis import connectivity_matrices as conn_mat
+
+    style = FIG5_DIAGRAM[panel]
+    names = list(style["positions"])
+    fraction = pd.DataFrame(0.0, index=names, columns=names)
+    lower, upper = fraction.copy(), fraction.copy()
+    for row in df.itertuples(index=False):
+        presyn = str(row.Presynaptic_Group)
+        starter = str(row.Starter_Group)
+        if presyn not in names or starter not in names:
+            continue
+        fraction.loc[presyn, starter] = float(row.Input_Fraction)
+        lower.loc[presyn, starter] = float(row.CI_Lower)
+        upper.loc[presyn, starter] = float(row.CI_Upper)
+
+    fig = plt.figure(figsize=(3.8, 4.0))
+    ax = fig.add_axes([0.02, 0.05, 0.76, 0.82])
+    cax = fig.add_axes([0.84, 0.12, 0.03, 0.18])
+    conn_mat.connectivity_diagram_mpl(
+        fraction,
+        lower,
+        upper,
+        connection_names=names,
+        positions=style["positions"],
+        display_names=names,
+        node_style=dict(facecolor="Lightgray", radius=style["radius"], fontsize=7),
+        min_fraction_cutoff=FIG5_DIAGRAM_CUTOFF,
+        ci_to_alpha=False,
+        ci_cmap=FIG5_DIAGRAM_CMAP,
+        edge_width_scale=style["edge_width_scale"],
+        arrow_head_scale=style["arrow_head_scale"],
+        arrow_style=dict(connectionstyle="Arc3, rad=-0.2", ec="none"),
+        ax=ax,
+        cax=cax,
+        vmin=style["vmin"],
+        vmax=style["vmax"],
+    )
+    fig.suptitle(sheet_name, fontsize=11)
+    footer = f"{source_name} — {len(df):,} rows" if source_name else f"{len(df):,} rows"
+    fig.text(0.99, 0.01, footer, ha="right", va="bottom", fontsize=6, color="0.4")
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Figure 4 -- panels whose geometry cannot be inferred from the sheet alone
+# ---------------------------------------------------------------------------
+
+#: Height/width ratio of each Figure 4 panel's axes box, keyed by panel letter. Figure 4
+#: is laid out at 17.4 x 17.4 cm with `fig.add_axes`, so a panel of width ``w`` and
+#: height ``h`` in figure fractions has a box aspect of ``h / w``. The anatomical
+#: panels (a, b, f, g, h) are drawn with an equal aspect instead and are not listed.
+FIG4_BOX_ASPECT = {
+    "4c": 1.875,  # [0.08, 0.15]
+    "4d": 1.875,  # [0.08, 0.15]
+    "4e": 1.50,  # [0.10, 0.15]
+    "4i": 0.588,  # [0.17, 0.10]
+}
+
+#: Colour of every cortical area of panels a and b, as the notebook passes them.
+FIG4_AREA_COLORS = {
+    "AUDp": "limegreen",
+    "AUDpo": "mediumseagreen",
+    "AUDv": "springgreen",
+    "RSP": "darkorchid",
+    "TEa": "forestgreen",
+    "ECT": "darkolivegreen",
+    "TH": "orangered",
+    "VISal": "aquamarine",
+    "VISl": "darkturquoise",
+    "VISli": "mediumaquamarine",
+    "VISp": "deepskyblue",
+    "VISpm": "royalblue",
+}
+
+#: Windows of the anatomical panels, in the order matplotlib takes them, so that the
+#: axes the published panel inverts come out inverted here too.
+FIG4A_XLIM = (1100, 570)
+FIG4A_YLIM = (450, 0)
+FIG4B_XLIM = (1200, 100)
+FIG4B_YLIM = (1350, 740)
+FIG4F_CORONAL_XLIM = (1100, 570)
+FIG4F_CORONAL_YLIM = (450, 0)
+FIG4F_FLATMAP_XLIM = (980, 250)
+FIG4F_FLATMAP_YLIM = (1250, 850)
+
+#: Cortical depth window of panel c, drawn downwards.
+FIG4C_YLIM = (1000, 0)
+
+#: Colour of each cell population of panel c, in the order `plot_layer_distribution`
+#: stacks the two halves of the split violin.
+FIG4C_COLORS = {"Starter cell": "black", "Presynaptic cell": "gray"}
+
+#: Legend entry of the median line the redrawn panel c adds as a reading aid. The
+#: published panel draws no such line: its violins are drawn with ``inner=None``.
+FIG4C_MEDIAN_LABEL = "Median (not in the published panel)"
+
+#: Window of panel i and the bandwidth method the notebook estimates its density with.
+FIG4I_XLIM = (-5, 5)
+FIG4I_BW_METHOD = 0.05
+
+#: Colour of the stacked series of panel e, in stacking order.
+FIG4E_COLORS = (
+    "lightskyblue",
+    "dodgerblue",
+    "royalblue",
+    "darkblue",
+    "red",
+    "orange",
+    "orangered",
+)
+
+#: Colour of each example barcode of panel f, in the order the notebook passes them, and
+#: of the grey background of all barcoded cells.
+FIG4F_COLORS = ("dodgerblue", "forestgreen", "darkorange")
+FIG4F_BACKGROUND = "gray"
+
+
+def _plot_cell_positions(
+    df, sheet_name, source_name, xcol, ycol, xlim, ylim, width=4.0
+):
+    """Panels a/b -- every barcoded cell coloured by area, starters in black on top."""
+    span_x = abs(xlim[1] - xlim[0])
+    span_y = abs(ylim[1] - ylim[0])
+    fig, ax = plt.subplots(figsize=(width, width * span_y / span_x + 0.9))
+    ax.scatter(
+        df[xcol],
+        df[ycol],
+        s=1,
+        alpha=0.3,
+        linewidths=0,
+        c=[FIG4_AREA_COLORS.get(a, "0.5") for a in df["Cortical_Area"]],
+        rasterized=True,
+    )
+    starters = df[df["Is_Starter"].astype(bool)]
+    ax.scatter(
+        starters[xcol],
+        starters[ycol],
+        s=2,
+        alpha=0.6,
+        linewidths=0,
+        c="black",
+        rasterized=True,
+    )
+    ax.set_xlim(*xlim)
+    ax.set_ylim(*ylim)
+    ax.set_aspect("equal")
+    ax.set_axis_off()
+    areas = [a for a in FIG4_AREA_COLORS if a in set(df["Cortical_Area"])]
+    ax.legend(
+        handles=[
+            plt.Line2D(
+                [], [], marker="o", lw=0, color=FIG4_AREA_COLORS[a], label=a, ms=3
+            )
+            for a in areas
+        ],
+        loc="lower left",
+        ncols=4,
+        frameon=False,
+        fontsize=5,
+        handlelength=1,
+    )
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_cortical_depth(df, sheet_name, source_name):
+    """Fig 4c -- the cortical depth of every barcoded cell of VISp, by population.
+
+    The published panel draws these depths as a split violin with ``inner=None``, so it
+    carries no mean or median line. Here they are a jittered strip per population, with
+    a short line at the median of each as a reading aid for this check panel only: it is
+    not a feature of the figure and must not be added to it, and it is not in the
+    workbook either -- it is computed here from the depths the sheet holds. The dashed
+    layer boundaries of the published panel are Allen atlas averages, not data, so they
+    are neither in the sheet nor redrawn here.
+    """
+    cells = df
+    box_aspect = FIG4_BOX_ASPECT["4c"]
+    fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect, width=3.0))
+    rng = np.random.default_rng(0)
+    populations = [p for p in FIG4C_COLORS if p in set(cells["Series"])]
+    for position, series in enumerate(populations):
+        depths = (
+            pd.to_numeric(
+                cells.loc[cells["Series"] == series, "Cortical_Depth_um"],
+                errors="coerce",
+            )
+            .dropna()
+            .to_numpy(dtype=float)
+        )
+        if not depths.size:
+            continue
+        ax.scatter(
+            position + rng.uniform(-0.25, 0.25, len(depths)),
+            depths,
+            s=2,
+            alpha=0.5,
+            linewidths=0,
+            color=FIG4C_COLORS[series],
+            rasterized=True,
+            label=series,
+        )
+        ax.plot(
+            [position - 0.38, position + 0.38],
+            [np.median(depths)] * 2,
+            color="crimson",
+            lw=1.2,
+            zorder=3,
+            label=FIG4C_MEDIAN_LABEL if position == 0 else None,
+        )
+    _style_panel_axes(
+        ax,
+        ylabel="Cortical depth (um)",
+        xlim=(-0.6, len(populations) - 0.4),
+        ylim=FIG4C_YLIM,
+        xticks=range(len(populations)),
+        box_aspect=box_aspect,
+    )
+    ax.set_xticklabels(populations, fontsize=6)
+    ax.legend(
+        loc="lower left",
+        bbox_to_anchor=(-0.3, 1.0),
+        frameon=False,
+        fontsize=6,
+        handlelength=1,
+        markerscale=4,
+    )
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_starters_per_presynaptic(df, sheet_name, source_name):
+    """Fig 4d -- the number of starters a presynaptic cell is connected to."""
+    box_aspect = FIG4_BOX_ASPECT["4d"]
+    fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect, width=2.8))
+    values = df["Connected_Starters"].to_numpy(dtype=float)
+    proportions = df["Proportion_Of_Cells"].to_numpy(dtype=float)
+    ax.bar(
+        values,
+        proportions,
+        width=1,
+        edgecolor="black",
+        facecolor="slategray",
+        linewidth=0.5,
+    )
+    if "Cell_Count" in df.columns:  # the counts written above the bars
+        for value, proportion, count in zip(values, proportions, df["Cell_Count"]):
+            ax.text(
+                value - 0.2,
+                proportion + 0.05,
+                f"{int(count)}",
+                ha="left",
+                fontsize=6,
+                color="black",
+                alpha=0.8,
+                rotation=35,
+            )
+    _style_panel_axes(
+        ax,
+        xlabel="Connected starters",
+        ylabel="Proportion of cells",
+        xlim=(values.min() - 0.5, values.max() + 0.5),
+        ylim=(0, 1),
+        xticks=values,
+        box_aspect=box_aspect,
+    )
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_multibarcoded_starters(df, sheet_name, source_name):
+    """Fig 4e -- presynaptic cells per barcode of every multi-barcoded starter."""
+    box_aspect = FIG4_BOX_ASPECT["4e"]
+    fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect, width=3.0))
+    x = df["Starter_Rank"].to_numpy(dtype=float)
+    series = [c for c in df.columns if c != "Starter_Rank"]
+    bottom = np.zeros(len(df))
+    for column, color in zip(series, FIG4E_COLORS):
+        height = df[column].to_numpy(dtype=float)
+        ax.bar(
+            x,
+            height,
+            bottom=bottom,
+            width=1,
+            color=color,
+            label=str(column).replace("_", " "),
+        )
+        bottom = bottom + height
+    _style_panel_axes(
+        ax,
+        xlabel="Starter cell",
+        ylabel="# presynaptic cells",
+        xticks=[x.min(), x.max()],
+        box_aspect=box_aspect,
+    )
+    ax.legend(
+        fontsize=5,
+        loc="upper left",
+        bbox_to_anchor=(0.55, 1.05),
+        frameon=False,
+        handlelength=1,
+    )
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_example_barcodes(df, sheet_name, source_name):
+    """Fig 4f -- the cells of each example barcode, coronal section and flatmap.
+
+    The two panels of the figure draw the same cells, so both are redrawn here, each
+    with its own window. The lines are the ones of the panel: from the starter of a
+    barcode to every cell carrying it.
+    """
+    background = df["Barcode"] == "All barcoded cells"
+    barcodes = [b for b in pd.unique(df.loc[~background, "Barcode"])]
+    colors = dict(zip(barcodes, FIG4F_COLORS * (len(barcodes) // 3 + 1)))
+
+    fig, axes = plt.subplots(1, 2, figsize=(6.6, 3.4))
+    for ax, (xcol, ycol, xlim, ylim) in zip(
+        axes,
+        (
+            ("ARA_Z_px", "ARA_Y_px", FIG4F_CORONAL_XLIM, FIG4F_CORONAL_YLIM),
+            ("Flatmap_X", "Flatmap_Y", FIG4F_FLATMAP_XLIM, FIG4F_FLATMAP_YLIM),
+        ),
+    ):
+        grey = df[background]
+        ax.scatter(
+            grey[xcol],
+            grey[ycol],
+            s=1,
+            alpha=0.15,
+            linewidths=0,
+            c=FIG4F_BACKGROUND,
+            rasterized=True,
+        )
+        for barcode in barcodes:
+            cells = df[df["Barcode"] == barcode]
+            color = colors[barcode]
+            ax.scatter(
+                cells[xcol],
+                cells[ycol],
+                s=4,
+                linewidths=0,
+                c=color,
+                zorder=2,
+                rasterized=True,
+            )
+            starter = cells[cells["Point_Type"] == "Starter cell"]
+            for _, presynaptic in cells.iterrows():
+                for _, origin in starter.iterrows():
+                    ax.plot(
+                        [origin[xcol], presynaptic[xcol]],
+                        [origin[ycol], presynaptic[ycol]],
+                        color=color,
+                        lw=0.5,
+                        alpha=0.5,
+                        zorder=-3,
+                        rasterized=True,
+                    )
+            ax.scatter(
+                starter[xcol],
+                starter[ycol],
+                s=25,
+                edgecolors="black",
+                linewidths=1,
+                c=color,
+                zorder=3,
+                label=barcode,
+            )
+        ax.set_xlim(*xlim)
+        ax.set_ylim(*ylim)
+        ax.set_aspect("equal")
+        ax.set_axis_off()
+    axes[1].legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.0),
+        frameon=False,
+        fontsize=5,
+        ncols=2,
+    )
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_relative_coors(df, sheet_name, source_name):
+    """Figs 4g/h -- presynaptic positions relative to their starter, on equal axes."""
+    fig, ax = plt.subplots(figsize=(3.6, 2.2))
+    ax.scatter(
+        df["Relative_ML_Location_mm"],
+        df["Relative_Cortical_Depth_mm"],
+        s=1,
+        alpha=0.05,
+        color="black",
+        edgecolors="none",
+        rasterized=True,
+    )
+    _style_panel_axes(
+        ax,
+        xlabel="Relative M-L location (mm)",
+        ylabel="Relative cortical\ndepth (mm)",
+        xlim=(-5, 5),
+        ylim=(-1, 1),
+        yticks=[-1, 0, 1],
+        aspect="equal",
+    )
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_ml_kde(df, sheet_name, source_name):
+    """Fig 4i -- the observed medio-lateral density over the shuffle band.
+
+    The sheet holds one relative position per presynaptic cell, so the kernel density
+    estimate of the published panel is recomputed here with its bandwidth.
+    """
+    from scipy.stats import gaussian_kde
+
+    box_aspect = FIG4_BOX_ASPECT["4i"]
+    fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect, width=3.4))
+    shuffle = df[df["Series"] == "Shuffle"]
+    ax.fill_between(
+        shuffle["Relative_ML_Location_mm"],
+        shuffle["Shuffle_Density_Lower"],
+        shuffle["Shuffle_Density_Upper"],
+        color="gray",
+        lw=0,
+        zorder=1,
+        label="Shuffle",
+    )
+    observed = pd.to_numeric(
+        df.loc[df["Series"] == "Observed", "Relative_ML_Location_mm"], errors="coerce"
+    ).dropna()
+    grid = np.linspace(*FIG4I_XLIM, 400)
+    ax.plot(
+        grid,
+        gaussian_kde(observed.to_numpy(dtype=float), bw_method=FIG4I_BW_METHOD)(grid),
+        color="black",
+        lw=0.9,
+        zorder=2,
+        label="Observed",
+    )
+    _style_panel_axes(
+        ax,
+        xlabel="Relative M-L location (mm)",
+        ylabel="Density",
+        xlim=FIG4I_XLIM,
+        ylim=(0, None),
+        yticks=[0, 0.5],
+        box_aspect=box_aspect,
+    )
+    ax.legend(fontsize=6, frameon=False, handlelength=1, loc="upper right")
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+# ---------------------------------------------------------------------------
 # Per-panel drawing specifications
 # ---------------------------------------------------------------------------
 
@@ -829,7 +2189,7 @@ PANEL_SPECS = [
         {
             "kind": "line",
             "draw": partial(
-                _plot_fig1_curves,
+                _plot_panel_curves,
                 xcol="Distance_To_Injection_mm",
                 ycol="Cell_Density_Per_mm3",
                 colors=("black",),
@@ -842,6 +2202,146 @@ PANEL_SPECS = [
     ),
     ("1o starter positions", {"kind": "scatter", "draw": _plot_starter_positions}),
     ("1p pairwise distances", {"kind": "line", "draw": _plot_pairwise_distances}),
+    (
+        "4a coronal cell positions",
+        {
+            "kind": "scatter",
+            "draw": partial(
+                _plot_cell_positions,
+                xcol="ARA_Z_px",
+                ycol="ARA_Y_px",
+                xlim=FIG4A_XLIM,
+                ylim=FIG4A_YLIM,
+            ),
+        },
+    ),
+    (
+        "4b flatmap cell positions",
+        {
+            "kind": "scatter",
+            "draw": partial(
+                _plot_cell_positions,
+                xcol="Flatmap_X",
+                ycol="Flatmap_Y",
+                xlim=FIG4B_XLIM,
+                ylim=FIG4B_YLIM,
+                width=4.4,
+            ),
+        },
+    ),
+    ("4c cortical depth", {"kind": "strip", "draw": _plot_cortical_depth}),
+    (
+        "4d starters per presynaptic",
+        {"kind": "bar", "draw": _plot_starters_per_presynaptic},
+    ),
+    (
+        "4e multibarcoded starters",
+        {"kind": "bar", "draw": _plot_multibarcoded_starters},
+    ),
+    ("4f example barcodes", {"kind": "scatter", "draw": _plot_example_barcodes}),
+    (
+        "4g relative coords observed",
+        {"kind": "scatter", "draw": _plot_relative_coors},
+    ),
+    (
+        "4h relative coords shuffled",
+        {"kind": "scatter", "draw": _plot_relative_coors},
+    ),
+    ("4i ml kde vs shuffle", {"kind": "band", "draw": _plot_ml_kde}),
+    # Figure 5, on the colour scales, layer order and proportions of the published one.
+    (
+        "5a presyn pos by layer",
+        {"kind": "scatter", "draw": _plot_fig5_presyn_positions},
+    ),
+    (
+        "5b counts matrix",
+        {
+            "kind": "heatmap",
+            "draw": partial(_plot_fig5_matrix, panel="5b", value_format="{:.0f}"),
+        },
+    ),
+    (
+        "5c mean input fraction",
+        {"kind": "heatmap", "draw": partial(_plot_fig5_matrix, panel="5c")},
+    ),
+    (
+        "5d input fraction by layer",
+        {"kind": "points", "draw": _plot_fig5_input_fraction_ci},
+    ),
+    (
+        "5e connectivity diagram",
+        {"kind": "diagram", "draw": partial(_plot_fig5_diagram, panel="5e")},
+    ),
+    ("5f input vs shuffle", {"kind": "bubble", "draw": _plot_fig5_bubbles}),
+    (
+        "5g mean output fraction",
+        {"kind": "heatmap", "draw": partial(_plot_fig5_matrix, panel="5g")},
+    ),
+    (
+        "5h output vs shuffle",
+        {"kind": "bubble", "draw": partial(_plot_fig5_bubbles, show_legend=False)},
+    ),
+    (
+        "5i interneuron counts",
+        {
+            "kind": "heatmap",
+            "draw": partial(
+                _plot_fig5_matrix,
+                panel="5i",
+                value_format="{:.0f}",
+                xlabel="Starter cell type",
+            ),
+        },
+    ),
+    (
+        "5j interneuron input fract",
+        {
+            "kind": "heatmap",
+            "draw": partial(_plot_fig5_matrix, panel="5j", xlabel="Starter cell type"),
+        },
+    ),
+    (
+        "5k interneuron diagram",
+        {"kind": "diagram", "draw": partial(_plot_fig5_diagram, panel="5k")},
+    ),
+    # Figure 6, on the flatmap windows and axes of the published figure.
+    (
+        "6b starter positions",
+        {
+            "kind": "scatter",
+            "draw": partial(_plot_fig6_flatmap_scatter, panel="6b", marker_size=8),
+        },
+    ),
+    (
+        "6c presynaptic positions",
+        {
+            "kind": "scatter",
+            "draw": partial(_plot_fig6_flatmap_scatter, panel="6c", marker_size=1),
+        },
+    ),
+    ("6d smoothed starter map", {"kind": "heatmap", "draw": _plot_fig6_smoothed_map}),
+    (
+        "6e starter vs presyn ml",
+        {"kind": "scatter", "draw": _plot_fig6_starter_vs_presyn},
+    ),
+    ("6e running average", {"kind": "line", "draw": _plot_fig6_running_average}),
+    ("6f azimuth running avg", {"kind": "line", "draw": _plot_fig6_azimuth_average}),
+    # Figure 3, likewise drawn on the axes of the published figure.
+    (
+        "3a barcodes per cell",
+        {"kind": "bar", "draw": _plot_fig3_barcodes_per_cell},
+    ),
+    ("3b match to library", {"kind": "bar", "draw": _plot_fig3_match_to_library}),
+    (
+        "3c starters per barcode",
+        {"kind": "bar", "draw": _plot_fig3_starters_per_barcode},
+    ),
+    (
+        "3d presynaptic per barcode",
+        {"kind": "bar", "draw": _plot_fig3_presyn_per_barcode},
+    ),
+    ("3e spots per cell", {"kind": "bar", "draw": _plot_fig3_spots_per_cell}),
+    ("3f mcherry vs presynaptic", {"kind": "scatter", "draw": _plot_fig3_mcherry}),
     ("umap by cluster", {"kind": "scatter", "draw": _plot_umap_clusters}),
     ("umap barcoded cells", {"kind": "scatter", "draw": _plot_umap_barcoded}),
     ("gene expression map", {"kind": "mosaic", "draw": _plot_gene_expression_mosaic}),

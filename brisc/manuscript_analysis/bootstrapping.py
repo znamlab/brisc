@@ -353,8 +353,13 @@ def plot_confidence_intervals(
 
     Returns
     -------
-    (fig, axes) : (matplotlib.figure.Figure, list of matplotlib.axes.Axes)
-        The figure and list of axes (one per column in mean_input_frac_df).
+    plotted_element : dict
+        One entry per column of `mean_input_frac_df` (one subplot), each holding the
+        individual values drawn for every presynaptic area (as a violin or as a jittered
+        scatter, given by ``drawn_as``), the group mean drawn as a black line, the
+        presynaptic areas in the plotted order and the positions of the dotted reference
+        lines. `lower_df` / `upper_df` are *not* included: no confidence interval is
+        drawn by this function.
     """
     rng = np.random.default_rng(jitter_seed)
     violin_width = 0.7
@@ -369,6 +374,9 @@ def plot_confidence_intervals(
     # Create a divider on the initial Axes
     divider = make_axes_locatable(ax)
     axes = [ax]
+    plotted_element = {}
+    reference_lines = [0.5, 1.0]
+    vertical = orientation == "vertical"
     direction = "bottom" if orientation == "vertical" else "right"
     for _ in range(num_subplots - 1):
         ax_new = divider.append_axes(direction, size="100%", pad=0.025)
@@ -390,11 +398,32 @@ def plot_confidence_intervals(
             violin_mask = counts > 7
         if show_violin is not None:
             violin_mask = np.full(len(m), show_violin, dtype=bool) & (group is not None)
-        for line in [0.5, 1.0]:
+        for line in reference_lines:
             if orientation == "vertical":
                 ax_curr.axhline(line, color="black", linestyle=":", linewidth=0.5)
             else:
                 ax_curr.axvline(line, color="black", linestyle=":", linewidth=0.5)
+        plotted_element[area] = dict(
+            presynaptic_order=list(presyn_area_order),
+            means=dict(zip(presyn_area_order, m)),
+            values={
+                presyn_area: (
+                    np.asarray([])
+                    if group is None
+                    else group[presyn_area].dropna().values
+                )
+                for presyn_area in presyn_area_order
+            },
+            drawn_as={
+                presyn_area: "violin" if show else "points"
+                for presyn_area, show in zip(presyn_area_order, violin_mask)
+            },
+            reference_lines=list(reference_lines),
+            point_color="darkorchid",
+            mean_color="black",
+            xlabel="Presynaptic layer" if vertical else "Input fraction",
+            ylabel="Input fraction" if vertical else "Presynaptic layer",
+        )
         if orientation == "vertical":
             if violin_mask.any():
                 parts = ax_curr.violinplot(
@@ -536,3 +565,4 @@ def plot_confidence_intervals(
         axes[0].set_ylabel("Presynaptic layer", fontsize=label_fontsize)
         axes[2].set_title("Starter layer", fontsize=label_fontsize, loc="left", pad=15)
         axes[2].set_xlabel("Input fraction", fontsize=label_fontsize, loc="left")
+    return plotted_element

@@ -7,18 +7,12 @@ confocal view.
 
 from pathlib import Path
 
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
-import PIL
-import cv2
 import brainglobe_atlasapi as bga
-
+import cv2
 import flexiznam as flz
-from flexiznam.schema import Dataset
-from cricksaw_analysis import atlas_utils
-from brisc.starter_cell_density import coronal_view_utils as cvu
-import cricksaw_analysis.io
+import matplotlib.pyplot as plt
+import numpy as np
+import PIL
 from iss_preprocess import vis
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 

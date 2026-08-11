@@ -181,6 +181,10 @@ def plot_cells_spots(
         max_x (int): Maximum x coordinate.
         colors (list): List with the colors for the channels.
         vmaxs (list): List with the vmax values for the channels.
+
+    Returns:
+        None: This is an image-only panel — it draws a two-channel micrograph and no
+            data series, so it has no `plotted_element` and no Source Data worksheet.
     """
     # Filter cells for ROI 5
     no_spot = good_cells[good_cells["spot_count"] <= 2]

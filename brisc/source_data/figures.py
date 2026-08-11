@@ -219,6 +219,46 @@ FIG1_DELIVERY_LABELS = {"local": "Intracerebral", "tail": "Intravenous"}
 #: Number of cells per mm^3 in V1, the factor between the two x-axes of panel j.
 FIG1J_V1_CELL_DENSITY = 150e3
 
+#: The libraries made in this study. Panels h and i compare them against libraries
+#: published by other laboratories, whose barcode counts are those groups' data to
+#: distribute; only our own curves are written to the workbook.
+FIG1_OWN_LIBRARIES = (
+    "Plasmid library",
+    "Virus library",
+    "2 wells",
+    "12 wells",
+    "RV2",
+    "RV35",
+)
+
+#: Sheet note for a panel that also draws libraries published by other laboratories.
+FIG1_PUBLISHED_LIBRARY_NOTE = (
+    "Note: the panel also compares libraries published by other laboratories. Those "
+    "curves are not tabulated here, as the barcode counts behind them are not ours to "
+    "distribute; they are available from the original publications ({libraries})."
+)
+
+
+def _own_libraries_only(drawn, sheet):
+    """Drop the curves of libraries published by other laboratories.
+
+    Args:
+        drawn (dict): Plotted curves, keyed by the library label of the figure.
+        sheet (str): Sheet name, used in the message naming what was left out.
+
+    Returns:
+        tuple: ``(kept, dropped)``, the curves made in this study and the labels of the
+        ones left out, in the plotted order.
+    """
+    kept = {name: curve for name, curve in drawn.items() if name in FIG1_OWN_LIBRARIES}
+    dropped = [name for name in drawn if name not in FIG1_OWN_LIBRARIES]
+    if dropped:
+        print(
+            f"[Source Data] Fig 1: {sheet}: leaving out libraries published elsewhere: "
+            f"{dropped}"
+        )
+    return kept, dropped
+
 
 def build_fig1_source_data(fig1_plotted_data=None):
     """Build the panel dictionary for Figure 1 from what the figure actually drew.
@@ -228,7 +268,8 @@ def build_fig1_source_data(fig1_plotted_data=None):
     matplotlib rather than a second, re-derived copy of them. Nothing that is not drawn
     enters the workbook: the printed 95%/99% unique-labelling estimates, the pairwise
     distances behind the panel p kernel density estimate and the micrograph annotations
-    are all dropped.
+    are all dropped. The libraries published by other laboratories, which panels h and i
+    compare ours against, are left out too — see :func:`_own_libraries_only`.
 
     Args:
         fig1_plotted_data (dict): The notebook's ``fig1_plotted_data``. Curve panels
@@ -282,9 +323,24 @@ def build_fig1_source_data(fig1_plotted_data=None):
         ("starter_positions", "Fig 1o Starter positions", _starter_positions_sheet),
         ("pairwise_distances", "Fig 1p Pairwise distances", _pairwise_distances_sheet),
     )
-    panels = {
-        sheet: build(plotted[key]) for key, sheet, build in builders if plotted.get(key)
-    }
+    # The panels that draw one curve per viral or plasmid library.
+    library_keys = {key for key, _, build in builders if build in _LIBRARY_SHEETS}
+    panels = {}
+    for key, sheet, build in builders:
+        drawn = plotted.get(key)
+        if not drawn:
+            continue
+        dropped = []
+        if key in library_keys:
+            drawn, dropped = _own_libraries_only(drawn, sheet)
+            if not drawn:
+                continue
+        table = build(drawn)
+        if dropped:
+            published = FIG1_PUBLISHED_LIBRARY_NOTE.format(libraries="; ".join(dropped))
+            already = table.attrs.get(NOTE_ATTR)
+            _note(table, f"{already} {published}" if already else published)
+        panels[sheet] = table
 
     known = {key for key, _, _ in builders} | set(FIG1_IMAGE_KEYS)
     unknown = [key for key in plotted if key not in known]
@@ -296,6 +352,9 @@ def build_fig1_source_data(fig1_plotted_data=None):
 
 def _abundance_sheet(drawn):
     """Panels d/f/h — the rank-abundance curve of every library, as drawn.
+
+    Only the libraries made in this study reach the sheet; see
+    :func:`_own_libraries_only`.
 
     Libraries above 500k barcodes are subsampled to stay inside Excel's 1,048,576-row
     limit, keeping the first 1,000 ranks in full and thinning the rest on a log scale to
@@ -324,7 +383,11 @@ def _abundance_sheet(drawn):
 
 
 def _unique_fraction_sheet(drawn):
-    """Panels e/g/i — proportion of uniquely labelled cells, on the plotted grid."""
+    """Panels e/g/i — proportion of uniquely labelled cells, on the plotted grid.
+
+    Only the libraries made in this study reach the sheet; see
+    :func:`_own_libraries_only`.
+    """
     return pd.concat(
         [
             pd.DataFrame(
@@ -338,6 +401,11 @@ def _unique_fraction_sheet(drawn):
         ],
         ignore_index=True,
     )
+
+
+#: The sheet builders that take one curve per library, and so are filtered down to the
+#: libraries made in this study.
+_LIBRARY_SHEETS = (_abundance_sheet, _unique_fraction_sheet)
 
 
 def _starter_spread_sheet(drawn):
@@ -649,174 +717,254 @@ FIG3_PANELS = [
 ]
 
 
-def build_fig3_source_data(
-    cells_df=None,
-    barcodes_df=None,
-    in_situ_barcode_matches=None,
-    random_barcode_matches=None,
-    rv35_library=None,
-    good_cells=None,
-    valid_mcherry=None,
-):
-    """Build the panel dictionary for Figure 3.
+#: Keys of ``fig3_plotted_data`` that belong to an image panel: the two-channel
+#: micrograph of the barcode spots inside cells (panel e inset), which is pixel data and
+#: not Source Data, so `sensitivity.plot_cells_spots` returns nothing. Listed so that a
+#: key added later is noticed rather than silently dropped.
+FIG3_IMAGE_KEYS = ("spots_in_cells_image",)
+
+#: How the two cell populations of panel a are labelled in the figure, in drawing order.
+FIG3A_POPULATIONS = ("Presynaptic cells", "Starter cells")
+
+
+def build_fig3_source_data(fig3_plotted_data=None):
+    """Build the panel dictionary for Figure 3 from what the figure actually drew.
+
+    The notebook collects the return value of every Figure 3 plotting call in
+    ``fig3_plotted_data``, so each sheet holds the arrays that were handed to matplotlib
+    rather than a second, re-derived copy of them. Nothing that is not drawn enters the
+    workbook: the cell and barcode identifiers, the printed match-to-library and
+    regression statistics, the counts of the histograms that do not annotate their bars
+    and the micrograph of panel e are all dropped.
 
     Args:
-        cells_df (pd.DataFrame): Barcoded cells with ``n_unique_barcodes`` and
-            ``is_starter`` (panel a).
-        barcodes_df (pd.DataFrame): Per-barcode ``n_starters``/``n_presynaptic``
-            (panels c, d).
-        in_situ_barcode_matches (pd.DataFrame): In-situ barcode matches (panel b).
-        random_barcode_matches (pd.DataFrame): Random control matches (panel b).
-        rv35_library (pd.DataFrame): Viral library read counts (panel b).
-        good_cells (pd.DataFrame): Rabies-positive cells with ``spot_count`` (panel e).
-        valid_mcherry (pd.DataFrame): Starter mCherry measurements (panel f).
+        fig3_plotted_data (dict): The notebook's ``fig3_plotted_data``. The histogram
+            panels (``"barcodes_per_cell_presynaptic"``,
+            ``"barcodes_per_cell_starter"``, ``"starters_per_barcode"`` and
+            ``"spots_per_cell"``) come from `barcodes_in_cells.plot_hist`,
+            ``"match_to_library"`` from `match_to_library.plot_matches_to_library`,
+            ``"presynaptic_per_barcode"`` from
+            `barcodes_in_cells.plot_presyn_per_barcode` and
+            ``"mcherry_vs_presynaptic"`` from
+            `mcherry_intensity.plot_mcherry_intensity_presyn`.
+
+    Returns:
+        dict: Sheet name to DataFrame. Sheets needing a worksheet note carry it in
+        ``DataFrame.attrs``.
     """
-    panels = {}
+    plotted = fig3_plotted_data or {}
+    # Plotted keys, sheet, and what turns the drawn arrays into it; in panel order.
+    builders = (
+        (
+            ("barcodes_per_cell_presynaptic", "barcodes_per_cell_starter"),
+            "Fig 3a Barcodes per cell",
+            _barcodes_per_cell_sheet,
+        ),
+        (("match_to_library",), "Fig 3b Match to library", _match_to_library_sheet),
+        (
+            ("starters_per_barcode",),
+            "Fig 3c Starters per barcode",
+            _starters_per_barcode_sheet,
+        ),
+        (
+            ("presynaptic_per_barcode",),
+            "Fig 3d Presynaptic per barcode",
+            _presyn_per_barcode_sheet,
+        ),
+        (("spots_per_cell",), "Fig 3e Spots per cell", _spots_per_cell_sheet),
+        (
+            ("mcherry_vs_presynaptic",),
+            "Fig 3f mCherry vs presynaptic",
+            _mcherry_sheet,
+        ),
+    )
+    panels = {
+        sheet: build(*[plotted[key] for key in keys])
+        for keys, sheet, build in builders
+        if all(plotted.get(key) for key in keys)
+    }
 
-    if cells_df is not None and "n_unique_barcodes" in cells_df.columns:
-        presynaptic = cells_df[~cells_df["is_starter"].astype(bool)]
-        starters = cells_df[cells_df["is_starter"].astype(bool)]
-        panels["Fig 3a Barcodes per cell"] = pd.concat(
-            [
-                _hist_table(
-                    presynaptic["n_unique_barcodes"].values,
-                    max_val=6,
-                    group="Presynaptic cells",
-                    group_col="Cell_Population",
-                ),
-                _hist_table(
-                    starters["n_unique_barcodes"].values,
-                    max_val=6,
-                    group="Starter cells",
-                    group_col="Cell_Population",
-                ),
-            ],
-            ignore_index=True,
-        ).rename(columns={"Value": "Barcodes_Per_Cell"})
-
-    if in_situ_barcode_matches is not None and random_barcode_matches is not None:
-        panels["Fig 3b Match to library"] = _match_to_library_table(
-            in_situ_barcode_matches, random_barcode_matches, rv35_library
-        )
-
-    if barcodes_df is not None:
-        if "n_starters" in barcodes_df.columns:
-            panels["Fig 3c Starters per barcode"] = _hist_table(
-                barcodes_df["n_starters"].values, show_zero=True
-            ).rename(
-                columns={
-                    "Value": "Starters_Per_Barcode",
-                    "Cell_Count": "Barcode_Count",
-                    "Proportion": "Proportion_Of_Barcodes",
-                }
-            )
-        if "n_presynaptic" in barcodes_df.columns:
-            panels["Fig 3d Presynaptic per barcode"] = _presyn_per_barcode_table(
-                barcodes_df
-            )
-
-    if good_cells is not None and "spot_count" in good_cells.columns:
-        panels["Fig 3e Spots per cell"] = _hist_table(
-            good_cells["spot_count"].values, max_val=40, show_zero=True
-        ).rename(
-            columns={
-                "Value": "Barcode_Spots_Per_Cell",
-                "Proportion": "Proportion_Of_Cells",
-            }
-        )
-
-    if valid_mcherry is not None and "intensity_mean-0" in valid_mcherry.columns:
-        intensity = valid_mcherry["intensity_mean-0"].values
-        n_presynaptic = valid_mcherry["n_presynaptic"].values
-        panels["Fig 3f mCherry vs presynaptic"] = pd.DataFrame(
-            {
-                "Starter_Cell_ID": valid_mcherry.index.astype(str),
-                "mCherry_Fluorescence_AU": intensity,
-                "Number_Of_Presynaptic_Cells": n_presynaptic,
-                "Log_mCherry_Fluorescence": np.log(intensity.astype(float)),
-                "Log_Number_Of_Presynaptic": np.log(n_presynaptic.astype(float)),
-            }
-        )
+    known = {key for keys, _, _ in builders for key in keys} | set(FIG3_IMAGE_KEYS)
+    unknown = [key for key in plotted if key not in known]
+    if unknown:
+        print(f"[Source Data] !! Fig 3: no sheet for plotted panels {unknown}")
 
     return panels
 
 
-def _match_to_library_table(in_situ, random, rv35_library):
-    """Panel b — the three normalised histograms drawn by `plot_matches_to_library`."""
-    bin_edges = np.logspace(0, 6, num=20)
-    bin_edges = np.insert(bin_edges, 0, 0)
+def _stairs_sheet(drawn, value_col, proportion_col, count_col):
+    """One `barcodes_in_cells.plot_hist` histogram, as its bars were drawn.
 
-    in_situ_counts = (
-        in_situ["ham_lib_bc_counts"]
-        .where(in_situ["ham_min_edit_distance"] <= 0, 0)
-        .values
-    )
-    random_counts = (
-        random["lib_bc_counts"].where(random["min_edit_distance"] <= 0, 0).values
-    )
-
-    in_situ_hist, _ = np.histogram(in_situ_counts, bins=bin_edges)
-    random_hist, _ = np.histogram(random_counts, bins=bin_edges)
-    in_situ_hist = in_situ_hist / np.sum(in_situ_hist)
-    random_hist = random_hist / np.sum(random_hist)
-
+    The bar of an integer value covers ``value +/- 0.5``, so the bin edges add nothing
+    over the value itself and are left out. The per-bar counts are written only when the
+    panel annotates its bars with them.
+    """
+    histogram = drawn["histogram"]
     table = pd.DataFrame(
         {
-            "Bin_Min_Reads": bin_edges[:-1],
-            "Bin_Max_Reads": bin_edges[1:],
-            "In_Situ_Barcode_Proportion": in_situ_hist,
-            "Random_Barcode_Proportion": random_hist,
+            value_col: np.asarray(histogram["x"]).astype(int),
+            proportion_col: np.asarray(histogram["y"], dtype=float),
         }
     )
-
-    if rv35_library is not None:
-        sequences = np.flip(np.asarray(rv35_library["counts"]))
-        edge_positions = sequences.searchsorted(bin_edges)
-        library = np.zeros(len(bin_edges) - 1)
-        for i in range(len(bin_edges) - 1):
-            start, stop = edge_positions[i : i + 2]
-            library[i] = sequences[start:stop].sum()
-        table["Library_Read_Proportion"] = library / np.sum(library)
-        table["Library_Total_Reads"] = np.sum(rv35_library["counts"])
+    if "counts" in histogram:
+        table[count_col] = np.asarray(histogram["counts"]).astype(int)
     return table
 
 
-def _presyn_per_barcode_table(barcodes_df):
-    """Panel d — log-spaced histograms of presynaptic cells per barcode."""
-    orphan = barcodes_df[barcodes_df["n_starters"] == 0]["n_presynaptic"].values
-    non_orphan = barcodes_df[barcodes_df["n_starters"] > 0]["n_presynaptic"].values
-    max_n = max(orphan.max(), non_orphan.max())
-    bins = 10 ** (np.arange(0, np.log10(max_n), 0.16))
-
+def _barcodes_per_cell_sheet(presynaptic, starter):
+    """Panel a — barcodes per cell, presynaptic cells above starter cells."""
     frames = []
-    for label, values in (
-        ("Orphan barcodes", orphan),
-        ("Non-orphan barcodes", non_orphan),
-    ):
-        hist, edges = np.histogram(values, bins=bins)
+    for population, drawn in zip(FIG3A_POPULATIONS, (presynaptic, starter)):
+        table = _stairs_sheet(
+            drawn, "Barcodes_Per_Cell", "Proportion_Of_Barcodes", "Cell_Count"
+        )
+        table.insert(0, "Cell_Population", population)
+        frames.append(table)
+    return _note(
+        pd.concat(frames, ignore_index=True),
+        "Note: Cell_Count is the number of cells in each bar, written above it in the "
+        "panel; Proportion_Of_Barcodes is that count over all cells of the population, "
+        "which is the quantity drawn (the axis label of the published panel).",
+    )
+
+
+def _match_to_library_sheet(drawn):
+    """Panel b — the three normalised histograms of library reads per barcode.
+
+    The first row is the bin of barcodes absent from the library, which the panel draws
+    as a separate bar left of the logarithmic axis; the viral library curve has no such
+    bar, hence the missing value.
+    """
+    series = {
+        "In_Situ_Barcode_Proportion": drawn["in_situ"],
+        "Random_Barcode_Proportion": drawn["random"],
+        "Library_Read_Proportion": drawn["viral_library"],
+    }
+    edges = np.asarray(drawn["viral_library"]["bin_edges"], dtype=float)
+    table = pd.DataFrame(
+        {
+            "Bin_Min_Reads": np.insert(edges[:-1], 0, 0.0),
+            "Bin_Max_Reads": np.insert(edges[1:], 0, edges[0]),
+        }
+    )
+    for column, curve in series.items():
+        values = np.asarray(curve["y"], dtype=float)
+        zero_bin = curve.get("zero_bin_y", np.nan)
+        table[column] = np.insert(values, 0, zero_bin)
+    table["Library_Total_Reads"] = drawn["viral_library"]["total_reads_in_library"]
+    return _note(
+        table,
+        "Note: bins are numbers of reads in the viral library. The first row is the "
+        "bin of barcodes with no read in the library, drawn as a separate bar left of "
+        "the logarithmic axis; the viral library curve has no such bar. "
+        "Library_Total_Reads is constant: it is the total number of reads in the "
+        "library, the factor turning the read axis into the proportion of unique reads "
+        "the panel is labelled with.",
+    )
+
+
+def _starters_per_barcode_sheet(drawn):
+    """Panel c — starter cells per barcode, with the counts annotating the bars."""
+    return _note(
+        _stairs_sheet(
+            drawn, "Starters_Per_Barcode", "Proportion_Of_Barcodes", "Barcode_Count"
+        ),
+        "Note: Barcode_Count is the number of barcodes in each bar, written above it "
+        "in the panel; Proportion_Of_Barcodes is that count over all barcodes.",
+    )
+
+
+def _presyn_per_barcode_sheet(drawn):
+    """Panel d — presynaptic cells per barcode, orphan and non-orphan barcodes.
+
+    Each barcode type is normalised by its own number of barcodes, as drawn.
+    """
+    frames = []
+    for barcode_type, curve in drawn.items():
+        edges = np.asarray(curve["bin_edges"], dtype=float)
         frames.append(
             pd.DataFrame(
                 {
-                    "Barcode_Type": label,
+                    "Barcode_Type": barcode_type,
                     "Bin_Min": np.insert(edges[:-1], 0, 0.0),
                     "Bin_Max": np.insert(edges[1:], 0, 0.0),
                     "Proportion_Of_Barcodes": np.insert(
-                        hist / len(values), 0, (values == 0).sum() / len(values)
+                        np.asarray(curve["y"], dtype=float), 0, curve["zero_bin_y"]
                     ),
                 }
             )
         )
-    return pd.concat(frames, ignore_index=True)
+    return _note(
+        pd.concat(frames, ignore_index=True),
+        "Note: the first row of each barcode type is the proportion of barcodes with "
+        "zero presynaptic cells, drawn as a separate bar left of the logarithmic axis.",
+    )
+
+
+def _spots_per_cell_sheet(drawn):
+    """Panel e — barcode spots per cell, with the dotted detection threshold."""
+    table = _stairs_sheet(
+        drawn, "Barcode_Spots_Per_Cell", "Proportion_Of_Cells", "Cell_Count"
+    )
+    threshold = drawn["histogram"].get("min_spots_threshold")
+    if threshold is None:
+        return table
+    table["Min_Spots_Threshold"] = threshold
+    return _note(
+        table,
+        "Note: Min_Spots_Threshold is constant; it is the dotted vertical line of the "
+        "panel, below which cells are not called barcoded.",
+    )
+
+
+def _mcherry_sheet(drawn):
+    """Panel f — presynaptic cells against starter mCherry fluorescence, and its fit.
+
+    Both are on the natural-logarithm axes the panel draws them on. The regression
+    statistics the notebook prints are not drawn and are left out.
+    """
+    scatter = drawn["starter_cells"]
+    frames = [
+        pd.DataFrame(
+            {
+                "Series_Type": "Individual starter cell",
+                "Log_mCherry_Fluorescence": np.asarray(scatter["x"], dtype=float),
+                "Log_Presynaptic_Cells": np.asarray(scatter["y"], dtype=float),
+            }
+        )
+    ]
+    fit = drawn.get("robust_fit")
+    if fit is not None:
+        table = pd.DataFrame(
+            {
+                "Series_Type": "Robust fit",
+                "Log_mCherry_Fluorescence": np.asarray(fit["x"], dtype=float),
+                "Log_Presynaptic_Cells": np.asarray(fit["y"], dtype=float),
+            }
+        )
+        for column, key in (
+            ("Fit_CI_Lower", "ci_lower"),
+            ("Fit_CI_Upper", "ci_upper"),
+        ):
+            if key in fit:
+                table[column] = np.asarray(fit[key], dtype=float)
+        frames.append(table)
+    return _note(
+        pd.concat(frames, ignore_index=True),
+        "Note: both columns are natural logarithms, as plotted; the panel labels the "
+        "axes with the fluorescence and cell numbers themselves. The presynaptic count "
+        "of a starter includes the starter itself, hence the '+ 1' of the axis label. "
+        "Rows of type 'Robust fit' are the fitted line seaborn drew and the bounds of "
+        "its bootstrap confidence band; they are empty for the individual cells.",
+    )
 
 
 def export_fig3_source_data(output_path, **kwargs):
     panels = build_fig3_source_data(**kwargs)
     notes = {
-        "Fig 3d Presynaptic per barcode": (
-            "The first row of each barcode type is the proportion of barcodes with "
-            "zero "
-            "presynaptic cells, drawn as a separate bar left of the log axis."
-        )
+        name: table.attrs[NOTE_ATTR]
+        for name, table in panels.items()
+        if NOTE_ATTR in getattr(table, "attrs", {})
     }
     return save_excel_sheets(
         panels, output_path, notes_dict=notes, expected=FIG3_PANELS
@@ -839,178 +987,349 @@ FIG4_PANELS = [
     "Fig 4i ML KDE vs shuffle",
 ]
 
-FIG4_EXAMPLE_BARCODES = ("GCTTCATGCAATTG", "GCTCTTCCTTAATA", "ATAAATAAGGCGCT")
+
+#: Keys of ``fig4_plotted_data`` that belong to an image panel. Figure 4 has none: the
+#: atlas contours of panels a and f, and the flatmap outline of panels b and f, are
+#: images drawn inside a data-bearing panel rather than panels of their own, so no key
+#: reports them. The tuple is kept so that a key added later is noticed rather than
+#: silently dropped.
+FIG4_IMAGE_KEYS = ()
+
+#: How the two cell populations are named in the sheets of panels a, b, c and f.
+FIG4_STARTER_LABEL = "Starter cell"
+FIG4_PRESYNAPTIC_LABEL = "Presynaptic cell"
+
+#: Name given to the grey background of every barcoded cell in panel f.
+FIG4_ALL_CELLS_LABEL = "All barcoded cells"
+
+#: The stacked series of panel e, in the order they are stacked.
+FIG4E_SERIES = (
+    "Barcode 1",
+    "Barcode 2",
+    "Barcode 3",
+    "Barcode 4",
+    "Any 2",
+    "Any 3",
+    "Any 4",
+)
 
 
-def build_fig4_source_data(
-    cells_df=None,
-    presynaptic=None,
-    multibarcoded_starters=None,
-    relative_presyn_coords_flatmap=None,
-    all_shuffled_distances_flatmap=None,
-    x_grid=None,
-    ml_kde_shuffled=None,
-    bw_method=0.05,
-    example_barcodes=FIG4_EXAMPLE_BARCODES,
-):
-    """Build the panel dictionary for Figure 4.
+def build_fig4_source_data(fig4_plotted_data=None):
+    """Build the panel dictionary for Figure 4 from what the figure actually drew.
+
+    The notebook collects the return value of every Figure 4 plotting call in
+    ``fig4_plotted_data``, so each sheet holds the arrays that were handed to matplotlib
+    rather than a second, re-derived copy of them. Nothing that is not drawn enters the
+    workbook: the cell identifiers, the barcode sets behind a starter's connections, the
+    unplotted coordinate of the relative positions (the antero-posterior one, panels g
+    and h draw only medio-lateral against depth) and the statistics the notebook prints
+    are all dropped.
 
     Args:
-        cells_df (pd.DataFrame): All barcoded cells with atlas and flatmap coordinates
-            (panels a, b, c, f).
-        presynaptic (pd.DataFrame): Presynaptic cells with ``n_starters`` (panel d).
-        multibarcoded_starters (pd.DataFrame): Output of
-            `barcodes_in_cells.analyze_multibarcoded_starters` (panel e).
-        relative_presyn_coords_flatmap (np.ndarray): (N, 3) observed relative
-            coordinates in flatmap pixels (panels g, i).
-        all_shuffled_distances_flatmap (list): Per-shuffle (N, 3) relative coordinates
-            (panels h, i).
-        x_grid (np.ndarray): KDE evaluation grid of panel i.
-        ml_kde_shuffled (np.ndarray): (n_shuffles, len(x_grid)) shuffled KDEs (panel i).
-        bw_method (float): KDE bandwidth used by the panel.
-        example_barcodes (tuple): The barcodes drawn in panel f.
+        fig4_plotted_data (dict): The notebook's ``fig4_plotted_data``, with keys
+            ``"all_cells_coronal"`` and ``"all_cells_flatmap"`` (the two panels of
+            `spatial_plots_rabies.plot_all_rv_cells`), ``"cortical_depth"`` (from
+            `spatial_plots_rabies.plot_layer_distribution`),
+            ``"starters_per_presynaptic"`` (from `barcodes_in_cells.plot_hist`),
+            ``"multibarcoded_starters"`` (from
+            `barcodes_in_cells.plot_multibarcoded_starters`), ``"example_barcodes"``
+            (from `spatial_plots_rabies.plot_example_barcodes`),
+            ``"relative_coors_observed"`` and ``"relative_coors_shuffled"`` (two
+            calls to `distance_between_cells.plot_relative_coors`) and ``"ml_kde"``, the
+            observed
+            kernel density estimate and shuffle band the notebook draws itself.
+
+    Returns:
+        dict: Sheet name to DataFrame. Sheets needing a worksheet note carry it in
+        ``DataFrame.attrs``.
     """
-    panels = {}
+    plotted = fig4_plotted_data or {}
+    # Plotted key, sheet, and what turns one into the other; in panel order.
+    builders = (
+        (
+            "all_cells_coronal",
+            "Fig 4a Coronal cell positions",
+            _coronal_positions_sheet,
+        ),
+        (
+            "all_cells_flatmap",
+            "Fig 4b Flatmap cell positions",
+            _flatmap_positions_sheet,
+        ),
+        ("cortical_depth", "Fig 4c Cortical depth VISp", _cortical_depth_sheet),
+        (
+            "starters_per_presynaptic",
+            "Fig 4d Starters per presynaptic",
+            _starters_per_presynaptic_sheet,
+        ),
+        (
+            "multibarcoded_starters",
+            "Fig 4e Multibarcoded starters",
+            _multibarcoded_sheet,
+        ),
+        ("example_barcodes", "Fig 4f Example barcodes", _example_barcodes_sheet),
+        (
+            "relative_coors_observed",
+            "Fig 4g Relative coords observed",
+            _relative_coors_sheet,
+        ),
+        (
+            "relative_coors_shuffled",
+            "Fig 4h Relative coords shuffled",
+            _relative_coors_sheet,
+        ),
+        ("ml_kde", "Fig 4i ML KDE vs shuffle", _ml_kde_sheet),
+    )
+    panels = {
+        sheet: build(plotted[key]) for key, sheet, build in builders if plotted.get(key)
+    }
 
-    if cells_df is not None:
-        panels["Fig 4a Coronal cell positions"] = pd.DataFrame(
-            {
-                "Cell_ID": cells_df.index.astype(str),
-                "ARA_Y": cells_df["ara_y"].values,
-                "ARA_Z": cells_df["ara_z"].values,
-                "Cortical_Area": cells_df["cortical_area"].values,
-                "Is_Starter": cells_df["is_starter"].values,
-            }
-        )
-        panels["Fig 4b Flatmap cell positions"] = pd.DataFrame(
-            {
-                "Cell_ID": cells_df.index.astype(str),
-                "Flatmap_X": cells_df["flatmap_x"].values,
-                "Flatmap_Y": cells_df["flatmap_y"].values,
-                "Cortical_Area": cells_df["cortical_area"].values,
-                "Is_Starter": cells_df["is_starter"].values,
-            }
-        )
-        visp = cells_df[cells_df["cortical_area"] == "VISp"]
-        panels["Fig 4c Cortical depth VISp"] = pd.DataFrame(
-            {
-                "Cell_ID": visp.index.astype(str),
-                "Cortical_Depth_um": visp["normalised_layers"].values * 10,
-                "Is_Starter": visp["is_starter"].values,
-            }
-        )
-        panels["Fig 4f Example barcodes"] = _example_barcodes_table(
-            cells_df, example_barcodes
-        )
-
-    if presynaptic is not None and "n_starters" in presynaptic.columns:
-        panels["Fig 4d Starters per presynaptic"] = _hist_table(
-            presynaptic["n_starters"].values, max_val=4
-        ).rename(
-            columns={"Value": "Connected_Starters", "Proportion": "Proportion_Of_Cells"}
-        )
-
-    if multibarcoded_starters is not None:
-        panels["Fig 4e Multibarcoded starters"] = _multibarcoded_table(
-            multibarcoded_starters
-        )
-
-    if relative_presyn_coords_flatmap is not None:
-        panels["Fig 4g Relative coords observed"] = _relative_coords_table(
-            relative_presyn_coords_flatmap
-        )
-    if all_shuffled_distances_flatmap is not None:
-        panels["Fig 4h Relative coords shuffled"] = _relative_coords_table(
-            all_shuffled_distances_flatmap[1]
-        )
-
-    if (
-        relative_presyn_coords_flatmap is not None
-        and x_grid is not None
-        and ml_kde_shuffled is not None
-    ):
-        from scipy.stats import gaussian_kde
-
-        observed = relative_presyn_coords_flatmap[:, 0] / 100
-        observed = observed[~np.isnan(observed)]
-        low, high = np.percentile(ml_kde_shuffled, [2.5, 97.5], axis=0)
-        panels["Fig 4i ML KDE vs shuffle"] = pd.DataFrame(
-            {
-                "Relative_ML_Location_mm": x_grid,
-                "Observed_Density": gaussian_kde(observed, bw_method=bw_method)(x_grid),
-                "Shuffle_Density_Lower": low,
-                "Shuffle_Density_Upper": high,
-            }
-        )
+    known = {key for key, _, _ in builders} | set(FIG4_IMAGE_KEYS)
+    unknown = [key for key in plotted if key not in known]
+    if unknown:
+        print(f"[Source Data] !! Fig 4: no sheet for plotted panels {unknown}")
 
     return panels
 
 
-def _relative_coords_table(coords):
-    """Panels g/h — relative M-L and depth of each presynaptic cell, in mm."""
-    coords = np.asarray(coords) / 100
-    return pd.DataFrame(
+def _cell_positions_sheet(drawn, xcol, ycol, note):
+    """Panels a/b — every barcoded cell of one space, coloured by cortical area.
+
+    The starter cells are the same rows redrawn in black on top of the area colours, so
+    they are a flag rather than a second copy of the coordinates.
+    """
+    table = pd.DataFrame(
         {
-            "Relative_ML_Location_mm": coords[:, 0],
-            "Relative_Cortical_Depth_mm": coords[:, 2],
+            xcol: np.asarray(drawn["x"], dtype=float),
+            ycol: np.asarray(drawn["y"], dtype=float),
+            "Cortical_Area": np.asarray(drawn["cortical_area"]),
+            "Is_Starter": np.asarray(drawn["is_starter"], dtype=bool),
         }
+    )
+    table, subsampled = _subsample_cells(table, keep=table["Is_Starter"].values)
+    if subsampled:
+        note = f"{note} {CELL_SUBSAMPLE_NOTE}"
+    return _note(table, note)
+
+
+def _coronal_positions_sheet(drawn):
+    """Panel a — the coronal section, in the 10 um voxels of the atlas."""
+    return _cell_positions_sheet(
+        drawn,
+        "ARA_Z_px",
+        "ARA_Y_px",
+        "Note: coordinates are Allen CCF positions in 10 um voxels, as plotted "
+        "(ARA_Z_px is medio-lateral, drawn on a reversed axis; ARA_Y_px is "
+        "dorso-ventral, drawn downwards). Every cell is drawn in the colour of its "
+        "cortical area and the cells flagged Is_Starter are redrawn in black on top. "
+        "The atlas outlines are an image and are not tabulated.",
     )
 
 
-def _example_barcodes_table(cells_df, barcodes):
-    """Panel f — the cells carrying each example barcode, in both spaces."""
+def _flatmap_positions_sheet(drawn):
+    """Panel b — the same cells on the cortical flatmap."""
+    return _cell_positions_sheet(
+        drawn,
+        "Flatmap_X",
+        "Flatmap_Y",
+        "Note: coordinates are positions on the Allen cortical flatmap in 10 um "
+        "voxels, as plotted, with both axes reversed in the panel. Every cell is drawn "
+        "in the colour of its cortical area and the cells flagged Is_Starter are "
+        "redrawn in black on top. The flatmap outlines are an image and are not "
+        "tabulated.",
+    )
+
+
+def _cortical_depth_sheet(drawn):
+    """Panel c — the cortical depth of every barcoded cell of VISp, by population.
+
+    The panel draws these depths as the two halves of a split violin. The dashed layer
+    boundaries it draws over them are Allen atlas averages rather than measurements of
+    this dataset, so they are left out, as are the atlas outlines of panels a, b and f.
+    """
     frames = []
-    for barcode in barcodes:
-        carries = cells_df["all_barcodes"].apply(lambda bcs: barcode in bcs)
-        subset = cells_df[carries]
+    for key, series in (
+        ("starter_cells", FIG4_STARTER_LABEL),
+        ("presynaptic_cells", FIG4_PRESYNAPTIC_LABEL),
+    ):
+        population = drawn[key]
         frames.append(
             pd.DataFrame(
                 {
-                    "Barcode": barcode,
-                    "Cell_ID": subset.index.astype(str),
-                    "Is_Starter": subset["is_starter"].values,
-                    "ARA_Y": subset["ara_y"].values,
-                    "ARA_Z": subset["ara_z"].values,
-                    "Flatmap_X": subset["flatmap_x"].values,
-                    "Flatmap_Y": subset["flatmap_y"].values,
+                    "Series": series,
+                    "Cortical_Depth_um": np.asarray(population["values"], dtype=float),
                 }
             )
         )
-    return pd.concat(frames, ignore_index=True)
+    table = pd.concat(frames, ignore_index=True)
+    table, subsampled = _subsample_cells(table)
+    note = (
+        "Note: one row per barcoded cell of VISp, holding the cortical depth the panel "
+        "draws it at. The panel shows the two populations as the two halves of a split "
+        "violin, a kernel density estimate of these depths (Gaussian kernel, bandwidth "
+        "adjusted by 0.5) whose width is normalised, so its horizontal axis is in "
+        "arbitrary units. The dashed horizontal lines of the panel are the average "
+        "cortical layer boundaries of the Allen atlas, reference geometry rather than "
+        "data of this experiment, and are deliberately not tabulated."
+    )
+    if subsampled:
+        note = f"{note} {CELL_SUBSAMPLE_NOTE}"
+    return _note(table, note)
 
 
-def _multibarcoded_table(multibarcoded_starters):
-    """Panel e — presynaptic cells attributable to each barcode of a starter."""
-    rows = []
-    for _, row in multibarcoded_starters.iterrows():
-        per_barcode = sorted(row["n_presyn_per_barcode"], reverse=True)
-        for rank, count in enumerate(per_barcode, start=1):
-            rows.append(
+def _starters_per_presynaptic_sheet(drawn):
+    """Panel d — how many starter cells each presynaptic cell is connected to."""
+    return _note(
+        _stairs_sheet(drawn, "Connected_Starters", "Proportion_Of_Cells", "Cell_Count"),
+        "Note: each bar covers its integer value +/- 0.5. Cell_Count is the number of "
+        "presynaptic cells in the bar, written above it in the panel; "
+        "Proportion_Of_Cells is that count over all presynaptic cells, including the "
+        "cells connected to no starter, which the panel does not draw.",
+    )
+
+
+def _multibarcoded_sheet(drawn):
+    """Panel e — the presynaptic cells of every multi-barcoded starter, by barcode.
+
+    One column per stacked series, in stacking order, so each row is one bar of the
+    panel. The bar order is the panel's own: starters sorted by their total number of
+    presynaptic cells.
+    """
+    series = [key for key in FIG4E_SERIES if key in drawn]
+    series += [key for key in drawn if key not in FIG4E_SERIES]
+    first = drawn[series[0]]
+    table = pd.DataFrame(
+        {"Starter_Rank": np.asarray(first["x"], dtype=int)},
+    )
+    for key in series:
+        table[key.replace(" ", "_")] = np.asarray(drawn[key]["y"], dtype=float)
+    return _note(
+        table,
+        "Note: one row per bar of the panel, ordered as the panel orders them. The "
+        "Barcode_N columns hold the number of presynaptic cells carrying only the Nth "
+        "most abundant barcode of that starter; the Any_N columns hold the number "
+        "carrying N of its barcodes. The bars are stacked in that column order.",
+    )
+
+
+def _example_barcodes_sheet(drawn):
+    """Panel f — the cells of each example barcode, in both spaces.
+
+    The coronal and the flatmap panel draw the same cells, so a cell is one row holding
+    both coordinate pairs. The grey background of every barcoded cell is drawn first and
+    is the first block of rows. The lines the panel draws from a starter to each of its
+    presynaptic cells join the coordinates of those rows and add nothing.
+    """
+    frames = []
+    for key, series in drawn.items():
+        is_all_cells = key == "all_cells"
+        starter = np.asarray(series.get("is_starter", []), dtype=bool)
+        if is_all_cells:
+            point_type = np.full(len(series["x"]), FIG4_ALL_CELLS_LABEL)
+        else:
+            point_type = np.where(starter, FIG4_STARTER_LABEL, FIG4_PRESYNAPTIC_LABEL)
+        frames.append(
+            pd.DataFrame(
                 {
-                    "Starter_Cell_ID": row["starter_cell_id"],
-                    "Barcode_Rank": rank,
-                    "Presynaptic_Cells_With_Barcode_Only": count,
-                    "Total_Presynaptic_Cells": row["n_presyn"],
+                    "Barcode": FIG4_ALL_CELLS_LABEL if is_all_cells else key,
+                    "Point_Type": point_type,
+                    "ARA_Z_px": np.asarray(series["x"], dtype=float),
+                    "ARA_Y_px": np.asarray(series["y"], dtype=float),
+                    "Flatmap_X": np.asarray(series["flatmap_x"], dtype=float),
+                    "Flatmap_Y": np.asarray(series["flatmap_y"], dtype=float),
                 }
             )
-        counts = np.asarray(row["barcode_counts"])
-        for n_shared, count in enumerate(counts):
-            if n_shared < 2:
-                continue
-            rows.append(
-                {
-                    "Starter_Cell_ID": row["starter_cell_id"],
-                    "Barcode_Rank": f"shared by {n_shared}",
-                    "Presynaptic_Cells_With_Barcode_Only": count,
-                    "Total_Presynaptic_Cells": row["n_presyn"],
-                }
-            )
-    return pd.DataFrame(rows)
+        )
+    table = pd.concat(frames, ignore_index=True)
+    table, subsampled = _subsample_cells(
+        table, keep=(table["Barcode"] != FIG4_ALL_CELLS_LABEL).values
+    )
+    note = (
+        "Note: coordinates are Allen CCF positions and cortical flatmap positions in "
+        "10 um voxels, as plotted; the same cell is drawn at both, once on the coronal "
+        "panel and once on the flatmap panel. The rows whose Barcode is "
+        f"'{FIG4_ALL_CELLS_LABEL}' are the grey background of all barcoded cells, "
+        "drawn without distinguishing starters. The lines of the panel join each "
+        "starter to the cells of the same barcode."
+    )
+    if subsampled:
+        note = f"{note} {CELL_SUBSAMPLE_NOTE}"
+    return _note(table, note)
+
+
+def _relative_coors_sheet(drawn):
+    """Panels g/h — position of every presynaptic cell relative to its starter.
+
+    Only the two coordinates the panel draws are written: the antero-posterior offset is
+    in the plotted array but on neither axis.
+    """
+    scatter = drawn["relative_coors"]
+    table = pd.DataFrame(
+        {
+            "Relative_ML_Location_mm": np.asarray(scatter["x"], dtype=float),
+            "Relative_Cortical_Depth_mm": np.asarray(scatter["y"], dtype=float),
+        }
+    )
+    table, subsampled = _subsample_cells(table)
+    return _note(table, CELL_SUBSAMPLE_NOTE) if subsampled else table
+
+
+def _ml_kde_sheet(drawn):
+    """Panel i — the observed medio-lateral positions and the shuffle band.
+
+    The observed curve is a kernel density estimate of one value per presynaptic cell,
+    so those values are what is written; the shuffle band is drawn from its percentiles
+    on the notebook's grid, which is a different number of rows, so each series keeps
+    its own rows.
+    """
+    observed = drawn["observed"]
+    shuffle = drawn["shuffle"]
+    frames = [
+        pd.DataFrame(
+            {
+                "Series": "Observed",
+                "Relative_ML_Location_mm": np.asarray(observed["values"], dtype=float),
+                "Shuffle_Density_Lower": np.nan,
+                "Shuffle_Density_Upper": np.nan,
+            }
+        ),
+        pd.DataFrame(
+            {
+                "Series": "Shuffle",
+                "Relative_ML_Location_mm": np.asarray(shuffle["x"], dtype=float),
+                "Shuffle_Density_Lower": np.asarray(shuffle["lower"], dtype=float),
+                "Shuffle_Density_Upper": np.asarray(shuffle["upper"], dtype=float),
+            }
+        ),
+    ]
+    table = pd.concat(frames, ignore_index=True)
+    table, subsampled = _subsample_cells(
+        table, keep=(table["Series"] == "Shuffle").values
+    )
+    bandwidth = observed.get("bw_method")
+    note = (
+        "Note: the Observed rows are the medio-lateral position of every presynaptic "
+        "cell relative to its starter, the same values as the Relative_ML_Location_mm "
+        "column of the panel g sheet; the panel draws their kernel density estimate "
+        f"(Gaussian kernel, bandwidth method {bandwidth}). The Shuffle rows hold the "
+        "2.5th and 97.5th percentile of the same estimate over the barcode-shuffled "
+        "nulls, on the grid the notebook evaluates them on, drawn as the grey band."
+    )
+    if subsampled:
+        note = f"{note} {CELL_SUBSAMPLE_NOTE}"
+    return _note(table, note)
 
 
 def export_fig4_source_data(output_path, **kwargs):
     panels = build_fig4_source_data(**kwargs)
-    return save_excel_sheets(panels, output_path, expected=FIG4_PANELS)
+    notes = {
+        name: table.attrs[NOTE_ATTR]
+        for name, table in panels.items()
+        if NOTE_ATTR in getattr(table, "attrs", {})
+    }
+    return save_excel_sheets(
+        panels, output_path, notes_dict=notes, expected=FIG4_PANELS
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1032,217 +1351,284 @@ FIG5_PANELS = [
 ]
 
 
-def build_fig5_source_data(
-    starters_df=None,
-    counts_df=None,
-    starter_counts=None,
-    presynaptic_counts=None,
-    mean_input_fraction=None,
-    mean_input_frac_df=None,
-    fractions_df=None,
-    lower_df=None,
-    upper_df=None,
-    input_fraction_log_ratio=None,
-    input_fraction_pval=None,
-    output_fraction=None,
-    output_fraction_log_ratio=None,
-    output_fraction_pval=None,
-    inh_counts_df=None,
-    inh_starter_counts=None,
-    inh_presynaptic_counts=None,
-    inh_mean_input_fraction=None,
-    inh_lower_df=None,
-    inh_upper_df=None,
-):
-    """Build the panel dictionary for Figure 5.
+#: Keys of ``fig5_plotted_data`` that belong to an image panel. Figure 5 has none —
+#: every one of its panels is data-bearing — so the tuple is empty. It is kept so that
+#: an image panel added later is declared here instead of being reported as a plotted
+#: panel without a sheet.
+FIG5_IMAGE_KEYS = ()
 
-    Every argument is a variable of `figure5_connectivity_matrices.ipynb`; the matrices
-    are written with their layer / cell-type labels as the first column.
+#: Point types of panel a, keyed by their key in the plotted element.
+FIG5A_POINT_TYPES = {"presynaptic": "Presynaptic cell", "starter": "Starter cell"}
+
+
+def _sheet_index_name(label, default="Presynaptic_Group"):
+    """An axis label of the figure as a column name (``"Presynaptic layer"`` -> ...)."""
+    words = str(label or "").split()
+    return "_".join(word.capitalize() for word in words) if words else default
+
+
+def build_fig5_source_data(fig5_plotted_data=None):
+    """Build the panel dictionary for Figure 5 from what the figure actually drew.
+
+    The notebook collects the return value of every Figure 5 plotting call in
+    ``fig5_plotted_data``, so each sheet holds the numbers that were handed to
+    matplotlib. Nothing that is not drawn enters the workbook: the 1,000 shuffles and
+    1,000 bootstrap replicates behind the panels, the row sums of the count matrices,
+    the antero-posterior offset of the panel a presynaptic cells and the confidence
+    bounds of panel d (which draws none) are all dropped.
+
+    Args:
+        fig5_plotted_data (dict): The notebook's ``fig5_plotted_data``. The matrix
+            panels (``"counts"``, ``"input_fraction"``, ``"output_fraction"`` and their
+            ``"interneuron_"`` counterparts) come from
+            `connectivity_matrices.plot_area_by_area_connectivity`, the two bubble plots
+            from `connectivity_matrices.bubble_plot`, the two connectivity diagrams from
+            `connectivity_matrices.connectivity_diagram_mpl`,
+            ``"input_fraction_by_layer"`` from
+            `bootstrapping.plot_confidence_intervals` and
+            ``"presynaptic_positions"`` from the scatter loop of the figure cell.
+
+    Returns:
+        dict: Sheet name to DataFrame. Sheets needing a worksheet note carry it in
+        ``DataFrame.attrs``.
     """
-    panels = {}
+    plotted = fig5_plotted_data or {}
+    # Plotted key, sheet, and what turns one into the other; in panel order.
+    builders = (
+        (
+            "presynaptic_positions",
+            "Fig 5a Presyn pos by layer",
+            _presyn_positions_sheet,
+        ),
+        ("counts", "Fig 5b Counts matrix", _fig5_matrix_sheet),
+        ("input_fraction", "Fig 5c Mean input fraction", _fig5_matrix_sheet),
+        (
+            "input_fraction_by_layer",
+            "Fig 5d Input fraction by layer",
+            _input_fraction_ci_sheet,
+        ),
+        (
+            "connectivity_diagram",
+            "Fig 5e Connectivity diagram CI",
+            _diagram_edges_sheet,
+        ),
+        ("input_vs_shuffle", "Fig 5f Input vs shuffle", _bubble_sheet),
+        ("output_fraction", "Fig 5g Mean output fraction", _fig5_matrix_sheet),
+        ("output_vs_shuffle", "Fig 5h Output vs shuffle", _bubble_sheet),
+        ("interneuron_counts", "Fig 5i Interneuron counts", _fig5_matrix_sheet),
+        (
+            "interneuron_input_fraction",
+            "Fig 5j Interneuron input fract",
+            _fig5_matrix_sheet,
+        ),
+        (
+            "interneuron_diagram",
+            "Fig 5k Interneuron diagram CI",
+            _diagram_edges_sheet,
+        ),
+    )
+    panels = {
+        sheet: build(plotted[key]) for key, sheet, build in builders if plotted.get(key)
+    }
 
-    if starters_df is not None:
-        panels["Fig 5a Presyn pos by layer"] = _presyn_positions_by_layer(starters_df)
-
-    if counts_df is not None:
-        panels["Fig 5b Counts matrix"] = _counts_matrix_sheet(
-            counts_df, starter_counts, presynaptic_counts
-        )
-
-    if mean_input_fraction is not None:
-        panels["Fig 5c Mean input fraction"] = _matrix_sheet(mean_input_fraction)
-
-    if fractions_df is not None:
-        panels["Fig 5d Input fraction by layer"] = _input_fraction_points(
-            fractions_df, mean_input_frac_df
-        )
-
-    if mean_input_fraction is not None and lower_df is not None:
-        panels["Fig 5e Connectivity diagram CI"] = _matrix_with_ci(
-            mean_input_fraction, lower_df, upper_df
-        )
-
-    if input_fraction_log_ratio is not None:
-        panels["Fig 5f Input vs shuffle"] = _log_ratio_table(
-            input_fraction_log_ratio, input_fraction_pval
-        )
-
-    if output_fraction is not None:
-        panels["Fig 5g Mean output fraction"] = _matrix_sheet(output_fraction)
-
-    if output_fraction_log_ratio is not None:
-        panels["Fig 5h Output vs shuffle"] = _log_ratio_table(
-            output_fraction_log_ratio, output_fraction_pval
-        )
-
-    if inh_counts_df is not None:
-        panels["Fig 5i Interneuron counts"] = _counts_matrix_sheet(
-            inh_counts_df,
-            inh_starter_counts,
-            inh_presynaptic_counts,
-            index_name="Presynaptic_Cell_Type",
-        )
-
-    if inh_mean_input_fraction is not None:
-        panels["Fig 5j Interneuron input fract"] = _matrix_sheet(
-            inh_mean_input_fraction, index_name="Presynaptic_Cell_Type"
-        )
-        if inh_lower_df is not None:
-            panels["Fig 5k Interneuron diagram CI"] = _matrix_with_ci(
-                inh_mean_input_fraction,
-                inh_lower_df,
-                inh_upper_df,
-                index_name="Presynaptic_Cell_Type",
-            )
+    known = {key for key, _, _ in builders} | set(FIG5_IMAGE_KEYS)
+    unknown = [key for key in plotted if key not in known]
+    if unknown:
+        print(f"[Source Data] !! Fig 5: no sheet for plotted panels {unknown}")
 
     return panels
 
 
-def _counts_matrix_sheet(
-    counts, starter_counts, presynaptic_counts, index_name="Presynaptic_Group"
-):
-    """A connectivity count matrix with its starter and presynaptic marginals."""
-    table = _matrix_sheet(counts, index_name=index_name)
-    if presynaptic_counts is not None:
-        table["Total_Presynaptic_Cells"] = np.asarray(presynaptic_counts)
-    if starter_counts is not None:
-        starter_counts = pd.Series(starter_counts)
-        row = {index_name: "Starter cell count"}
-        for column in table.columns[1:]:
-            row[column] = starter_counts.get(column, np.nan)
-        table = pd.concat([table, pd.DataFrame([row])], ignore_index=True)
-    return table
+def _fig5_matrix_sheet(drawn):
+    """Panels b/c/g/i/j — a connectivity matrix exactly as colour-mapped.
+
+    The matrix keeps the row and column order of the panel, so the sheet can be read as
+    the panel is read: one row per presynaptic group, one column per starter group. The
+    count panels also print the number of starter cells under each column, which is
+    appended as a last row.
+    """
+    element = drawn["matrix"]
+    matrix = pd.DataFrame(element["matrix"])
+    index_name = _sheet_index_name(element.get("ylabel"))
+    table = _matrix_sheet(matrix, index_name=index_name)
+
+    starter_counts = element.get("starter_counts")
+    if starter_counts is None:
+        return table
+    starter_counts = pd.Series(starter_counts)
+    row = {index_name: "Starter cell count"}
+    for column in table.columns[1:]:
+        row[column] = starter_counts.get(column, np.nan)
+    table = pd.concat([table, pd.DataFrame([row])], ignore_index=True)
+    return _note(
+        table,
+        "Note: the last row is not part of the matrix. It is the number of starter "
+        "cells printed under each column of the panel, next to the 'N starters:' "
+        "label.",
+    )
 
 
-def _presyn_positions_by_layer(starters_df):
-    """Panel a — presynaptic positions relative to their starter, by layer."""
-    scale = 10  # flatmap pixels to microns
+def _presyn_positions_sheet(drawn):
+    """Panel a — one row per point of the per-starter-layer scatters.
+
+    Only the two plotted coordinates are given: the panel plots the medio-lateral offset
+    of each presynaptic cell from its starter against its absolute cortical depth, so
+    the antero-posterior offset, which the notebook also computes, is not Source Data.
+    """
     frames = []
-    for layer, group in starters_df.groupby("cortical_layer", observed=True):
-        relative = np.hstack(group["presynaptic_coors_relative"].values)[0]
-        absolute = np.hstack(group["presynaptic_coors"].values)[0]
+    for layer, groups in drawn.items():
+        for key, label in FIG5A_POINT_TYPES.items():
+            scatter = groups.get(key)
+            if scatter is None:
+                continue
+            frames.append(
+                pd.DataFrame(
+                    {
+                        "Starter_Layer": layer,
+                        "Point_Type": label,
+                        "Relative_ML_um": np.asarray(scatter["x"], dtype=float),
+                        "Cortical_Depth_um": np.asarray(scatter["y"], dtype=float),
+                    }
+                )
+            )
+    table = pd.concat(frames, ignore_index=True)
+    note = (
+        "Note: Relative_ML_um is the medio-lateral offset from the starter cell, so it "
+        "is 0 for every starter cell; Cortical_Depth_um is an absolute depth below the "
+        "pia. The antero-posterior offset is not plotted and is therefore not given. "
+        "The dashed horizontal lines of the panel are the average cortical layer "
+        "boundaries of the Allen atlas, reference geometry rather than a measurement "
+        "of this dataset, and are deliberately not tabulated."
+    )
+    return _note(table, note)
+
+
+def _input_fraction_ci_sheet(drawn):
+    """Panel d — the input fraction of every starter cell, with the means drawn on top.
+
+    One sub-panel per starter layer, one distribution per presynaptic layer within it.
+    ``Drawn_As`` says how the panel shows that distribution: as a violin when it holds
+    more than seven starter cells, as a jittered scatter of the raw values otherwise.
+    The bootstrap confidence intervals are not in the sheet because the panel draws
+    none — only the individual values and the mean.
+    """
+    frames = []
+    for starter, element in drawn.items():
+        order = list(element["presynaptic_order"])
+        drawn_as = element.get("drawn_as", {})
+        for presyn in order:
+            values = np.asarray(element["values"].get(presyn, []), dtype=float)
+            frames.append(
+                pd.DataFrame(
+                    {
+                        "Series_Type": "Individual",
+                        "Starter_Layer": starter,
+                        "Presynaptic_Layer": presyn,
+                        "Input_Fraction": values,
+                        "Drawn_As": drawn_as.get(presyn, ""),
+                    }
+                )
+            )
         frames.append(
             pd.DataFrame(
                 {
-                    "Starter_Layer": layer,
-                    "Point_Type": "Presynaptic cell",
-                    "Relative_ML_um": relative[:, 1] * scale,
-                    "Relative_AP_um": relative[:, 0] * scale,
-                    "Cortical_Depth_um": absolute[:, 2] * scale,
+                    "Series_Type": "Mean",
+                    "Starter_Layer": starter,
+                    "Presynaptic_Layer": order,
+                    "Input_Fraction": [element["means"][presyn] for presyn in order],
+                    "Drawn_As": "mean line",
                 }
             )
         )
-        frames.append(
-            pd.DataFrame(
-                {
-                    "Starter_Layer": layer,
-                    "Point_Type": "Starter cell",
-                    "Relative_ML_um": 0.0,
-                    "Relative_AP_um": np.nan,
-                    "Cortical_Depth_um": group["flatmap_z_normalised"].values * scale,
-                }
-            )
-        )
-    return pd.concat(frames, ignore_index=True)
-
-
-def _input_fraction_points(fractions_df, mean_input_frac_df=None):
-    """Panel d — per-starter input fractions, plus the group means drawn on top."""
-    grouping = "cortical_layer"
-    value_cols = [c for c in fractions_df.columns if c != grouping]
-    points = fractions_df.melt(
-        id_vars=grouping,
-        value_vars=value_cols,
-        var_name="Presynaptic_Layer",
-        value_name="Input_Fraction",
+    return _note(
+        pd.concat(frames, ignore_index=True),
+        "Note: rows with Series_Type 'Individual' are one starter cell each; rows with "
+        "Series_Type 'Mean' are the black lines drawn over each distribution. Drawn_As "
+        "gives how the individual values are shown ('violin' for more than seven "
+        "starter cells, 'points' otherwise). The panel draws no confidence interval, "
+        "so none is given.",
     )
-    points = points.rename(columns={grouping: "Starter_Layer"})
-    points.insert(0, "Series_Type", "Individual")
-    frames = [points]
-    if mean_input_frac_df is not None:
-        means = (
-            pd.DataFrame(mean_input_frac_df)
-            .rename_axis("Presynaptic_Layer")
-            .reset_index()
-            .melt(
-                id_vars="Presynaptic_Layer",
-                var_name="Starter_Layer",
-                value_name="Input_Fraction",
-            )
-        )
-        means.insert(0, "Series_Type", "Mean")
-        frames.append(means)
-    return pd.concat(frames, ignore_index=True)
 
 
-def _matrix_with_ci(matrix, lower, upper, index_name="Presynaptic_Group"):
-    """A matrix with its bootstrap confidence interval, in long form."""
+def _diagram_edges_sheet(drawn):
+    """Panels e/k — one row per arrow of the connectivity diagram.
 
-    def _long(df, name):
-        return (
-            pd.DataFrame(df)
-            .rename_axis(index_name)
-            .reset_index()
-            .melt(id_vars=index_name, var_name="Starter_Group", value_name=name)
-        )
-
-    table = _long(matrix, "Input_Fraction")
-    table["CI_Lower"] = _long(lower, "CI_Lower")["CI_Lower"]
-    if upper is not None:
-        table["CI_Upper"] = _long(upper, "CI_Upper")["CI_Upper"]
-    return table
-
-
-def _log_ratio_table(log_ratio, pvalues):
-    """Panels f/h — observed-vs-shuffle log ratio and its FDR-corrected p-value."""
-    table = (
-        pd.DataFrame(log_ratio)
-        .rename_axis("Presynaptic_Group")
-        .reset_index()
-        .melt(
-            id_vars="Presynaptic_Group",
-            var_name="Starter_Group",
-            value_name="Log2_Observed_Over_Shuffle",
-        )
+    Arrow width encodes the input fraction and arrow colour the width of its bootstrap
+    confidence interval, so both are given. Only connections above the panel's input
+    fraction cutoff are drawn, and only those are in the sheet.
+    """
+    element = drawn["edges"]
+    edges = pd.DataFrame(element["edges"])
+    table = edges.rename(
+        columns={
+            "starter": "Starter_Group",
+            "presynaptic": "Presynaptic_Group",
+            "input_fraction": "Input_Fraction",
+            "ci_lower": "CI_Lower",
+            "ci_upper": "CI_Upper",
+            "ci_width": "CI_Width",
+        }
+    )[
+        [
+            "Starter_Group",
+            "Presynaptic_Group",
+            "Input_Fraction",
+            "CI_Lower",
+            "CI_Upper",
+            "CI_Width",
+        ]
+    ]
+    cutoff = element.get("min_fraction_cutoff")
+    return _note(
+        table,
+        "Note: one row per arrow drawn, from the presynaptic group to the starter "
+        f"group. Only connections with an input fraction of at least {cutoff} are "
+        "drawn, and only those are listed. CI_Lower and CI_Upper are the 2.5th and "
+        "97.5th percentiles of 1,000 bootstrap resamplings of the starter cells; "
+        "CI_Width is their difference, which the colour of the arrow encodes.",
     )
-    if pvalues is not None:
-        long_p = (
-            pd.DataFrame(pvalues)
-            .rename_axis("Presynaptic_Group")
-            .reset_index()
-            .melt(
-                id_vars="Presynaptic_Group",
-                var_name="Starter_Group",
-                value_name="FDR_Corrected_P_Value",
-            )
-        )
-        table["FDR_Corrected_P_Value"] = long_p["FDR_Corrected_P_Value"]
-    return table
+
+
+def _bubble_sheet(drawn):
+    """Panels f/h — observed-versus-shuffle bubble plot.
+
+    Bubble area encodes the absolute log2 ratio of the observed connectivity over the
+    shuffled one, bubble colour the signed -log10 of the FDR-corrected p-value, and a
+    black outline marks the cells below the significance level. The 1,000 shuffles
+    themselves are not drawn and are not in the sheet.
+    """
+    element = drawn["bubbles"]
+    bubbles = pd.DataFrame(element["bubbles"])
+    table = pd.DataFrame(
+        {
+            "Presynaptic_Group": bubbles["y_label"].to_numpy(),
+            "Starter_Group": bubbles["x_label"].to_numpy(),
+            "Log2_Observed_Over_Shuffle": bubbles["log_ratio"].to_numpy(),
+            "FDR_Corrected_P_Value": bubbles["p_value"].to_numpy(),
+            "Signed_Log10_P_Value": bubbles["color_value"].to_numpy(),
+            "Significant": bubbles["significant"].to_numpy(),
+        }
+    )
+    return _note(
+        table,
+        "Note: one row per bubble. Bubble area is proportional to "
+        "|Log2_Observed_Over_Shuffle|; bubble colour is Signed_Log10_P_Value, the sign "
+        "of the log ratio times -log10 of the FDR-corrected p-value. Significant is "
+        f"True where FDR_Corrected_P_Value < {element.get('alpha')}, the cells the "
+        "panel outlines in black.",
+    )
 
 
 def export_fig5_source_data(output_path, **kwargs):
     panels = build_fig5_source_data(**kwargs)
-    return save_excel_sheets(panels, output_path, expected=FIG5_PANELS)
+    notes = {
+        name: table.attrs[NOTE_ATTR]
+        for name, table in panels.items()
+        if NOTE_ATTR in getattr(table, "attrs", {})
+    }
+    return save_excel_sheets(
+        panels, output_path, notes_dict=notes, expected=FIG5_PANELS
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1255,9 +1641,51 @@ FIG6_PANELS = [
     "Fig 6d Smoothed starter map",
     "Fig 6e Starter vs presyn ML",
     "Fig 6e Running average and CI",
-    "Fig 6f Presynaptic azimuth",
     "Fig 6f Azimuth running avg",
 ]
+
+#: Keys of ``fig6_plotted_data`` that belong to an image panel. The flatmap outlines of
+#: panels b, c and d and the retinotopy inset of panel d are atlas images, not
+#: measurements, so they have no worksheet. Listed so that a key added later is noticed
+#: rather than silently dropped.
+FIG6_IMAGE_KEYS = ("retinotopy_map",)
+
+#: Panel b draws the presynaptic cells of panel c again, in grey behind the starters.
+FIG6B_NOTE = (
+    "Note: the starter cells are drawn coloured by their medio-lateral position "
+    "(Starter_ML_Position_mm, turbo_r colour map, -1 to 1 mm). The grey cloud drawn "
+    "behind them is the presynaptic population of panel c; it is not repeated here, "
+    "see the 'Fig 6c Presynaptic positions' worksheet."
+)
+
+#: The smoothed map is an image whose opacity carries the local data support.
+FIG6D_NOTE = (
+    "Note: Gaussian-smoothed mean starter medio-lateral position (mm) of the "
+    "presynaptic cells at each flatmap location, drawn as the panel image. Column "
+    "headers are flatmap X, the first column is flatmap Y; rows run from the bottom of "
+    "the panel upwards. Blank cells lie outside the area covered by presynaptic cells "
+    "and are not drawn. Inside it, the panel additionally fades pixels supported by "
+    "few cells (opacity proportional to the summed Gaussian weight, saturating at 50), "
+    "which is a display property of the image rather than a measurement."
+)
+
+#: What the shaded band and the dashed line of panel e are.
+FIG6E_NOTE = (
+    "Note: Shuffle_Lower and Shuffle_Upper are the 2.5th and 97.5th percentiles of "
+    "1,000 bootstrap resamplings of the starter cells, drawn as the shaded band; the "
+    "individual resamplings are not drawn and are not given. "
+    "Mean_Starter_ML_Position_mm is constant: it is the mean starter position over all "
+    "presynaptic cells, drawn as the dashed horizontal line."
+)
+
+#: Panel f draws the running average only, not the per-cell azimuths behind it.
+FIG6F_NOTE = (
+    "Note: the panel draws the Gaussian-weighted running average of the receptive "
+    "field azimuth of the presynaptic cells against their medio-lateral position. The "
+    "per-cell azimuth values that go into the average are not drawn in this panel and "
+    "so are not given here; the azimuth map they are read from is the Allen atlas "
+    "retinotopy shown as the inset of panel d."
+)
 
 
 def build_long_range_source_data(
@@ -1282,12 +1710,14 @@ def build_long_range_source_data(
     retinotopy_running_average=None,
     panel_letters=("b", "c", "d", "e", "f"),
 ):
-    """Shared builder for the two long-range figures.
+    """Builder of the supplementary reviewer long-range figure, from raw variables.
 
-    Figure 6 and the supplementary reviewer figure have the same five panels: starter
-    and presynaptic flatmap positions, a smoothed map of starter position, the
-    starter-vs-presynaptic scatter with its running average and shuffle band, and a
-    retinotopy running average. Only the quantity carried by the colour axis differs.
+    That figure repeats Figure 6 along elevation and the antero-posterior axis, with the
+    same five panels: starter and presynaptic flatmap positions, a smoothed map of
+    starter position, the starter-vs-presynaptic scatter with its running average and
+    shuffle band, and a retinotopy running average. Figure 6 itself no longer comes
+    through here: it is built from what its panels drew, see
+    :func:`build_fig6_source_data`.
 
     Every value argument is expected in the units the panel draws; only the flatmap
     coordinates are raw.
@@ -1370,79 +1800,174 @@ def build_long_range_source_data(
     return panels
 
 
-def build_fig6_source_data(
-    v1_starter_cells=None,
-    presy_xy=None,
-    presy_azel=None,
-    relative_starter_pos=None,
-    center_abs=None,
-    scale=0.01,
-    ctx_img=None,
-    ctx_mask=None,
-    xlim=(150, 1050),
-    ylim=(810, 1330),
-    x_calc=None,
-    pres_vs_start_kde=None,
-    conf_int=None,
-    azi_kde=None,
-    mean_position=None,
-):
-    """Build the panel dictionary for Figure 6.
+def build_fig6_source_data(fig6_plotted_data=None):
+    """Build the panel dictionary for Figure 6 from what the figure actually drew.
 
-    Args are the variables of `figure6_long_range.ipynb`. ``relative_starter_pos`` and
-    ``presy_xy`` are already restricted to the cells with valid coordinates, in the same
-    order, so they line up row by row.
+    The notebook collects every drawn Figure 6 series in ``fig6_plotted_data``, so each
+    sheet holds the arrays that were handed to matplotlib rather than a second,
+    re-derived copy of them. Nothing that is not drawn enters the workbook: the cell
+    identifiers, the flatmap coordinates of cells outside the plotted panels, the
+    individual bootstrap resamplings behind the shuffle band of panel e, the per-cell
+    receptive-field azimuths that only enter panel f through their running average and
+    the atlas images are all dropped.
+
+    Args:
+        fig6_plotted_data (dict): The notebook's ``fig6_plotted_data``, with keys
+            ``"starter_positions"`` (panel b), ``"presynaptic_positions"`` (panel c),
+            ``"smoothed_starter_map"`` (panel d), ``"starter_vs_presyn_ml"`` (panel e,
+            both its scatter and its running average) and
+            ``"azimuth_running_average"`` (panel f). Image-only keys are listed in
+            :data:`FIG6_IMAGE_KEYS`.
+
+    Returns:
+        dict: Sheet name to DataFrame. Sheets needing a worksheet note carry it in
+        ``DataFrame.attrs``.
     """
-
-    def rel_pos(x):
-        return -(np.asarray(x) - center_abs)
-
-    starter_values = None
-    if v1_starter_cells is not None and center_abs is not None:
-        starter_values = rel_pos(v1_starter_cells["flatmap_x"].values) * scale
-
-    return build_long_range_source_data(
-        prefix="Fig",
-        panel_letters=("6b", "6c", "6d", "6e", "6f"),
-        v1_starter_cells=v1_starter_cells,
-        starter_panel_values=starter_values,
-        presy_xy=presy_xy,
-        presyn_panel_values=(
-            None
-            if relative_starter_pos is None
-            else np.asarray(relative_starter_pos) * scale
+    plotted = fig6_plotted_data or {}
+    # Plotted key, sheet, and what turns one into the other; in panel order. Panel e
+    # gives two sheets, its scatter and its running average, from the same key.
+    builders = (
+        (
+            "starter_positions",
+            "Fig 6b Starter positions",
+            _fig6_starter_positions_sheet,
         ),
-        starter_value_label="Starter_ML_Position_mm",
-        presynaptic_axis_values=(
-            None
-            if presy_xy is None or center_abs is None
-            else rel_pos(presy_xy[0]) * scale
+        (
+            "presynaptic_positions",
+            "Fig 6c Presynaptic positions",
+            _fig6_presynaptic_positions_sheet,
         ),
-        ctx_img=ctx_img,
-        ctx_mask=ctx_mask,
-        xlim=xlim,
-        ylim=ylim,
-        running_average_x=(
-            None if x_calc is None or center_abs is None else rel_pos(x_calc) * scale
+        (
+            "smoothed_starter_map",
+            "Fig 6d Smoothed starter map",
+            _fig6_smoothed_map_sheet,
         ),
-        running_average=(
-            None if pres_vs_start_kde is None else np.asarray(pres_vs_start_kde) * scale
+        (
+            "starter_vs_presyn_ml",
+            "Fig 6e Starter vs presyn ML",
+            _fig6_starter_vs_presyn_sheet,
         ),
-        conf_int=None if conf_int is None else np.asarray(conf_int) * scale,
-        mean_position=None if mean_position is None else mean_position * scale,
-        retinotopy=None if presy_azel is None else np.asarray(presy_azel)[0],
-        retinotopy_label="Receptive_Field_Azimuth_deg",
-        retinotopy_running_average=azi_kde,
+        (
+            "starter_vs_presyn_ml",
+            "Fig 6e Running average and CI",
+            _fig6_running_average_sheet,
+        ),
+        (
+            "azimuth_running_average",
+            "Fig 6f Azimuth running avg",
+            _fig6_azimuth_average_sheet,
+        ),
     )
+    panels = {
+        sheet: build(plotted[key]) for key, sheet, build in builders if plotted.get(key)
+    }
+
+    known = {key for key, _, _ in builders} | set(FIG6_IMAGE_KEYS)
+    unknown = [key for key in plotted if key not in known]
+    if unknown:
+        print(f"[Source Data] !! Fig 6: no sheet for plotted panels {unknown}")
+
+    return panels
+
+
+def _fig6_flatmap_positions(drawn):
+    """Flatmap positions coloured by starter medio-lateral position, as drawn."""
+    return pd.concat(
+        [
+            pd.DataFrame(
+                {
+                    "Flatmap_X": np.asarray(series["x"], dtype=float),
+                    "Flatmap_Y": np.asarray(series["y"], dtype=float),
+                    "Starter_ML_Position_mm": np.asarray(series["c"], dtype=float),
+                }
+            )
+            for series in drawn.values()
+        ],
+        ignore_index=True,
+    )
+
+
+def _fig6_starter_positions_sheet(drawn):
+    """Panel b — the V1 starter cells on the flatmap, coloured by their ML position."""
+    return _note(_fig6_flatmap_positions(drawn), FIG6B_NOTE)
+
+
+def _fig6_presynaptic_positions_sheet(drawn):
+    """Panel c — every presynaptic cell, coloured by the ML position of its starter."""
+    return _fig6_flatmap_positions(drawn)
+
+
+def _fig6_smoothed_map_sheet(drawn):
+    """Panel d — the smoothed starter-position map, as the image it is drawn as.
+
+    One row per image row and one column per image column, the flatmap coordinates of
+    the panel's ``extent`` as the row and column labels. Pixels the panel draws fully
+    transparent are left blank: they are outside the area covered by presynaptic cells,
+    where the smoothed value is not shown.
+    """
+    panel = drawn["smoothed_map"]
+    image = np.asarray(panel["image"], dtype=float)
+    alpha = panel.get("alpha")
+    if alpha is not None:
+        image = np.where(np.asarray(alpha, dtype=float) > 0, image, np.nan)
+    x0, x1, y0, y1 = panel["extent"]
+    table = pd.DataFrame(image)
+    table.columns = np.linspace(x0, x1, image.shape[1]).round(1)
+    table.insert(0, "Flatmap_Y", np.linspace(y0, y1, image.shape[0]).round(1))
+    return _note(table, FIG6D_NOTE)
+
+
+def _fig6_starter_vs_presyn_sheet(drawn):
+    """Panel e — one point per presynaptic cell, its ML position against its starter's.
+
+    The running average, its shuffle band and the mean-position line of the same panel
+    are on their own worksheet: they are given on the evaluation grid of the average,
+    not per cell.
+    """
+    cells = drawn["cells"]
+    return pd.DataFrame(
+        {
+            "Presynaptic_ML_mm": np.asarray(cells["x"], dtype=float),
+            "Starter_ML_Position_mm": np.asarray(cells["y"], dtype=float),
+        }
+    )
+
+
+def _fig6_running_average_sheet(drawn):
+    """Panel e — the running average of starter position, its band and its mean line."""
+    curve = drawn["running_average"]
+    table = pd.DataFrame(
+        {
+            "Presynaptic_ML_mm": np.asarray(curve["x"], dtype=float),
+            "Running_Average_Starter_ML_mm": np.asarray(curve["y"], dtype=float),
+        }
+    )
+    if curve.get("shuffle_lower") is not None:
+        table["Shuffle_Lower"] = np.asarray(curve["shuffle_lower"], dtype=float)
+        table["Shuffle_Upper"] = np.asarray(curve["shuffle_upper"], dtype=float)
+    if curve.get("mean_starter_position") is not None:
+        table["Mean_Starter_ML_Position_mm"] = float(curve["mean_starter_position"])
+    return _note(table, FIG6E_NOTE)
+
+
+def _fig6_azimuth_average_sheet(drawn):
+    """Panel f — the running average of receptive-field azimuth, as drawn."""
+    curve = drawn["running_average"]
+    table = pd.DataFrame(
+        {
+            "Presynaptic_ML_mm": np.asarray(curve["x"], dtype=float),
+            "Running_Average_Azimuth_deg": np.asarray(curve["y"], dtype=float),
+        }
+    )
+    return _note(table, FIG6F_NOTE)
 
 
 def export_fig6_source_data(output_path, **kwargs):
     panels = build_fig6_source_data(**kwargs)
     notes = {
-        "Fig 6d Smoothed starter map": (
-            "Gaussian-smoothed mean starter medio-lateral position (mm) over the "
-            "flatmap. Column headers are flatmap X, the first column is flatmap Y."
-        )
+        name: table.attrs[NOTE_ATTR]
+        for name, table in panels.items()
+        if NOTE_ATTR in getattr(table, "attrs", {})
     }
     return save_excel_sheets(
         panels, output_path, notes_dict=notes, expected=FIG6_PANELS

@@ -262,6 +262,13 @@ def plot_area_by_area_connectivity(
         show_counts (bool, optional): If True, displays starter cell counts below
             the heatmap. Defaults to True.
         cbar_label (str, optional): Label for the colorbar. Defaults to "Input fraction".
+
+    Returns:
+        dict: `plotted_element` with a single ``"matrix"`` entry holding the matrix as
+            colour-mapped (`matrix`), its row and column labels in the plotted order,
+            the colour map and its `vmin`/`vmax`, the format of the value printed in
+            each cell, the axis labels and, when ``show_counts`` is True, the starter
+            cell count printed under each column.
     """
     if vmin is None:
         vmin = np.min(connectivity_matrix[connectivity_matrix != -np.inf]) * 0.7
@@ -326,8 +333,23 @@ def plot_area_by_area_connectivity(
     ax.set_xlabel(xlabel, fontsize=label_fontsize)
     ax.set_ylabel(ylabel, fontsize=label_fontsize)
 
+    plotted_element = {
+        "matrix": dict(
+            matrix=pd.DataFrame(connectivity_matrix).copy(),
+            row_labels=list(connectivity_matrix.index),
+            col_labels=list(connectivity_matrix.columns),
+            cmap=cmap,
+            vmin=float(vmin),
+            vmax=float(vmax),
+            value_format="{:.2f}" if input_fraction else "{:.0f}",
+            cbar_label=cbar_label,
+            xlabel=xlabel,
+            ylabel=ylabel,
+        )
+    }
+
     if not show_counts:
-        return
+        return plotted_element
     # Add number of starter cells in each area per column on the bottom of the heatmap
     for i, area in enumerate(connectivity_matrix.columns):
         # if area in starter_counts else put 0
@@ -351,6 +373,10 @@ def plot_area_by_area_connectivity(
         color="black",
         fontsize=tick_fontsize,
     )
+    plotted_element["matrix"]["starter_counts"] = pd.Series(
+        {area: starter_counts.get(area, 0) for area in connectivity_matrix.columns}
+    )
+    return plotted_element
 
 
 def make_minimal_df(
@@ -996,6 +1022,14 @@ def bubble_plot(
         vmin: Minimum value for the colormap normalization of color_value.
         vmax: Maximum value for the colormap normalization of color_value.
         bubble_lw: Linewidth for the outline of significant bubbles.
+
+    Returns:
+        dict: `plotted_element` with a single ``"bubbles"`` entry holding, for every
+            drawn bubble, its row (`y_label`) and column (`x_label`), the log ratio the
+            bubble area encodes, the FDR-corrected p-value behind its colour, the
+            plotted `bubble_size` and `color_value`, whether it got the black outline of
+            a significant cell, plus the colour map limits, the `size_scale`, the
+            significance `alpha`, the bubble sizes of the legend and the axis labels.
     """
     # Reformat input dfs into a long-form DataFrame for plotting
     row_name = log_ratio_matrix.index.name or "row_label"
@@ -1100,6 +1134,26 @@ def bubble_plot(
     )
     ax.set_ylabel("Presynaptic layer", fontsize=label_fontsize)
 
+    drawn = df_plot[
+        ["y_label", "x_label", "log_ratio", "p_value", "bubble_size", "color_value"]
+    ].copy()
+    drawn["significant"] = is_signif
+    return {
+        "bubbles": dict(
+            bubbles=drawn,
+            row_labels=list(y_categories),
+            col_labels=list(x_categories),
+            cmap="coolwarm",
+            vmin=vmin,
+            vmax=vmax,
+            size_scale=size_scale,
+            alpha=alpha,
+            legend_log_ratios=[0.3, 0.6, 1.0] if show_legend else None,
+            xlabel="Starter layer",
+            ylabel="Presynaptic layer",
+        )
+    }
+
 
 def _truncate_colormap(
     cmap: mcolors.Colormap, start: float = 0.0, end: float = 1.0, n: int = 256
@@ -1183,8 +1237,12 @@ def connectivity_diagram_mpl(
 
 
     Returns:
-        tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]:
-            The figure and axes used for plotting.
+        tuple: ``(fig, ax, cbar, plotted_element)``. `plotted_element` has one
+            ``"nodes"`` entry, holding the plotted position and label of every node, and
+            one ``"edges"`` entry, holding one row per *drawn* arrow (those above
+            ``min_fraction_cutoff``) with the input fraction its width encodes, the
+            confidence bounds and the CI width its colour encodes, and the colour map
+            limits.
     """
     if ax is None:
         fig, ax = plt.subplots(figsize=(12, 10))  # Adjust default size as needed
@@ -1254,6 +1312,7 @@ def connectivity_diagram_mpl(
     if ci_cmap is not None:
         base_cmap = plt.get_cmap(ci_cmap)
         cmap_obj = _truncate_colormap(base_cmap, start=ci_cmap_start, end=ci_cmap_end)
+    drawn_edges = []
     # Plot edges
     for starter_name in connection_names:  # Target of the connection
         for presyn_name in connection_names:  # Source of the connection
@@ -1337,6 +1396,19 @@ def connectivity_diagram_mpl(
                 arrow_head_scale,
                 arrow_style,
             )
+            drawn_edges.append(
+                dict(
+                    starter=display_names[starter_name],
+                    presynaptic=display_names[presyn_name],
+                    input_fraction=connection_strength,
+                    ci_lower=lower_df.loc[presyn_name, starter_name],
+                    ci_upper=upper_df.loc[presyn_name, starter_name],
+                    ci_width=conf_range,
+                    edge_width=connection_strength * edge_width_scale,
+                    arrow_head=connection_strength * arrow_head_scale,
+                    alpha=edge_plot_alpha,
+                )
+            )
 
     # --- Final plot adjustments ---
     all_x_coords, all_y_coords = np.vstack(list(positions.values())).T
@@ -1373,7 +1445,33 @@ def connectivity_diagram_mpl(
             cbar.ax.tick_params(labelsize=colorbar_fontsize)
         # else: No colorbar if min and max for normalization are the same (no range to show)
 
-    return fig, ax, cbar
+    plotted_element = {
+        "nodes": dict(
+            nodes=pd.DataFrame(
+                [
+                    dict(
+                        node=name,
+                        label=display_names[name],
+                        x=pos_xy[0],
+                        y=pos_xy[1],
+                    )
+                    for name, pos_xy in positions.items()
+                ]
+            ),
+            radius=node_radius,
+        ),
+        "edges": dict(
+            edges=pd.DataFrame(drawn_edges),
+            min_fraction_cutoff=min_fraction_cutoff,
+            ci_cmap=ci_cmap,
+            vmin=vmin,
+            vmax=vmax,
+            edge_width_scale=edge_width_scale,
+            arrow_head_scale=arrow_head_scale,
+            cbar_label="CI width",
+        ),
+    }
+    return fig, ax, cbar, plotted_element
 
 
 def _draw_arrow_mpl(

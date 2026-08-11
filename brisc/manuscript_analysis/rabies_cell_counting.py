@@ -8,9 +8,8 @@ from matplotlib import pyplot as plt
 import matplotlib
 from .utils import despine, get_path
 
-matplotlib.rcParams[
-    "pdf.fonttype"
-] = 42  # Use Type 3 fonts (TrueType) for selectable text
+# Use Type 3 fonts (TrueType) for selectable text
+matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["ps.fonttype"] = 42  # For EPS, if relevant
 
 

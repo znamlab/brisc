@@ -2,11 +2,12 @@
 
 # %% imports
 from pathlib import Path
+
 import cv2
-import numpy as np
-import matplotlib.pyplot as plt
-from czifile import CziFile
 import flexiznam as flz
+import matplotlib.pyplot as plt
+import numpy as np
+from czifile import CziFile
 from iss_preprocess import vis
 from matplotlib.patches import ConnectionPatch
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar

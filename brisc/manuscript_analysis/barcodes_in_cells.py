@@ -28,6 +28,12 @@ def plot_hist(
         show_zero (bool, optional): Whether to show zero values. Defaults to False.
         show_counts (bool, optional): Whether to show counts on the bars. Defaults to True.
         linewidth (float, optional): Linewidth for the bars. Defaults to 0.5.
+
+    Returns:
+        dict: `plotted_element` with a single `histogram` entry holding the plotted
+            proportions `y`, the value of each bar `x`, the `bin_edges` handed to
+            `plt.stairs`, the fill `color` and, only when the bars are annotated with
+            them, the `counts` written on the panel.
     """
     if max_val is None:
         max_val = data_df[col].max() + 1
@@ -39,15 +45,27 @@ def plot_hist(
     props = counts / np.sum(counts)
     counts = counts[min_val : max_val + 1]
     props = props[min_val : max_val + 1]
+    bin_edges = np.arange(min_val, max_val + 2) - 0.5
+    plotted_element = dict(
+        histogram=dict(
+            x=np.arange(min_val, max_val + 1),
+            y=props,
+            bin_edges=bin_edges,
+            color="slategray",
+            xlabel=col,
+            ylabel="Proportion",
+        )
+    )
     plt.stairs(
         props,
-        np.arange(min_val, max_val + 2) - 0.5,
+        bin_edges,
         fill=True,
         edgecolor="black",
         facecolor="slategray",
         linewidth=linewidth,
     )
     if show_counts:
+        plotted_element["histogram"]["counts"] = counts
         for i, (count, prop) in enumerate(zip(counts, props)):
             # Annotate unfiltered data with padding if heights are similar
             plt.text(
@@ -71,6 +89,7 @@ def plot_hist(
         labelsize=tick_fontsize,
     )
     despine(ax)
+    return plotted_element
 
 
 def plot_presyn_per_barcode(
@@ -108,6 +127,12 @@ def plot_presyn_per_barcode(
         log_scale (bool, optional): If True, plots with a logarithmic x-axis
             and filled steps. If False, plots with a linear x-axis and step lines.
             Defaults to True.
+
+    Returns:
+        dict: `plotted_element`, one entry per barcode type, each with the plotted
+            proportions `y`, the `bin_edges` handed to `stairs`, the `color` and, on the
+            logarithmic axis, the proportion of barcodes with zero presynaptic cells
+            (`zero_bin_y`) drawn as a separate bar between `zero_bin_edges`.
     """
     cells_with_starter = barcodes_df[barcodes_df["n_starters"] > 0][
         "n_presynaptic"
@@ -119,6 +144,7 @@ def plot_presyn_per_barcode(
 
     # Non-starters *with* starter
     labels = ["Orphan barcodes", "Non-orphan barcodes"]
+    plotted_element = {}
     if log_scale:
         ax = plt.gca()
         max_n = max(cells_without_starter.max(), cells_with_starter.max())
@@ -167,6 +193,15 @@ def plot_presyn_per_barcode(
                 label="__no_legend__",
             )
 
+            plotted_element[labels[i]] = dict(
+                y=h / len(cells),
+                bin_edges=b,
+                zero_bin_y=zero_cells / len(cells),
+                zero_bin_edges=np.array([0.48, 0.69]),
+                color=color,
+                xlabel="Presynaptic cells per barcode",
+                ylabel="Proportion of barcodes",
+            )
             i += 1
 
         ax.set_xscale("log")
@@ -206,6 +241,13 @@ def plot_presyn_per_barcode(
                 alpha=alpha,
                 label=labels[i],
             )
+            plotted_element[labels[i]] = dict(
+                x=edge2plot,
+                y=props2plot,
+                color=color,
+                xlabel="Presynaptic cells per barcode",
+                ylabel="Proportion of barcodes",
+            )
             i += 1
         ax.set_xlim(0, max_val + 1)
         labels = [str(l) for l in np.arange(0, max_val + 10, 10).astype(int)]
@@ -233,6 +275,7 @@ def plot_presyn_per_barcode(
         labelsize=tick_fontsize,
     )
     despine(ax)
+    return plotted_element
 
 
 def analyze_multibarcoded_starters(
@@ -316,6 +359,11 @@ def plot_multibarcoded_starters(
             - n_presyn_with_barcode1 (int): Number of presynaptic cells with barcode1
             - n_presyn_with_barcode2 (int): Number of presynaptic cells with barcode2
             - n_presyn_with_both (int): Number of presynaptic cells with both barcodes
+
+    Returns:
+        dict: `plotted_element`, one entry per stacked bar series, each a dict with the
+            plotted `x` (starter rank, sorted as the panel sorts them), `y` (bar
+            height), `bottom` (height the bar starts at) and `color`.
     """
     max_bc = (
         multibarcoded_starters["n_presyn_per_barcode"].apply(len).max()
@@ -392,14 +440,28 @@ def plot_multibarcoded_starters(
         "Any 3",
         "Any 4",
     ]
+    if barcode_proportion:
+        ylabel = "Proportion of presynaptic cells"
+    else:
+        ylabel = "# presynaptic cells"
+    plotted_element = {}
+    x = np.arange(bar_data.shape[0]) + 1
     for i, color, label in zip(range(bar_data.shape[1]), colors, labels):
         ax.bar(
-            np.arange(bar_data.shape[0]) + 1,
+            x,
             bar_data[:, i],
             bottom=bottom,
             color=color,
             label=label,
             width=1,
+        )
+        plotted_element[label] = dict(
+            x=x,
+            y=bar_data[:, i],
+            bottom=np.broadcast_to(bottom, bar_data[:, i].shape).copy(),
+            color=color,
+            xlabel="Starter cell",
+            ylabel=ylabel,
         )
         bottom += bar_data[:, i]
     if barcode_proportion:
@@ -424,3 +486,4 @@ def plot_multibarcoded_starters(
     )
     ax.set_xticks([1, bar_data.shape[0]])
     despine(ax)
+    return plotted_element
