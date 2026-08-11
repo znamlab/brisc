@@ -80,7 +80,7 @@ line-length = 88
 
 [tool.setuptools_scm]
 fallback_version = "0.1.0"
-tag_regex = "^brisc_v(?P<version>\\d+)$"
+tag_regex = "^brisc_v(?P<version>\\d+(?:\\.\\d+)*)$"
 
 [tool.check-manifest]
 ignore = [
