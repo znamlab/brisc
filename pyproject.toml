@@ -27,7 +27,9 @@ dependencies = [
         "tables",
         "shapely",
         "editdistance",
-        "napari>=0.7",]
+        "napari>=0.7",
+        "openpyxl>=3.1.5",
+]
 license = {text = "MIT"}
 
 [project.urls]

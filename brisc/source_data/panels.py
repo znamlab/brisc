@@ -804,6 +804,10 @@ def _plot_gene_expression_mosaic(df, sheet_name, source_name):
     for ax in axes[len(genes) :]:
         ax.set_axis_off()
     _finish(fig, sheet_name, source_name, len(df))
+    # `tight_layout` leaves the rows touching, because an axis-off panel reports no
+    # height for its title: open a gap so a gene name cannot land on the row above it.
+    if nrows > 1:
+        fig.subplots_adjust(hspace=0.12)
     return fig
 
 
@@ -2519,13 +2523,21 @@ def plot_workbook(xlsx_path, output_dir, dpi=200, verbose=True):
         verbose (bool): Print one line per sheet.
 
     Returns:
-        list: Paths of the written PNGs.
+        list: Paths of the written PNGs. Empty if the workbook could not be opened.
     """
     xlsx_path = Path(xlsx_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    sheets = read_source_data_workbook(xlsx_path)
+    try:
+        sheets = read_source_data_workbook(xlsx_path)
+    except Exception as e:  # an unreadable workbook must not abort the whole run
+        size = xlsx_path.stat().st_size if xlsx_path.exists() else 0
+        print(
+            f"  [!] could not read {xlsx_path.name} ({size:,} bytes) "
+            f"({type(e).__name__}: {e}); re-run its export cell"
+        )
+        return []
     written = []
     for sheet_name, df in sheets.items():
         target = output_dir / f"{slugify(sheet_name)}.png"
