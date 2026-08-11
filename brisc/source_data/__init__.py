@@ -18,13 +18,15 @@ from brisc.source_data.figures import (
     export_fig5_source_data,
     export_fig6_source_data,
 )
-from brisc.source_data.figures import build_long_range_source_data
 from brisc.source_data.io import (
     extract_counts_array,
     read_source_data_workbook,
     save_excel_sheets,
 )
 from brisc.source_data.supplementary import (
+    build_suppfig4_source_data,
+    build_suppfig6_source_data,
+    build_suppfig_reviewer_source_data,
     export_suppfig2_source_data,
     export_suppfig4_source_data,
     export_suppfig5_source_data,
@@ -41,7 +43,9 @@ __all__ = [
     "build_fig4_source_data",
     "build_fig5_source_data",
     "build_fig6_source_data",
-    "build_long_range_source_data",
+    "build_suppfig4_source_data",
+    "build_suppfig6_source_data",
+    "build_suppfig_reviewer_source_data",
     "export_fig1_source_data",
     "export_fig2_source_data",
     "export_fig3_source_data",

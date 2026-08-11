@@ -17,21 +17,49 @@ def save_excel_sheets(panels_dict, output_path, notes_dict=None, expected=None):
         expected (list, optional): Every sheet the figure should contain. Any that are
             absent are reported loudly, so a renamed or unpassed variable cannot make a
             panel disappear silently.
+
+    Returns:
+        pathlib.Path or None: The workbook written, or None when there was nothing real
+        to write.
+
+    Notes:
+        This function only ever writes numbers it was given. A panel that was not built
+        is reported and left out; it is never stood in for by a placeholder, an empty
+        frame or a zero. A call with no panels at all writes no file, so a workbook on
+        disk always means a figure was actually exported.
     """
     output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     if expected:
-        missing = [name for name in expected if name not in panels_dict]
+        missing = [
+            name
+            for name in expected
+            if name not in panels_dict or panels_dict[name] is None
+        ]
         if missing:
             print(
                 f"[Source Data] !! MISSING {len(missing)}/{len(expected)} panels for "
                 f"{output_path.name}: {missing}"
             )
 
+    # A panel whose builder returned nothing is dropped rather than written as a blank
+    # sheet: an empty sheet in a deposited workbook reads as "measured nothing".
+    empty = [
+        name
+        for name, table in panels_dict.items()
+        if table is None or (hasattr(table, "empty") and table.empty)
+    ]
+    if empty:
+        print(f"[Source Data] !! EMPTY, not written for {output_path.name}: {empty}")
+        panels_dict = {k: v for k, v in panels_dict.items() if k not in empty}
+
     if not panels_dict:
-        print(f"[Source Data Warning] No panels to save for {output_path}")
-        return output_path
+        print(
+            f"[Source Data] !! Nothing to save for {output_path.name}; no file written."
+        )
+        return None
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
         for sheet_name, df in panels_dict.items():

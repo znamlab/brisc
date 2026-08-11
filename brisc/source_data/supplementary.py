@@ -5,15 +5,23 @@ plots and writes one worksheet per data-bearing panel. Micrographs, atlas outlin
 the exploratory cells of those notebooks have no worksheet.
 """
 
+from functools import partial
+
 import numpy as np
 import pandas as pd
 
 from brisc.source_data.figures import (
-    ABUNDANCE_SUBSAMPLE_NOTE,
-    _library_abundance,
+    CELL_SUBSAMPLE_NOTE,
+    NOTE_ATTR,
+    _abundance_sheet,
+    _longrange_flatmap_sheet,
+    _longrange_running_average_sheet,
+    _longrange_scatter_sheet,
+    _longrange_smoothed_map_sheet,
+    _note,
     _presynaptic_density,
-    _unique_fraction,
-    build_long_range_source_data,
+    _subsample_cells,
+    _unique_fraction_sheet,
 )
 from brisc.source_data.io import save_excel_sheets
 
@@ -26,35 +34,96 @@ SUPP1_PANELS = [
     "Supp 1d Starter dilution",
 ]
 
+#: Keys of ``suppfig2_plotted_data`` belonging to an image panel: the coronal rabies
+#: slice is a micrograph and the confocal panel returns only the arrows drawn over one.
+SUPP1_IMAGE_KEYS = ("coronal_rabies_slice", "starter_confocal")
 
-def export_suppfig2_source_data(
-    output_path,
-    voxel_distances_sorted=None,
-    cell_distances_sorted=None,
-    dilution_densities=None,
-):
-    """Supplementary Figure 1.
+
+def build_suppfig2_source_data(suppfig2_plotted_data=None):
+    """Build the panel dictionary for Supplementary Figure 1/2 from what it drew.
 
     Args:
-        voxel_distances_sorted (np.ndarray): Sorted isocortex voxel distances.
-        cell_distances_sorted (np.ndarray): Sorted labelled-cell distances.
-        dilution_densities (pd.DataFrame): The V1 density table returned by
+        suppfig2_plotted_data (dict): The notebook's ``suppfig2_plotted_data``, with
+            ``"presynaptic_density"`` from `rabies_cell_counting.plot_rabies_density`
+            and ``"starter_dilution"`` from
             `starter_cell_counting.plot_starter_dilution_densities`.
+
+    Returns:
+        dict: Sheet name to DataFrame, with worksheet notes in ``DataFrame.attrs``.
     """
-    panels = {}
-    if voxel_distances_sorted is not None and cell_distances_sorted is not None:
-        panels["Supp 1c Presynaptic density"] = _presynaptic_density(
-            voxel_distances_sorted, cell_distances_sorted
+    plotted = suppfig2_plotted_data or {}
+    builders = (
+        (
+            "presynaptic_density",
+            "Supp 1c Presynaptic density",
+            _supp1_presynaptic_density_sheet,
+        ),
+        ("starter_dilution", "Supp 1d Starter dilution", _supp1_starter_dilution_sheet),
+    )
+    panels = {
+        sheet: build(plotted[key]) for key, sheet, build in builders if plotted.get(key)
+    }
+
+    known = {key for key, _, _ in builders} | set(SUPP1_IMAGE_KEYS)
+    unknown = [key for key in plotted if key not in known]
+    if unknown:
+        print(f"[Source Data] !! Supp 1: no sheet for plotted panels {unknown}")
+
+    return panels
+
+
+def _supp1_presynaptic_density_sheet(drawn):
+    """Panel c — cumulative isocortex cell density around the injection site."""
+    curve = drawn["cumulative_density"] if "cumulative_density" in drawn else drawn
+    return pd.DataFrame(
+        {
+            "Distance_To_Injection_mm": np.asarray(curve["x"], dtype=float),
+            "Cell_Density_Per_mm3": np.asarray(curve["y"], dtype=float),
+        }
+    )
+
+
+def _supp1_starter_dilution_sheet(drawn):
+    """Panel d — the per-mouse starter densities and the mean drawn over each dilution.
+
+    The panel is a strip plot of one point per mouse with a mean line per dilution; the
+    mouse identifiers and the cell counts the density is computed from are not drawn, so
+    they are not written here.
+    """
+    frames = [
+        pd.DataFrame(
+            {
+                "Series_Type": label,
+                "Dilution": np.asarray(drawn[key]["x"]),
+                "Cell_Density_Per_mm3": np.asarray(drawn[key]["y"], dtype=float),
+            }
         )
-    if dilution_densities is not None:
-        table = pd.DataFrame(dilution_densities)
-        keep = [
-            c for c in ["mouse", "dilution", "count", "density"] if c in table.columns
-        ]
-        panels["Supp 1d Starter dilution"] = (
-            table.reset_index()[keep] if keep else table.reset_index()
-        )
-    return save_excel_sheets(panels, output_path, expected=SUPP1_PANELS)
+        for key, label in (("individual", "Individual mouse"), ("mean", "Mean"))
+        if drawn.get(key) is not None
+    ]
+    table = pd.concat(frames, ignore_index=True)
+    order = drawn.get("dilution_order")
+    note = (
+        "Note: one row per mouse for the individual points, plus one row per dilution "
+        "for the mean line the panel draws over them. The density is on a logarithmic "
+        "axis."
+    )
+    if order:
+        note += f" Dilutions are drawn in the order {', '.join(map(str, order))}."
+    return _note(table, note)
+
+
+def export_suppfig2_source_data(output_path, **kwargs):
+    """Supplementary Figure 1 / 2."""
+    panels = build_suppfig2_source_data(**kwargs)
+    notes = {
+        name: table.attrs[NOTE_ATTR]
+        for name, table in panels.items()
+        if NOTE_ATTR in getattr(table, "attrs", {})
+    }
+    return save_excel_sheets(
+        panels, output_path, notes_dict=notes, expected=SUPP1_PANELS
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -68,33 +137,91 @@ SUPP4_PANELS = [
 ]
 
 
-def export_suppfig4_source_data(
-    output_path, lib2plot=None, nunique=None, barcode_lengths=None
-):
+def build_suppfig4_source_data(suppfig4_plotted_data=None):
+    """Build the panel dictionary for Supplementary Figure 4 from what it drew.
+
+    The notebook collects the return value of every plotting call in
+    ``suppfig4_plotted_data``, so each sheet holds the arrays that were handed to
+    matplotlib rather than a second, re-derived copy of them: panel b used to be
+    recomputed by :func:`figures._unique_fraction` on its own evaluation grid instead of
+    the notebook's. Nothing that is not drawn enters the workbook, so the printed
+    95%/99% unique-labelling estimates that
+    `viral_library.plot_unique_label_fraction` also returns are dropped, as are the
+    barcode sequences the curves are counted from.
+
+    Every curve of this figure is our own RV35 library truncated to a given barcode
+    length, so, unlike Figure 1, there is no library published by another laboratory to
+    leave out with :func:`figures._own_libraries_only`.
+
+    Args:
+        suppfig4_plotted_data (dict): The notebook's ``suppfig4_plotted_data``.
+            ``"library_abundance"`` comes from
+            `viral_library.plot_barcode_counts_and_percentage` and
+            ``"unique_fraction"`` from `viral_library.plot_unique_label_fraction`, each
+            with one ``x``/``y`` entry per library; ``"unique_vs_length"`` is assembled
+            in the figure cell, which draws panel c inline.
+
+    Returns:
+        dict: Sheet name to DataFrame. Sheets needing a worksheet note carry it in
+        ``DataFrame.attrs``.
+    """
+    plotted = suppfig4_plotted_data or {}
+    # Plotted key, sheet, and what turns one into the other; in panel order. Panels a
+    # and b reuse Figure 1's curve builders, so every library curve of the manuscript is
+    # tabulated the same way.
+    builders = (
+        ("library_abundance", "Supp 4a Library abundance", _abundance_sheet),
+        ("unique_fraction", "Supp 4b Unique fraction", _unique_fraction_sheet),
+        ("unique_vs_length", "Supp 4c Unique vs length", _unique_vs_length_sheet),
+    )
+    panels = {}
+    for key, sheet, build in builders:
+        drawn = plotted.get(key)
+        if not drawn:
+            continue
+        panels[sheet] = build(drawn)
+
+    known = {key for key, _, _ in builders}
+    unknown = [key for key in plotted if key not in known]
+    if unknown:
+        print(f"[Source Data] !! Supp 4: no sheet for plotted panels {unknown}")
+
+    return panels
+
+
+def _unique_vs_length_sheet(drawn):
+    """Panel c — infections for 95% unique labelling against barcode length, as drawn.
+
+    The panel also fills the markers of the 10 and 20 nucleotide libraries that panels a
+    and b draw in full; those are points of this same curve, so the sheet holds it once.
+    """
+    return pd.concat(
+        [
+            pd.DataFrame(
+                {
+                    "Barcode_Length_Nucleotides": np.asarray(curve["x"]).astype(int),
+                    "Infections_For_95pc_Unique": np.asarray(curve["y"]).astype(int),
+                }
+            )
+            for curve in drawn.values()
+        ],
+        ignore_index=True,
+    )
+
+
+def export_suppfig4_source_data(output_path, suppfig4_plotted_data=None):
     """Supplementary Figure 4.
 
     Args:
-        lib2plot (dict): The 10 and 20 nucleotide libraries drawn in panels a and b.
-        nunique (list): Infection events for 95% unique labelling, per barcode length.
-        barcode_lengths (iterable): The barcode lengths matching ``nunique``.
+        output_path (str or Path): Workbook to write.
+        suppfig4_plotted_data (dict): The notebook's ``suppfig4_plotted_data``.
     """
-    panels = {}
-    if lib2plot is not None:
-        panels["Supp 4a Library abundance"] = _library_abundance(lib2plot)
-        panels["Supp 4b Unique fraction"] = _unique_fraction(lib2plot, max_cells=1e6)
-    if nunique is not None:
-        lengths = (
-            list(barcode_lengths)
-            if barcode_lengths is not None
-            else list(range(4, 4 + len(nunique)))
-        )
-        panels["Supp 4c Unique vs length"] = pd.DataFrame(
-            {
-                "Barcode_Length_Nucleotides": lengths,
-                "Infections_For_95pc_Unique": np.asarray(nunique),
-            }
-        )
-    notes = {"Supp 4a Library abundance": ABUNDANCE_SUBSAMPLE_NOTE}
+    panels = build_suppfig4_source_data(suppfig4_plotted_data)
+    notes = {
+        name: table.attrs[NOTE_ATTR]
+        for name, table in panels.items()
+        if NOTE_ATTR in getattr(table, "attrs", {})
+    }
     return save_excel_sheets(
         panels, output_path, notes_dict=notes, expected=SUPP4_PANELS
     )
@@ -111,143 +238,151 @@ SUPP5_PANELS = [
     "Supp 5d Marker gene expression",
 ]
 
+#: Keys of ``suppfig5_plotted_data`` with no worksheet: the atlas outlines the two
+#: position panels are drawn over are reference geometry, not measurements.
+SUPP5_IMAGE_KEYS = ("atlas_contours",)
 
-def export_suppfig5_source_data(
-    output_path,
-    mcherry_manual=None,
-    mcherry_curated=None,
-    starters_positions=None,
-    inside_cells_df=None,
-    outside_cells_df=None,
-    adata=None,
-    genes_to_plot=None,
-    categories_order=None,
-):
-    """Supplementary Figure 5.
+SUPP5_CORONAL_NOTE = (
+    "Note: coordinates are Allen CCF positions in 10 um voxels, as plotted, with the y "
+    "axis inverted in the panel. Only the cells within the drawn section window are "
+    "here; the window is +/-400 um for the cells outside the sequenced volume and "
+    "+/-100 um for those inside it, as the figure draws them."
+)
+
+SUPP5_DORSAL_NOTE = (
+    "Note: coordinates are Allen CCF positions in 10 um voxels, as plotted, with the x "
+    "axis inverted in the panel. This panel draws every cell of both groups."
+)
+
+
+def build_suppfig5_source_data(suppfig5_plotted_data=None):
+    """Build the panel dictionary for Supplementary Figure 5 from what it drew.
 
     Args:
-        mcherry_manual (pd.DataFrame): Manually curated mCherry cells (chamber_06).
-        mcherry_curated (pd.DataFrame): Automatically curated mCherry cells.
-        starters_positions (pd.DataFrame): Starter cell positions per section.
-        inside_cells_df (pd.DataFrame): Cells inside the sequenced volume.
-        outside_cells_df (pd.DataFrame): Cells outside the sequenced volume.
-        adata (AnnData): Object behind the marker-gene dot plot.
-        genes_to_plot (list): Genes of the dot plot, in the plotted order.
-        categories_order (list): Cluster order of the dot plot.
+        suppfig5_plotted_data (dict): The notebook's ``suppfig5_plotted_data``, with
+            ``"cells_per_section"`` (one entry per line of panel a),
+            ``"coronal_positions"`` and ``"dorsal_positions"`` (the two cell groups each
+            scatter draws) and ``"dotplot"`` (scanpy's own ``dot_color_df`` and
+            ``dot_size_df``, the values the dot plot maps to colour and size).
+
+    Returns:
+        dict: Sheet name to DataFrame, with worksheet notes in ``DataFrame.attrs``.
     """
-    panels = {}
-
-    if mcherry_manual is not None and mcherry_curated is not None:
-        panels["Supp 5a Cells per section"] = _cells_per_section(
-            mcherry_manual, mcherry_curated, starters_positions
-        )
-
-    atlas_size = 10
-    if outside_cells_df is not None and inside_cells_df is not None:
-        frames = []
-        for label, df in (
-            ("Outside volume", outside_cells_df),
-            ("Inside volume", inside_cells_df),
-        ):
-            frames.append(
-                pd.DataFrame(
-                    {
-                        "Cell_Group": label,
-                        "ARA_X_px": df["ara_x"].values * 1000 / atlas_size,
-                        "ARA_Y_px": df["ara_y"].values * 1000 / atlas_size,
-                        "ARA_Z_px": df["ara_z"].values * 1000 / atlas_size,
-                    }
-                )
-            )
-        positions = pd.concat(frames, ignore_index=True)
-        panels["Supp 5b Coronal positions"] = positions[
-            ["Cell_Group", "ARA_Z_px", "ARA_Y_px", "ARA_X_px"]
-        ]
-        panels["Supp 5c Dorsal positions"] = positions[
-            ["Cell_Group", "ARA_X_px", "ARA_Z_px"]
-        ]
-
-    if adata is not None and genes_to_plot is not None:
-        panels["Supp 5d Marker gene expression"] = _dotplot_table(
-            adata, genes_to_plot, categories_order
-        )
-
-    return save_excel_sheets(panels, output_path, expected=SUPP5_PANELS)
-
-
-def _cells_per_section(mcherry_manual, mcherry_curated, starters_positions):
-    """Panel a — mCherry and starter cell counts along the antero-posterior axis."""
-    rows = []
-    m6 = mcherry_manual.query("chamber == 'chamber_06'").groupby("roi").aggregate(len).x
-    for roi, count in m6.items():
-        rows.append(
-            {
-                "Cell_Type": "mCherry cells",
-                "Chamber": "chamber_06",
-                "Section_Position_um": (int(roi) - 10) * 20,
-                "Cell_Count": count,
-            }
-        )
-
-    offset = 10
-    for chamber in ["07", "08", "09", "10"]:
-        subset = mcherry_curated.query(f"chamber == 'chamber_{chamber}'")
-        counts = subset.groupby("roi").aggregate(len).x
-        for roi, count in counts.items():
-            rows.append(
-                {
-                    "Cell_Type": "mCherry cells",
-                    "Chamber": f"chamber_{chamber}",
-                    "Section_Position_um": (roi + offset) * 20,
-                    "Cell_Count": count,
-                }
-            )
-        if starters_positions is not None:
-            starters = starters_positions.query(f"chamber == 'chamber_{chamber}'")
-            if len(starters):
-                starter_counts = starters.groupby("roi").aggregate(len).y
-                for roi, count in starter_counts.items():
-                    rows.append(
-                        {
-                            "Cell_Type": "Starter cells",
-                            "Chamber": f"chamber_{chamber}",
-                            "Section_Position_um": (roi + offset) * 20,
-                            "Cell_Count": count,
-                        }
-                    )
-        offset += counts.index.max()
-    return pd.DataFrame(rows)
-
-
-def _dotplot_table(adata, genes, categories_order=None):
-    """Panel d — mean expression and fraction of expressing cells per cluster."""
-    clusters = adata.obs["custom_leiden"]
-    order = (
-        list(categories_order)
-        if categories_order is not None
-        else list(pd.unique(clusters))
+    plotted = suppfig5_plotted_data or {}
+    builders = (
+        ("cells_per_section", "Supp 5a Cells per section", _supp5_sections_sheet),
+        (
+            "coronal_positions",
+            "Supp 5b Coronal positions",
+            partial(
+                _supp5_positions_sheet,
+                xcol="ARA_Z_px",
+                ycol="ARA_Y_px",
+                note=SUPP5_CORONAL_NOTE,
+            ),
+        ),
+        (
+            "dorsal_positions",
+            "Supp 5c Dorsal positions",
+            partial(
+                _supp5_positions_sheet,
+                xcol="ARA_X_px",
+                ycol="ARA_Z_px",
+                note=SUPP5_DORSAL_NOTE,
+            ),
+        ),
+        ("dotplot", "Supp 5d Marker gene expression", _supp5_dotplot_sheet),
     )
-    rows = []
-    for gene in genes:
-        if gene not in adata.var_names:
-            continue
-        column = adata[:, gene].X
-        values = np.asarray(
-            column.toarray() if hasattr(column, "toarray") else column
-        ).ravel()
-        frame = pd.DataFrame({"Cluster": np.asarray(clusters), "Expression": values})
-        for cluster, group in frame.groupby("Cluster", observed=True):
-            if cluster not in order:
-                continue
-            rows.append(
+    panels = {
+        sheet: build(plotted[key]) for key, sheet, build in builders if plotted.get(key)
+    }
+
+    known = {key for key, _, _ in builders} | set(SUPP5_IMAGE_KEYS)
+    unknown = [key for key in plotted if key not in known]
+    if unknown:
+        print(f"[Source Data] !! Supp 5: no sheet for plotted panels {unknown}")
+
+    return panels
+
+
+def _supp5_sections_sheet(drawn):
+    """Panel a — one row per drawn point of every mCherry and starter count line.
+
+    The series name carries the chamber, which is what the panel's running section
+    offset encodes; the sheet keeps the section position as drawn.
+    """
+    frames = []
+    for series, line in drawn.items():
+        cell_type, _, chamber = str(series).partition(", ")
+        frames.append(
+            pd.DataFrame(
                 {
-                    "Gene": gene,
-                    "Cluster": cluster,
-                    "Mean_Expression": group["Expression"].mean(),
-                    "Fraction_Expressing": (group["Expression"] > 0).mean(),
+                    "Cell_Type": cell_type,
+                    "Chamber": chamber,
+                    "Section_Position_um": np.asarray(line["x"], dtype=float),
+                    "Cell_Count": np.asarray(line["y"], dtype=float),
                 }
             )
-    return pd.DataFrame(rows)
+        )
+    return _note(
+        pd.concat(frames, ignore_index=True),
+        "Note: mCherry counts are on the left axis and starter counts on the right one. "
+        "Section_Position_um runs continuously across chambers, as the panel draws it.",
+    )
+
+
+def _supp5_positions_sheet(drawn, xcol, ycol, note):
+    """Panels b and c — the cells each scatter drew, in the coordinates it drew them."""
+    table = pd.concat(
+        [
+            pd.DataFrame(
+                {
+                    "Cell_Group": group,
+                    xcol: np.asarray(scatter["x"], dtype=float),
+                    ycol: np.asarray(scatter["y"], dtype=float),
+                }
+            )
+            for group, scatter in drawn.items()
+        ],
+        ignore_index=True,
+    )
+    table, subsampled = _subsample_cells(table)
+    return _note(table, f"{note} {CELL_SUBSAMPLE_NOTE}" if subsampled else note)
+
+
+def _supp5_dotplot_sheet(drawn):
+    """Panel d — the dot plot's own colour and size values, as scanpy computed them."""
+    colors = pd.DataFrame(drawn["dot_color_df"])
+    sizes = pd.DataFrame(drawn["dot_size_df"])
+    long_colors = (
+        colors.rename_axis("Cluster")
+        .reset_index()
+        .melt(id_vars="Cluster", var_name="Gene", value_name="Scaled_Mean_Expression")
+    )
+    long_sizes = (
+        sizes.rename_axis("Cluster")
+        .reset_index()
+        .melt(id_vars="Cluster", var_name="Gene", value_name="Fraction_Expressing")
+    )
+    table = long_colors.merge(long_sizes, on=["Cluster", "Gene"], how="left")
+    return _note(
+        table,
+        "Note: Scaled_Mean_Expression is the dot colour, the mean expression rescaled "
+        "to 0-1 within each gene (scanpy's standard_scale='var'), not the raw mean. "
+        "Fraction_Expressing is the dot size.",
+    )
+
+
+def export_suppfig5_source_data(output_path, **kwargs):
+    panels = build_suppfig5_source_data(**kwargs)
+    notes = {
+        name: table.attrs[NOTE_ATTR]
+        for name, table in panels.items()
+        if NOTE_ATTR in getattr(table, "attrs", {})
+    }
+    return save_excel_sheets(
+        panels, output_path, notes_dict=notes, expected=SUPP5_PANELS
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -260,86 +395,104 @@ SUPP6_PANELS = [
 ]
 
 
-def export_suppfig6_source_data(
-    output_path,
-    adata=None,
-    group_key="custom_leiden",
-    chambers=("chamber_07",),
-    clusters_not_used=("Unassigned", "Zero_correlation", "VLMC"),
-    cortex_exclude=("fiber_tract", "non_cortical", "TH", "hippocampal"),
-    qc=None,
-    layer_tops=None,
-    x_min=1970,
-    x_max=2260,
-    bw_method=0.1,
-    atlas_size=10,
-):
-    """Supplementary Figure 6 — the per-cluster coronal scatter and depth KDE.
+#: Sheet note of the depth panel, whose curve is the only thing the panel draws.
+SUPP6_KDE_NOTE = (
+    "Note: the panel draws one Gaussian kernel density estimate of cortical depth per "
+    "cluster (scipy.stats.gaussian_kde, bw_method 0.1), evaluated on 200 depths "
+    "spanning the range observed in that cluster and scaled to its own maximum. The "
+    "curve is what the panel shows and is what is tabulated here; the per-cell depths "
+    "behind it are not drawn, and are deposited on Figshare instead (see "
+    "figshare_dataset.md). Only cells of the flatmap window of the panel contribute."
+)
 
-    The filtering mirrors `cell_typing.plot_cluster_mosaic` exactly, so the sheets hold
-    the cells actually drawn.
-    """
+
+def build_suppfig6_source_data(suppfig6_plotted_data=None):
+    """Build the panel dictionary for Supplementary Figure 6 from what it drew."""
+    plotted = dict(suppfig6_plotted_data or {})
+    if "cluster_mosaic" in plotted:
+        cm = plotted.pop("cluster_mosaic")
+        if isinstance(cm, dict):
+            for k, v in cm.items():
+                plotted[k] = v
+
+    if "depth_kde" in plotted and "cluster_depth_kde" not in plotted:
+        plotted["cluster_depth_kde"] = plotted.pop("depth_kde")
+
+    builders = (
+        ("cluster_positions", "Supp 6 Cluster positions", _supp6_positions_sheet),
+        ("cluster_depth_kde", "Supp 6 Cluster depth KDE", _supp6_depth_kde_sheet),
+    )
     panels = {}
-    if adata is None:
-        return save_excel_sheets(panels, output_path, expected=SUPP6_PANELS)
+    for key, sheet, build in builders:
+        drawn = plotted.get(key)
+        if drawn is not None:
+            df = build(drawn)
+            if df is not None:
+                panels[sheet] = df
 
-    if qc is None:
-        qc = dict(best_score=0.3, knn_agree_conf=0.3, raw_gene_counts=2)
-    if layer_tops is None:
-        layer_tops = {"wm": 957.0592130899}
+    return panels
 
-    obs = adata.obs
-    keep = (
-        ~obs[group_key].isin(list(clusters_not_used))
-        & obs["chamber"].isin(list(chambers))
-        & (~obs["cortical_area"].isna())
-        & ~obs["cortical_area"].isin(list(cortex_exclude))
-        & (obs["best_score"] > qc["best_score"])
-        & (obs["knn_agree_conf"] > qc["knn_agree_conf"])
-        & (obs["raw_gene_counts"] > qc["raw_gene_counts"])
-    )
-    plotted = obs[keep]
 
-    panels["Supp 6 Cluster positions"] = pd.DataFrame(
-        {
-            "Cluster": np.asarray(plotted[group_key]),
-            "ARA_Z_px": plotted["ara_z"].values * 1000 / atlas_size,
-            "ARA_Y_px": plotted["ara_y"].values * 1000 / atlas_size,
-        }
-    )
-
-    from scipy.stats import gaussian_kde
-
-    depth = plotted["normalised_depth"] * (layer_tops["wm"] / 2000.0)
-    flat_x = plotted["flatmap_dorsal_x"] / 10
-    in_region = (
-        (flat_x >= x_min)
-        & (flat_x <= x_max)
-        & (depth <= layer_tops["wm"])
-        & (depth >= 0)
-    )
-    frames = []
-    for cluster, group in plotted[in_region].groupby(group_key, observed=True):
-        values = (group["normalised_depth"] * (layer_tops["wm"] / 2000.0)).to_numpy()
-        if len(values) < 3:
-            continue
-        grid = np.linspace(values.min(), values.max(), 200)
-        density = gaussian_kde(values, bw_method=bw_method)(grid)
-        if density.max() > 0:
-            density = density / density.max()
-        frames.append(
-            pd.DataFrame(
-                {
-                    "Cluster": cluster,
-                    "Cortical_Depth_um": grid,
-                    "Normalised_Density": density,
-                }
-            )
+def _supp6_positions_sheet(drawn):
+    """The coronal scatter of every cluster panel, one row per plotted cell."""
+    if isinstance(drawn, pd.DataFrame):
+        return drawn
+    frames = [
+        pd.DataFrame(
+            {
+                "Cluster": cluster,
+                "ARA_Z_px": np.asarray(cluster_drawn["x"], dtype=float),
+                "ARA_Y_px": np.asarray(cluster_drawn["y"], dtype=float),
+            }
         )
-    if frames:
-        panels["Supp 6 Cluster depth KDE"] = pd.concat(frames, ignore_index=True)
+        for cluster, cluster_drawn in drawn.items()
+        if len(cluster_drawn["x"])
+    ]
+    if not frames:
+        return pd.DataFrame(columns=["Cluster", "ARA_Z_px", "ARA_Y_px"])
+    table = pd.concat(frames, ignore_index=True)
+    table, subsampled = _subsample_cells(table)
+    note = (
+        "Note: coordinates are Allen CCF positions in 10 um voxels, as plotted. Each "
+        "cluster is one panel of the mosaic."
+    )
+    if subsampled:
+        note = f"{note} {CELL_SUBSAMPLE_NOTE}"
+    return _note(table, note)
 
-    return save_excel_sheets(panels, output_path, expected=SUPP6_PANELS)
+
+def _supp6_depth_kde_sheet(drawn):
+    """The depth density curve drawn beside each cluster panel, as evaluated.
+
+    `plot_cluster_mosaic` draws the curve with the density on the x axis and the depth
+    on the y axis, which is the order the arrays come back in.
+    """
+    if isinstance(drawn, pd.DataFrame):
+        return drawn
+    frames = [
+        pd.DataFrame(
+            {
+                "Cluster": cluster,
+                "Cortical_Depth_um": np.asarray(cluster_drawn["y"], dtype=float),
+                "Normalised_Density": np.asarray(cluster_drawn["x"], dtype=float),
+            }
+        )
+        for cluster, cluster_drawn in drawn.items()
+    ]
+    table = pd.concat(frames, ignore_index=True)
+    return _note(table, SUPP6_KDE_NOTE)
+
+
+def export_suppfig6_source_data(output_path, **kwargs):
+    panels = build_suppfig6_source_data(**kwargs)
+    notes = {
+        name: table.attrs[NOTE_ATTR]
+        for name, table in panels.items()
+        if NOTE_ATTR in getattr(table, "attrs", {})
+    }
+    return save_excel_sheets(
+        panels, output_path, notes_dict=notes, expected=SUPP6_PANELS
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -350,103 +503,128 @@ SUPP8_PANELS = [
     "Supp 8a Library abundance KDE",
     "Supp 8b Density difference",
     "Supp 8c Pairwise distances",
-    "Supp 8c Median distances",
 ]
 
+#: Keys of ``suppfig8_plotted_data`` that carry no worksheet. The bootstrap medians and
+#: their confidence interval reach the panel only as marker positions and significance
+#: brackets -- the interval's own plotting call is commented out in the notebook -- so
+#: they are printed statistics rather than drawn data.
+SUPP8_IMAGE_KEYS = ()
 
-def export_suppfig8_source_data(
-    output_path,
-    x_grid_kde=None,
-    dens_lib=None,
-    dens_all=None,
-    dens_multi=None,
-    ci_low_kde=None,
-    ci_up_kde=None,
-    diff_all=None,
-    diff_multi=None,
-    ci_low_diff=None,
-    ci_up_diff=None,
-    dist2others=None,
-    dist2same=None,
-    not_adj=None,
-    median_distances=None,
-    p_val_same=None,
-    p_val_exl=None,
-):
-    """Supplementary Figure 8 — all arguments are variables of the notebook."""
-    panels = {}
 
-    if x_grid_kde is not None and dens_lib is not None:
+def build_suppfig8_source_data(suppfig8_plotted_data=None):
+    """Build the panel dictionary for Supplementary Figure 8 from what it drew.
+
+    Args:
+        suppfig8_plotted_data (dict): The notebook's ``suppfig8_plotted_data``, with one
+            entry per panel: ``"library_abundance_kde"`` and ``"density_difference"``
+            (one curve per series, the multi-starter one carrying the drawn confidence
+            band), and ``"pairwise_distances"`` (one kernel density estimate per
+            comparison, with the median marker drawn above it).
+
+    Returns:
+        dict: Sheet name to DataFrame, with worksheet notes in ``DataFrame.attrs``.
+    """
+    plotted = suppfig8_plotted_data or {}
+    builders = (
+        ("library_abundance_kde", "Supp 8a Library abundance KDE", _supp8_kde_sheet),
+        ("density_difference", "Supp 8b Density difference", _supp8_difference_sheet),
+        ("pairwise_distances", "Supp 8c Pairwise distances", _supp8_pairwise_sheet),
+    )
+    panels = {
+        sheet: build(plotted[key]) for key, sheet, build in builders if plotted.get(key)
+    }
+
+    known = {key for key, _, _ in builders} | set(SUPP8_IMAGE_KEYS)
+    unknown = [key for key in plotted if key not in known]
+    if unknown:
+        print(f"[Source Data] !! Supp 8: no sheet for plotted panels {unknown}")
+
+    return panels
+
+
+def _supp8_curve_sheet(drawn, xcol, ycol, note):
+    """One row per point of every curve of a panel, plus its drawn confidence band.
+
+    The band is stored against the series it belongs to, so a reader can tell which
+    curve it shades; series without a band leave those cells empty.
+    """
+    frames = []
+    for series, curve in drawn.items():
+        if not isinstance(curve, dict) or "x" not in curve:
+            continue  # scalars such as total_read_in_library, handled by the note
         table = pd.DataFrame(
             {
-                "Log10_Library_Reads": x_grid_kde,
-                "Library_Barcodes_Density": dens_lib,
-                "All_In_Situ_Barcodes_Density": dens_all,
-                "Multi_Starter_Barcodes_Density": dens_multi,
+                "Series": series,
+                xcol: np.asarray(curve["x"], dtype=float),
+                ycol: np.asarray(curve["y"], dtype=float),
             }
         )
-        if ci_low_kde is not None:
-            table["Multi_Starter_CI_Lower"] = ci_low_kde
-            table["Multi_Starter_CI_Upper"] = ci_up_kde
-        panels["Supp 8a Library abundance KDE"] = table
+        if curve.get("ci_lower") is not None:
+            table["CI_Lower"] = np.asarray(curve["ci_lower"], dtype=float)
+            table["CI_Upper"] = np.asarray(curve["ci_upper"], dtype=float)
+        frames.append(table)
+    return _note(pd.concat(frames, ignore_index=True), note)
 
-    if x_grid_kde is not None and diff_multi is not None:
+
+def _supp8_kde_sheet(drawn):
+    """Panel a — the three read-abundance densities, as drawn."""
+    note = (
+        "Note: the x axis is the log10 read count of a barcode in the viral library; "
+        "the panel labels it as a proportion of the library's unique reads, dividing "
+        "by a total of {total:,.0f} reads. CI_Lower/CI_Upper are the bootstrap band "
+        "drawn around the multiple-starter curve only."
+    )
+    total = drawn.get("total_read_in_library")
+    note = note.format(total=total) if total else note.split(". CI_")[0] + "."
+    return _supp8_curve_sheet(drawn, "Log10_Library_Reads", "Density", note)
+
+
+def _supp8_difference_sheet(drawn):
+    """Panel b — each density minus the library density, as drawn."""
+    return _supp8_curve_sheet(
+        drawn,
+        "Log10_Library_Reads",
+        "Density_Difference",
+        "Note: CI_Lower/CI_Upper are the bootstrap band drawn around the "
+        "multiple-starter curve only. The dashed line at zero is a reference, not data.",
+    )
+
+
+def _supp8_pairwise_sheet(drawn):
+    """Panel c — the distance densities, each with the median marker drawn above it."""
+    frames = []
+    for comparison, curve in drawn.items():
         table = pd.DataFrame(
             {
-                "Log10_Library_Reads": x_grid_kde,
-                "All_In_Situ_Minus_Library": diff_all,
-                "Multi_Starter_Minus_Library": diff_multi,
+                "Comparison": comparison,
+                "Distance_Between_Starters_mm": np.asarray(curve["x"], dtype=float),
+                "Density": np.asarray(curve["y"], dtype=float),
             }
         )
-        if ci_low_diff is not None:
-            table["Multi_Starter_CI_Lower"] = ci_low_diff
-            table["Multi_Starter_CI_Upper"] = ci_up_diff
-        panels["Supp 8b Density difference"] = table
+        median = curve.get("median")
+        if median is not None:
+            table["Median_Distance_mm"] = median["x"]
+        frames.append(table)
+    return _note(
+        pd.concat(frames, ignore_index=True),
+        "Note: Median_Distance_mm is constant within a comparison; it is the median of "
+        "that distribution, drawn as a marker above the curves. The significance "
+        "brackets of the panel are drawn from tests whose values the figure does not "
+        "show, so they are not tabulated.",
+    )
 
-    if dist2others is not None and dist2same is not None:
-        from scipy.stats import gaussian_kde
 
-        grid = np.arange(0, 2, 0.01)
-        series = {
-            "Different barcode": np.asarray(dist2others),
-            "Same barcode": np.asarray(dist2same),
-        }
-        if not_adj is not None:
-            series["Same barcode, excluding adjacent"] = np.asarray(dist2same)[not_adj]
-        frames = []
-        for label, values in series.items():
-            frames.append(
-                pd.DataFrame(
-                    {
-                        "Comparison": label,
-                        "Distance_Between_Starters_mm": grid,
-                        "Density": gaussian_kde(values, bw_method=0.2)(grid),
-                        "Median_Distance_mm": np.nanmedian(values),
-                    }
-                )
-            )
-        panels["Supp 8c Pairwise distances"] = pd.concat(frames, ignore_index=True)
-
-    if median_distances is not None:
-        rows = []
-        p_values = {
-            "med2same": p_val_same,
-            "med2same_excluding_adjacent": p_val_exl,
-        }
-        for name, boot in median_distances.items():
-            boot = np.asarray(boot)
-            rows.append(
-                {
-                    "Comparison": name,
-                    "Bootstrap_Median_mm": np.nanmedian(boot),
-                    "CI_Lower_mm": np.percentile(boot, 2.5),
-                    "CI_Upper_mm": np.percentile(boot, 97.5),
-                    "P_Value_Vs_Different_Barcode": p_values.get(name, np.nan),
-                }
-            )
-        panels["Supp 8c Median distances"] = pd.DataFrame(rows)
-
-    return save_excel_sheets(panels, output_path, expected=SUPP8_PANELS)
+def export_suppfig8_source_data(output_path, **kwargs):
+    panels = build_suppfig8_source_data(**kwargs)
+    notes = {
+        name: table.attrs[NOTE_ATTR]
+        for name, table in panels.items()
+        if NOTE_ATTR in getattr(table, "attrs", {})
+    }
+    return save_excel_sheets(
+        panels, output_path, notes_dict=notes, expected=SUPP8_PANELS
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -459,16 +637,22 @@ SUPP9_PANELS = [
 ]
 
 
-def export_suppfig9_source_data(output_path, results=None):
-    """Supplementary Figure 9.
+def build_suppfig9_source_data(suppfig9_plotted_data=None):
+    """Build the panel dictionary for Supplementary Figure 9 from what it drew.
 
     Args:
-        results (dict): Output of
-            `double_labeling_estimation.run_double_labeling_analysis`.
+        suppfig9_plotted_data (dict): Notebook's ``suppfig9_plotted_data`` dict
+            or results.
+
+    Returns:
+        dict: Sheet name to DataFrame.
     """
+    plotted = suppfig9_plotted_data or {}
     panels = {}
-    if results is None:
-        return save_excel_sheets(panels, output_path, expected=SUPP9_PANELS)
+    if "results" in plotted:
+        results = plotted["results"]
+    else:
+        results = plotted
 
     adata_region = results.get("adata_region")
     if adata_region is not None:
@@ -481,6 +665,8 @@ def export_suppfig9_source_data(output_path, results=None):
             if extra in obs:
                 table[extra] = obs[extra].values
         panels["Supp 9a Injection site cells"] = table
+    elif "injection_site" in results:
+        panels["Supp 9a Injection site cells"] = pd.DataFrame(results["injection_site"])
 
     observed = results.get("observed")
     expected = results.get("expected")
@@ -496,15 +682,23 @@ def export_suppfig9_source_data(output_path, results=None):
         if results.get("lambda_hat") is not None:
             table["Lambda_Hat"] = results["lambda_hat"]
         panels["Supp 9b Observed vs expected"] = table
+    elif "observed_vs_expected" in results:
+        panels["Supp 9b Observed vs expected"] = pd.DataFrame(
+            results["observed_vs_expected"]
+        )
 
-    for key, sheet in (
-        ("summary_df", "Supp 9 Summary"),
-        ("excess_df", "Supp 9 Excess"),
-    ):
-        value = results.get(key)
-        if isinstance(value, pd.DataFrame):
-            panels[sheet] = value.reset_index()
+    return panels
 
+
+def export_suppfig9_source_data(output_path, suppfig9_plotted_data=None, results=None):
+    """Supplementary Figure 9."""
+    if suppfig9_plotted_data is not None:
+        data = suppfig9_plotted_data
+    elif results is not None:
+        data = results
+    else:
+        data = {}
+    panels = build_suppfig9_source_data(data)
     return save_excel_sheets(panels, output_path, expected=SUPP9_PANELS)
 
 
@@ -518,70 +712,151 @@ SUPP_REVIEWER_PANELS = [
     "Rev d Smoothed starter map",
     "Rev e Starter vs presyn ML",
     "Rev e Running average and CI",
-    "Rev f Presynaptic elevation",
     "Rev f Elevation running avg",
 ]
 
+#: Keys of ``reviewer_plotted_data`` that belong to an image panel. The flatmap outlines
+#: of panels b, c and d, the elevation retinotopy inset of panel d and the dashed
+#: contour of the data-coverage hull drawn on that inset are atlas images and drawing
+#: geometry,
+#: not measurements, so they have no worksheet. Listed so that a key added later is
+#: noticed rather than silently dropped.
+SUPP_REVIEWER_IMAGE_KEYS = ("retinotopy_map",)
 
-def export_suppfig_reviewer_source_data(
-    output_path,
-    v1_starter_cells=None,
-    presy_xy=None,
-    presy_azel=None,
-    starter_pos_ara_x=None,
-    center_abs_x=None,
-    scale=0.01,
-    ctx_img=None,
-    ctx_mask=None,
-    xlim=(150, 1050),
-    ylim=(810, 1330),
-    x_calc=None,
-    pres_vs_start_kde=None,
-    conf_int=None,
-    ele_kde=None,
-    mean_position=None,
-):
-    """Supplementary reviewer figure — Figure 6 repeated along elevation / A-P.
+#: Panel b draws the presynaptic cells of panel c again, in grey behind the starters.
+REV_B_NOTE = (
+    "Note: the starter cells are drawn coloured by their antero-posterior position "
+    "(Starter_AP_Position_mm, turbo colour map, 8.5 to 8.9 mm). The grey cloud drawn "
+    "behind them is the presynaptic population of panel c; it is not repeated here, "
+    "see the 'Rev c Presynaptic positions' worksheet."
+)
 
-    Starter position is the antero-posterior atlas coordinate (``ara_x``, in mm) rather
-    than the relative medio-lateral flatmap position, and the running average is over
-    receptive-field elevation.
+#: The smoothed map is an image whose opacity carries the local data support.
+REV_D_NOTE = (
+    "Note: Gaussian-smoothed mean starter antero-posterior position (mm) of the "
+    "presynaptic cells at each flatmap location, drawn as the panel image. Column "
+    "headers are flatmap X, the first column is flatmap Y; rows run from the bottom of "
+    "the panel upwards. Blank cells lie outside the area covered by presynaptic cells "
+    "and are not drawn. Inside it, the panel additionally fades pixels supported by "
+    "few cells (opacity proportional to the summed Gaussian weight, saturating at 50), "
+    "which is a display property of the image rather than a measurement."
+)
+
+#: What the shaded band and the dashed line of panel e are.
+REV_E_NOTE = (
+    "Note: Shuffle_Lower and Shuffle_Upper are the 2.5th and 97.5th percentiles of "
+    "1,000 bootstrap resamplings of the starter cells, drawn as the shaded band; the "
+    "individual resamplings are not drawn and are not given. "
+    "Mean_Starter_AP_Position_mm is constant: it is the mean starter position over all "
+    "presynaptic cells, drawn as the dashed horizontal line."
+)
+
+#: Panel f draws the running average only, not the per-cell elevations behind it.
+REV_F_NOTE = (
+    "Note: the panel draws the Gaussian-weighted running average of the receptive "
+    "field elevation of the presynaptic cells against their medio-lateral position. "
+    "The per-cell elevation values that go into the average are not drawn in this "
+    "panel and so are not given here; the elevation map they are read from is the "
+    "Allen atlas retinotopy shown as the inset of panel d."
+)
+
+
+def build_suppfig_reviewer_source_data(reviewer_plotted_data=None):
+    """Build the reviewer figure's panels from what the figure actually drew.
+
+    The figure repeats Figure 6 along the antero-posterior axis and elevation: the
+    starter value is the antero-posterior atlas coordinate (``ara_x``, in mm) rather
+    than the relative medio-lateral flatmap position, and the running average of panel f
+    is over receptive-field elevation. As for Figure 6, the notebook collects every
+    drawn series in ``reviewer_plotted_data``, so each sheet holds the arrays handed
+    to matplotlib rather than a second, re-derived copy of them. Nothing that is not
+    drawn enters the workbook: the cell identifiers, the individual bootstrap
+    resamplings behind the shuffle band of panel e, the per-cell receptive-field
+    elevations that only enter panel f through their running average and the atlas
+    images are all dropped.
+
+    Args:
+        reviewer_plotted_data (dict): The notebook's ``reviewer_plotted_data``, with
+            keys ``"starter_positions"`` (panel b), ``"presynaptic_positions"``
+            (panel c), ``"smoothed_starter_map"`` (panel d),
+            ``"starter_vs_presyn_ap"`` (panel e, both its scatter and its running
+            average) and ``"elevation_running_average"`` (panel f). Image-only keys are
+            listed in :data:`SUPP_REVIEWER_IMAGE_KEYS`.
+
+    Returns:
+        dict: Sheet name to DataFrame. Sheets needing a worksheet note carry it in
+        ``DataFrame.attrs``.
     """
-
-    def rel_pos_x(x):
-        return -(np.asarray(x) - center_abs_x)
-
-    starter_values = None
-    if v1_starter_cells is not None and "ara_x" in v1_starter_cells.columns:
-        starter_values = v1_starter_cells["ara_x"].values
-
-    panels = build_long_range_source_data(
-        prefix="Rev",
-        v1_starter_cells=v1_starter_cells,
-        starter_panel_values=starter_values,
-        presy_xy=presy_xy,
-        presyn_panel_values=starter_pos_ara_x,
-        starter_value_label="Starter_AP_Position_mm",
-        presynaptic_axis_values=(
-            None
-            if presy_xy is None or center_abs_x is None
-            else rel_pos_x(presy_xy[0]) * scale
+    plotted = reviewer_plotted_data or {}
+    # Plotted key, sheet, and what turns one into the other; in panel order. Panel e
+    # gives two sheets, its scatter and its running average, from the same key.
+    builders = (
+        (
+            "starter_positions",
+            "Rev b Starter positions",
+            partial(
+                _longrange_flatmap_sheet,
+                value="Starter_AP_Position_mm",
+                note=REV_B_NOTE,
+            ),
         ),
-        ctx_img=ctx_img,
-        ctx_mask=ctx_mask,
-        xlim=xlim,
-        ylim=ylim,
-        running_average_x=(
-            None
-            if x_calc is None or center_abs_x is None
-            else rel_pos_x(x_calc) * scale
+        (
+            "presynaptic_positions",
+            "Rev c Presynaptic positions",
+            partial(_longrange_flatmap_sheet, value="Starter_AP_Position_mm"),
         ),
-        running_average=pres_vs_start_kde,
-        conf_int=conf_int,
-        mean_position=mean_position,
-        retinotopy=None if presy_azel is None else np.asarray(presy_azel)[1],
-        retinotopy_label="Receptive_Field_Elevation_deg",
-        retinotopy_name="Elevation",
-        retinotopy_running_average=ele_kde,
+        (
+            "smoothed_starter_map",
+            "Rev d Smoothed starter map",
+            partial(_longrange_smoothed_map_sheet, note=REV_D_NOTE),
+        ),
+        (
+            "starter_vs_presyn_ap",
+            "Rev e Starter vs presyn ML",
+            partial(_longrange_scatter_sheet, value="Starter_AP_Position_mm"),
+        ),
+        (
+            "starter_vs_presyn_ap",
+            "Rev e Running average and CI",
+            partial(
+                _longrange_running_average_sheet,
+                value="Running_Average_Starter_AP_mm",
+                mean_column="Mean_Starter_AP_Position_mm",
+                note=REV_E_NOTE,
+            ),
+        ),
+        (
+            "elevation_running_average",
+            "Rev f Elevation running avg",
+            partial(
+                _longrange_running_average_sheet,
+                value="Running_Average_Elevation_deg",
+                note=REV_F_NOTE,
+            ),
+        ),
     )
-    return save_excel_sheets(panels, output_path, expected=SUPP_REVIEWER_PANELS)
+    panels = {
+        sheet: build(plotted[key]) for key, sheet, build in builders if plotted.get(key)
+    }
+
+    known = {key for key, _, _ in builders} | set(SUPP_REVIEWER_IMAGE_KEYS)
+    unknown = [key for key in plotted if key not in known]
+    if unknown:
+        print(
+            "[Source Data] !! Reviewer figure: no sheet for plotted "
+            f"panels {unknown}"
+        )
+
+    return panels
+
+
+def export_suppfig_reviewer_source_data(output_path, **kwargs):
+    panels = build_suppfig_reviewer_source_data(**kwargs)
+    notes = {
+        name: table.attrs[NOTE_ATTR]
+        for name, table in panels.items()
+        if NOTE_ATTR in getattr(table, "attrs", {})
+    }
+    return save_excel_sheets(
+        panels, output_path, notes_dict=notes, expected=SUPP_REVIEWER_PANELS
+    )

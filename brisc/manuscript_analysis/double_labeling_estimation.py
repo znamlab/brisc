@@ -426,8 +426,13 @@ def bootstrap_excess_test(
             bootstrap sample (recommended for goodness-of-fit).
 
     Returns:
-        pandas.DataFrame with one row per tested category plus one
-        "combined" row.
+        pandas.DataFrame with one row per tested category plus one "combined" row,
+        holding the observed and expected counts, their difference (``surplus``), the
+        bootstrap ``p_value``, and the observed-over-expected ``ratio`` with a 95%
+        confidence interval (``ratio_ci_lo``/``ratio_ci_hi``). The p-value comes from
+        replicates drawn under the null; the ratio interval comes from resampling the
+        observed cells, since the null replicates say nothing about how precisely the
+        observed ratio is measured. Both use ``n_boot`` replicates and the same seed.
     """
     rng = np.random.default_rng(random_state)
     n = int(observed.sum())
@@ -466,6 +471,40 @@ def bootstrap_excess_test(
             comb_exp_b += exp_b
         sim_stats["combined"][b] = comb_count_b - comb_exp_b
 
+    # Observed-over-expected ratio, with a confidence interval from resampling the
+    # cells. The replicates above simulate under the null, so their spread describes
+    # H0, not the uncertainty of the observed ratio; these ones resample the observed
+    # count distribution instead, refitting lambda each time, which is what a
+    # confidence interval for that ratio needs.
+    empirical = np.asarray(observed, dtype=float)
+    empirical = empirical / empirical.sum()
+    k_vals = np.array([0, 1, 2, 3, 4, 5], dtype=float)
+    ratio_boot = {k: np.empty(n_boot) for k in list(cats) + ["combined"]}
+    for b in range(n_boot):
+        counts_b = rng.multinomial(n, empirical)
+        lam_b = float((k_vals * counts_b).sum() / n)
+        comb_obs_b = 0.0
+        comb_exp_b = 0.0
+        for k in cats:
+            idx = min(k, 5)
+            exp_b = n * _poisson_prob(lam_b, k)
+            ratio_boot[k][b] = counts_b[idx] / exp_b if exp_b > 0 else np.nan
+            comb_obs_b += counts_b[idx]
+            comb_exp_b += exp_b
+        ratio_boot["combined"][b] = (
+            comb_obs_b / comb_exp_b if comb_exp_b > 0 else np.nan
+        )
+
+    def _ratio_ci(key):
+        """The 2.5th and 97.5th percentile of the resampled ratio."""
+        values = ratio_boot[key][np.isfinite(ratio_boot[key])]
+        if not values.size:
+            return np.nan, np.nan
+        return (
+            round(float(np.percentile(values, 2.5)), 4),
+            round(float(np.percentile(values, 97.5)), 4),
+        )
+
     # Assemble results
     rows = []
     for k in cats:
@@ -477,6 +516,7 @@ def bootstrap_excess_test(
             p_value = min(1, 2 * min(p_excess, p_deficit))
         else:
             p_value = float((1 + np.sum(sim_stats[k] >= obs_stats[k])) / (n_boot + 1))
+        ci_lo, ci_hi = _ratio_ci(k)
         rows.append(
             dict(
                 category=str(k),
@@ -484,6 +524,9 @@ def bootstrap_excess_test(
                 expected=round(exp_k, 2),
                 surplus=round(obs_stats[k], 2),
                 p_value=round(p_value, 4),
+                ratio=round(float(observed[idx]) / exp_k, 4) if exp_k > 0 else np.nan,
+                ratio_ci_lo=ci_lo,
+                ratio_ci_hi=ci_hi,
             )
         )
 
@@ -499,6 +542,7 @@ def bootstrap_excess_test(
         p_comb = float(
             (1 + np.sum(sim_stats["combined"] >= obs_stats["combined"])) / (n_boot + 1)
         )
+    ci_lo, ci_hi = _ratio_ci("combined")
     rows.append(
         dict(
             category=("combined(" + "+".join(str(k) for k in cats) + ")"),
@@ -506,6 +550,13 @@ def bootstrap_excess_test(
             expected=round(obs_combined_exp, 2),
             surplus=round(obs_stats["combined"], 2),
             p_value=round(p_comb, 4),
+            ratio=(
+                round(obs_combined / obs_combined_exp, 4)
+                if obs_combined_exp > 0
+                else np.nan
+            ),
+            ratio_ci_lo=ci_lo,
+            ratio_ci_hi=ci_hi,
         )
     )
     df = pd.DataFrame(rows)
@@ -643,6 +694,11 @@ def plot_observed_vs_expected_log(
     ax.set_yscale("log")
     ax.set_ylabel("Number of cells", fontsize=label_fontsize)
     ax.set_ylim(bottom=0.5)
+    ax.plotted_element = {
+        "observed": observed,
+        "expected": expected,
+        "lambda_hat": lambda_hat,
+    }
     return ax
 
 
@@ -1053,6 +1109,11 @@ def plot_injection_site(
     ax.tick_params(labelsize=tick_fontsize)
     ax.legend(fontsize=legend_fontsize, frameon=False)
     despine(ax)
+    ax.plotted_element = {
+        "center": center,
+        "region_info": region_info,
+        "adata_region": adata_region,
+    }
     return ax
 
 

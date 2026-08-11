@@ -47,6 +47,12 @@ def plot_starter_dilution_densities(
         tick_fontsize (int, optional): Font size for tick labels. Defaults to 12.
         data_root (pathlib.Path, optional): The base path to the processed
             project data. Defaults to None (auto-find in lab).
+
+    Returns:
+        dict: `plotted_element` with the individual per-mouse densities of the strip
+            plot and the mean line the box plot draws for each dilution, plus the
+            dilution order and the x tick labels. The mouse identifiers and the raw
+            cell counts behind each density are not drawn and are not returned.
     """
 
     atlas_size = 25
@@ -215,6 +221,25 @@ def plot_starter_dilution_densities(
         fontsize=label_fontsize,
     )
     despine(ax)
+    means = v1.groupby("dilution", observed=True)["density"].mean().reindex(order)
+    return dict(
+        individual=dict(
+            x=np.asarray(v1["dilution"]),
+            y=np.asarray(v1["density"]),
+            color="lightgray",
+            xlabel=xlabel if isinstance(xlabel, str) else xlabel[0],
+            ylabel="Cell density (mm^-3)",
+        ),
+        mean=dict(
+            x=np.asarray(means.index),
+            y=np.asarray(means.values),
+            color="grey",
+            xlabel=xlabel if isinstance(xlabel, str) else xlabel[0],
+            ylabel="Cell density (mm^-3)",
+        ),
+        dilution_order=list(order),
+        tick_labels=list(xtlabel),
+    )
 
 
 def load_confocal_image(image_fname):

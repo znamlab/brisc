@@ -626,14 +626,19 @@ def _plot_pairwise_distances(df, sheet_name, source_name):
     return fig
 
 
-def _fig1_abundance_draw(panel):
-    """The draw callable of the rank-abundance panel ``panel`` (``"1d"``, ...)."""
+def _abundance_draw(colors, box_aspect):
+    """The draw callable of a rank-abundance panel, on the axes Figure 1 established.
+
+    Supplementary Figure 4a draws the same quantity on the same axes, with its own
+    colours and proportions, which is why the two are arguments rather than a panel
+    letter looked up in :data:`FIG1_LIBRARY_COLORS` and :data:`FIG1_BOX_ASPECT`.
+    """
     return partial(
         _plot_panel_curves,
         xcol="Barcode_Index",
         ycol="Barcode_Abundance",
         group_col="Library",
-        colors=FIG1_LIBRARY_COLORS[panel],
+        colors=colors,
         drawstyle="steps-pre",
         xscale="log",
         yscale="log",
@@ -641,18 +646,22 @@ def _fig1_abundance_draw(panel):
         ylim=(0.8, 1e6),
         xticks=np.logspace(0, 8, 9),
         yticks=np.logspace(0, 6, 7),
-        box_aspect=FIG1_BOX_ASPECT[panel],
+        box_aspect=box_aspect,
     )
 
 
-def _fig1_unique_draw(panel, max_cells):
-    """The draw callable of the unique-fraction panel ``panel`` (``"1e"``, ...)."""
+def _unique_draw(colors, box_aspect, max_cells):
+    """The draw callable of a unique-fraction panel, on the axes Figure 1 established.
+
+    Shared with Supplementary Figure 4b; see :func:`_abundance_draw` for why the colours
+    and proportions are passed in.
+    """
     return partial(
         _plot_panel_curves,
         xcol="Number_Of_Infections",
         ycol="Proportion_Uniquely_Labeled",
         group_col="Library",
-        colors=FIG1_LIBRARY_COLORS[panel],
+        colors=colors,
         xscale="log",
         xlim=(1, max_cells),
         ylim=(0.5, 1.02),
@@ -660,8 +669,18 @@ def _fig1_unique_draw(panel, max_cells):
         # powers.
         xticks=_decade_ticks(max_cells),
         yticks=[0.5, 0.75, 1.0],
-        box_aspect=FIG1_BOX_ASPECT[panel],
+        box_aspect=box_aspect,
     )
+
+
+def _fig1_abundance(panel):
+    """The rank-abundance draw callable of Figure 1 ``panel`` (``"1d"``, ...)."""
+    return _abundance_draw(FIG1_LIBRARY_COLORS[panel], FIG1_BOX_ASPECT[panel])
+
+
+def _fig1_unique(panel, max_cells):
+    """The unique-fraction draw callable of Figure 1 ``panel`` (``"1e"``, ...)."""
+    return _unique_draw(FIG1_LIBRARY_COLORS[panel], FIG1_BOX_ASPECT[panel], max_cells)
 
 
 # ---------------------------------------------------------------------------
@@ -1159,65 +1178,143 @@ def _plot_fig3_mcherry(df, sheet_name, source_name):
 
 
 # ---------------------------------------------------------------------------
-# Figure 6 -- panels whose geometry cannot be inferred from the sheet alone
+# Long-range panels -- Figure 6 and the supplementary reviewer figure
 # ---------------------------------------------------------------------------
 
-#: Colour map and value range shared by the starter medio-lateral position of panels b,
-#: c and d, as the notebook draws them.
-FIG6_CMAP = "turbo_r"
-FIG6_CLIM = (-1.0, 1.0)
+# The two long-range figures draw the same six panels of different quantities: Figure 6
+# along the medio-lateral axis and receptive-field azimuth, the supplementary reviewer
+# figure along the antero-posterior axis and elevation. Everything that differs between
+# them lives in LONG_RANGE_STYLES, and the value column is resolved from the sheet, so
+# the drawing functions below serve both.
 
-#: Flatmap window of each panel, ``(xlim, ylim)`` in flatmap pixels and in the order the
-#: notebook sets them: both axes are inverted, so the redrawn panel keeps the
-#: orientation of the published one. Panel b is the zoomed inset around V1.
-FIG6_FLATMAP_WINDOW = {
-    "6b": ((800, 400), (1200, 950)),
-    "6c": ((1050, 150), (1330, 810)),
-    "6d": ((1050, 150), (1330, 810)),
+#: Per-figure style of the long-range panels, as the two notebooks draw them.
+#: ``windows`` is the flatmap window of panels b, c and d, ``(xlim, ylim)`` in flatmap
+#: pixels and in the order the notebook sets them: both axes are inverted, so it keeps
+#: the orientation of the published one, and panel b is the zoomed inset around V1.
+#: ``box_aspect`` is the height/width ratio of the two graph panels' axes boxes; both
+#: figures are laid out at 8.8 x 20.0 cm with `fig.add_axes`, so a panel of width ``w``
+#: and height ``h`` in figure fractions has a box aspect of ``h * 20.0 / (w * 8.8)``.
+#: ``retinotopy`` is the axis of panel f. The two figures share their flatmap windows,
+#: proportions, presynaptic-position axis and curve colour; they differ in colour map,
+#: value range, what the value is and which retinotopic quantity panel f averages.
+LONG_RANGE_STYLES = {
+    "fig6": dict(
+        cmap="turbo_r",
+        clim=(-1.0, 1.0),
+        value_label="Starter ML position (mm)",
+        axis_label="Presynaptic ML position (mm)",
+        axis_lim=(-4.5, 4.5),
+        axis_ticks=(-4, 0, 4),
+        windows={
+            "b": ((800, 400), (1200, 950)),
+            "c": ((1050, 150), (1330, 810)),
+            "d": ((1050, 150), (1330, 810)),
+        },
+        box_aspect={
+            "e": 0.57,  # [0.8, 0.20]
+            "f": 0.26,  # [0.8, 0.09]
+        },
+        curve_color="darkorchid",
+        retinotopy=dict(
+            label="Receptive field azimuth (degrees)",
+            lim=(0, 60),
+            ticks=(0, 30, 60),
+        ),
+    ),
+    "reviewer": dict(
+        cmap="turbo",
+        clim=(8.5, 8.9),
+        value_label="Starter AP position (mm)",
+        axis_label="Presynaptic ML position (mm)",
+        axis_lim=(-4.5, 4.5),
+        axis_ticks=(-4, 0, 4),
+        windows={
+            "b": ((800, 400), (1200, 950)),
+            "c": ((1050, 150), (1330, 810)),
+            "d": ((1050, 150), (1330, 810)),
+        },
+        box_aspect={
+            "e": 0.57,  # [0.8, 0.20]
+            "f": 0.26,  # [0.8, 0.09]
+        },
+        curve_color="darkorchid",
+        retinotopy=dict(
+            label="Receptive field elevation (degrees)",
+            lim=(-20, 20),
+            ticks=(-20, 0, 20),
+        ),
+    ),
 }
 
-#: Height/width ratio of the two graph panels' axes boxes. Figure 6 is laid out at
-#: 8.8 x 20.0 cm with `fig.add_axes`, so a panel of width ``w`` and height ``h`` in
-#: figure fractions has a box aspect of ``h * 20.0 / (w * 8.8)``.
-FIG6_BOX_ASPECT = {
-    "6e": 0.57,  # [0.8, 0.20]
-    "6f": 0.26,  # [0.8, 0.09]
-}
+#: Name of the presynaptic-position column of the two graph panels, in both figures. The
+#: quantity is the same in both: the medio-lateral flatmap position of the presynaptic
+#: cells, in mm, which is what the panels label their x axis with.
+LONG_RANGE_AXIS_COLUMN = "Presynaptic_ML_mm"
 
-#: Colour of the running average and of its shuffle band in panel e.
-FIG6E_COLOR = "darkorchid"
+#: Flatmap coordinate columns, which every other numeric column of a flatmap sheet is
+#: measured against.
+LONG_RANGE_FLATMAP_COLUMNS = ("Flatmap_X", "Flatmap_Y")
 
 
-def _fig6_flatmap_figsize(window, width=4.2):
+def _long_range_value_column(df, exclude=()):
+    """The value column of a long-range sheet: its numeric column that is not an axis.
+
+    Resolved from the sheet rather than named, so that the two figures can label their
+    value columns after the quantity they draw (starter medio-lateral position in
+    Figure 6, antero-posterior position in the reviewer figure) without either figure's
+    drawing code knowing the other's names.
+    """
+    for column in df.columns:
+        if str(column) in set(exclude) or not _is_numeric(df[column]):
+            continue
+        return column
+    raise KeyError(f"no value column in {list(df.columns)}")
+
+
+def _long_range_prefixed_column(df, prefix):
+    """The one column of a long-range sheet whose name starts with ``prefix``."""
+    return next((c for c in df.columns if str(c).startswith(prefix)), None)
+
+
+def _long_range_value_ticks(clim):
+    """Colour-bar and value-axis ticks: the ends of the drawn range and its midpoint."""
+    return [clim[0], (clim[0] + clim[1]) / 2, clim[1]]
+
+
+def _long_range_flatmap_figsize(window, width=4.2):
     """Figure size holding the given flatmap window at an equal aspect ratio."""
     (x0, x1), (y0, y1) = window
     # the extra height is the title, the x label and the colour bar below it
     return (width, (width - 1.2) * abs(y1 - y0) / abs(x1 - x0) + 2.2)
 
 
-def _fig6_colorbar(fig, mappable, ax):
-    """The horizontal colour bar of the starter medio-lateral position."""
+def _long_range_colorbar(fig, mappable, ax, style):
+    """The horizontal colour bar of the starter position, on the figure value range."""
     bar = fig.colorbar(mappable, ax=ax, orientation="horizontal", shrink=0.5, pad=0.22)
-    bar.set_label("Starter ML position (mm)", fontsize=8)
-    bar.set_ticks([FIG6_CLIM[0], 0, FIG6_CLIM[1]])
+    bar.set_label(style["value_label"], fontsize=8)
+    bar.set_ticks(_long_range_value_ticks(style["clim"]))
     bar.ax.tick_params(labelsize=7)
     return bar
 
 
-def _plot_fig6_flatmap_scatter(df, sheet_name, source_name, panel, marker_size):
-    """Panels b and c -- flatmap cell positions coloured by starter ML position."""
-    window = FIG6_FLATMAP_WINDOW[panel]
-    fig, ax = plt.subplots(figsize=_fig6_flatmap_figsize(window))
+def _plot_long_range_flatmap_scatter(
+    df, sheet_name, source_name, style, panel, marker_size
+):
+    """Panels b and c -- flatmap cell positions coloured by the starter position."""
+    style = LONG_RANGE_STYLES[style]
+    window = style["windows"][panel]
+    value = _long_range_value_column(df, exclude=LONG_RANGE_FLATMAP_COLUMNS)
+    fig, ax = plt.subplots(figsize=_long_range_flatmap_figsize(window))
     points = ax.scatter(
         df["Flatmap_X"],
         df["Flatmap_Y"],
-        c=pd.to_numeric(df["Starter_ML_Position_mm"], errors="coerce"),
-        cmap=FIG6_CMAP,
-        vmin=FIG6_CLIM[0],
-        vmax=FIG6_CLIM[1],
+        c=pd.to_numeric(df[value], errors="coerce"),
+        cmap=style["cmap"],
+        vmin=style["clim"][0],
+        vmax=style["clim"][1],
         s=marker_size,
         linewidths=0,
-        alpha=0.8 if panel == "6b" else 0.4,
+        alpha=0.8 if panel == "b" else 0.4,
         rasterized=True,
     )
     _style_panel_axes(
@@ -1228,28 +1325,29 @@ def _plot_fig6_flatmap_scatter(df, sheet_name, source_name, panel, marker_size):
         ylim=window[1],
         aspect="equal",
     )
-    _fig6_colorbar(fig, points, ax)
+    _long_range_colorbar(fig, points, ax, style)
     _finish(fig, sheet_name, source_name, len(df))
     return fig
 
 
-def _plot_fig6_smoothed_map(df, sheet_name, source_name):
-    """Fig 6d -- the smoothed starter map, redrawn as the image the panel shows."""
+def _plot_long_range_smoothed_map(df, sheet_name, source_name, style, panel="d"):
+    """Panel d -- the smoothed starter map, redrawn as the image the panel shows."""
+    style = LONG_RANGE_STYLES[style]
     y = pd.to_numeric(df["Flatmap_Y"], errors="coerce").to_numpy(dtype=float)
     columns = [c for c in df.columns if c != "Flatmap_Y"]
     x = np.asarray([float(c) for c in columns], dtype=float)
     image = df[columns].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
 
-    window = FIG6_FLATMAP_WINDOW["6d"]
-    fig, ax = plt.subplots(figsize=_fig6_flatmap_figsize(window))
+    window = style["windows"][panel]
+    fig, ax = plt.subplots(figsize=_long_range_flatmap_figsize(window))
     # The sheet is written bottom row first, as the panel draws it.
     picture = ax.imshow(
         image,
-        cmap=FIG6_CMAP,
+        cmap=style["cmap"],
         origin="lower",
         extent=[x[0], x[-1], y[0], y[-1]],
-        vmin=FIG6_CLIM[0],
-        vmax=FIG6_CLIM[1],
+        vmin=style["clim"][0],
+        vmax=style["clim"][1],
         interpolation="nearest",
     )
     _style_panel_axes(
@@ -1260,18 +1358,26 @@ def _plot_fig6_smoothed_map(df, sheet_name, source_name):
         ylim=window[1],
         aspect="equal",
     )
-    _fig6_colorbar(fig, picture, ax)
+    _long_range_colorbar(fig, picture, ax, style)
     _finish(fig, sheet_name, source_name, len(df))
     return fig
 
 
-def _plot_fig6_starter_vs_presyn(df, sheet_name, source_name):
-    """Fig 6e -- one point per presynaptic cell, on the axes of the published panel."""
-    box_aspect = FIG6_BOX_ASPECT["6e"]
+def _plot_long_range_starter_vs_presyn(df, sheet_name, source_name, style, panel="e"):
+    """Panel e -- one point per presynaptic cell, on the axes of the published panel.
+
+    The value axis is drawn on the figure's colour range, which is also the window the
+    published panel sets. Its ticks are the ends of that range and its midpoint: the
+    reviewer notebook asks for ``[8.5, 9]`` inside ``ylim=(8.5, 8.9)``, so its second
+    tick never renders -- do not "fix" this back to the notebook's tick list.
+    """
+    style = LONG_RANGE_STYLES[style]
+    box_aspect = style["box_aspect"][panel]
+    value = _long_range_value_column(df, exclude=(LONG_RANGE_AXIS_COLUMN,))
     fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect, width=4.6))
     ax.scatter(
-        df["Presynaptic_ML_mm"],
-        df["Starter_ML_Position_mm"],
+        df[LONG_RANGE_AXIS_COLUMN],
+        pd.to_numeric(df[value], errors="coerce"),
         s=3,
         alpha=0.3,
         linewidths=0,
@@ -1280,77 +1386,83 @@ def _plot_fig6_starter_vs_presyn(df, sheet_name, source_name):
     )
     _style_panel_axes(
         ax,
-        xlabel="Presynaptic ML position (mm)",
-        ylabel="Starter ML position (mm)",
-        xlim=(-4.5, 4.5),
-        ylim=(-1, 1),
-        xticks=[-4, 0, 4],
-        yticks=[-1, 0, 1],
+        xlabel=style["axis_label"],
+        ylabel=style["value_label"],
+        xlim=style["axis_lim"],
+        ylim=style["clim"],
+        xticks=list(style["axis_ticks"]),
+        yticks=_long_range_value_ticks(style["clim"]),
         box_aspect=box_aspect,
     )
     _finish(fig, sheet_name, source_name, len(df))
     return fig
 
 
-def _plot_fig6_running_average(df, sheet_name, source_name):
-    """Fig 6e -- the running average with its shuffle band and mean-position line."""
-    box_aspect = FIG6_BOX_ASPECT["6e"]
+def _plot_long_range_running_average(df, sheet_name, source_name, style, panel="e"):
+    """Panel e -- the running average with its shuffle band and mean-position line."""
+    style = LONG_RANGE_STYLES[style]
+    box_aspect = style["box_aspect"][panel]
     fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect, width=4.6))
-    x = pd.to_numeric(df["Presynaptic_ML_mm"], errors="coerce")
+    x = pd.to_numeric(df[LONG_RANGE_AXIS_COLUMN], errors="coerce")
     if {"Shuffle_Lower", "Shuffle_Upper"} <= set(df.columns):
         ax.fill_between(
             x,
             pd.to_numeric(df["Shuffle_Lower"], errors="coerce"),
             pd.to_numeric(df["Shuffle_Upper"], errors="coerce"),
-            color=FIG6E_COLOR,
+            color=style["curve_color"],
             alpha=0.4,
             linewidth=0,
         )
+    average = _long_range_prefixed_column(df, "Running_Average_")
     ax.plot(
         x,
-        pd.to_numeric(df["Running_Average_Starter_ML_mm"], errors="coerce"),
-        color=FIG6E_COLOR,
+        pd.to_numeric(df[average], errors="coerce"),
+        color=style["curve_color"],
         lw=2,
     )
-    if "Mean_Starter_ML_Position_mm" in df.columns:  # constant column: the dashed line
+    mean_column = _long_range_prefixed_column(df, "Mean_")
+    if mean_column is not None:  # constant column: the dashed line
         ax.axhline(
-            float(df["Mean_Starter_ML_Position_mm"].iloc[0]),
+            float(df[mean_column].iloc[0]),
             color="k",
             linestyle="dashed",
             lw=1.5,
         )
     _style_panel_axes(
         ax,
-        xlabel="Presynaptic ML position (mm)",
-        ylabel="Starter ML position (mm)",
-        xlim=(-4.5, 4.5),
-        ylim=(-1, 1),
-        xticks=[-4, 0, 4],
-        yticks=[-1, 0, 1],
+        xlabel=style["axis_label"],
+        ylabel=style["value_label"],
+        xlim=style["axis_lim"],
+        ylim=style["clim"],
+        xticks=list(style["axis_ticks"]),
+        yticks=_long_range_value_ticks(style["clim"]),
         box_aspect=box_aspect,
     )
     _finish(fig, sheet_name, source_name, len(df))
     return fig
 
 
-def _plot_fig6_azimuth_average(df, sheet_name, source_name):
-    """Fig 6f -- the running average of receptive-field azimuth."""
-    box_aspect = FIG6_BOX_ASPECT["6f"]
+def _plot_long_range_retinotopy_average(df, sheet_name, source_name, style, panel="f"):
+    """Panel f -- the running average of the receptive-field position of the map."""
+    style = LONG_RANGE_STYLES[style]
+    box_aspect = style["box_aspect"][panel]
+    retinotopy = style["retinotopy"]
+    average = _long_range_prefixed_column(df, "Running_Average_")
     fig, ax = plt.subplots(figsize=_panel_figsize(box_aspect, width=4.6))
     ax.plot(
-        pd.to_numeric(df["Presynaptic_ML_mm"], errors="coerce"),
-        pd.to_numeric(df["Running_Average_Azimuth_deg"], errors="coerce"),
+        pd.to_numeric(df[LONG_RANGE_AXIS_COLUMN], errors="coerce"),
+        pd.to_numeric(df[average], errors="coerce"),
         color="k",
         lw=2,
     )
     _style_panel_axes(
         ax,
-        xlabel="Presynaptic ML position (mm)",
-        ylabel="Receptive field azimuth (degrees)",
-        xlim=(-4.5, 4.5),
-        ylim=(0, 60),
-        xticks=[-4, 0, 4],
-        yticks=[0, 30, 60],
+        xlabel=style["axis_label"],
+        ylabel=retinotopy["label"],
+        xlim=style["axis_lim"],
+        ylim=retinotopy["lim"],
+        xticks=list(style["axis_ticks"]),
+        yticks=list(retinotopy["ticks"]),
         box_aspect=box_aspect,
     )
     _finish(fig, sheet_name, source_name, len(df))
@@ -2160,6 +2272,331 @@ def _plot_ml_kde(df, sheet_name, source_name):
 
 
 # ---------------------------------------------------------------------------
+# Supplementary Figures panel draw functions
+# ---------------------------------------------------------------------------
+
+
+def _plot_supp1d_starter_dilution(df, sheet_name, source_name):
+    fig, ax = plt.subplots(figsize=_panel_figsize(1.0))
+    for label, sub in _groups(df, "dilution"):
+        ax.scatter(sub["dilution"], sub["density"], s=15, label=str(label))
+    _style_panel_axes(
+        ax,
+        xlabel="Dilution",
+        ylabel="Cell density (mm^-3)",
+        yscale="log",
+        box_aspect=1.0,
+    )
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_supp5a_cells_per_section(df, sheet_name, source_name):
+    fig, ax = plt.subplots(figsize=_panel_figsize(1.0))
+    for label, sub in _groups(df, "Cell_Type"):
+        ax.plot(
+            sub["Section_Position_um"],
+            sub["Cell_Count"],
+            "o-",
+            ms=3,
+            label=str(label),
+        )
+    _style_panel_axes(
+        ax, xlabel="Section position (um)", ylabel="Cell count", box_aspect=1.0
+    )
+    ax.legend(fontsize=6, frameon=False)
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_supp5b_coronal_positions(df, sheet_name, source_name):
+    fig, ax = plt.subplots(figsize=_panel_figsize(1.0))
+    for label, sub in _groups(df, "Cell_Group"):
+        ax.scatter(sub["ARA_Z_px"], sub["ARA_Y_px"], s=1, alpha=0.3, label=str(label))
+    _style_panel_axes(
+        ax,
+        xlabel="ARA Z (px)",
+        ylabel="ARA Y (px)",
+        aspect="equal",
+    )
+    ax.invert_yaxis()
+    ax.legend(fontsize=6, frameon=False)
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_supp5c_dorsal_positions(df, sheet_name, source_name):
+    fig, ax = plt.subplots(figsize=_panel_figsize(1.0))
+    for label, sub in _groups(df, "Cell_Group"):
+        ax.scatter(sub["ARA_X_px"], sub["ARA_Z_px"], s=1, alpha=0.3, label=str(label))
+    _style_panel_axes(
+        ax,
+        xlabel="ARA X (px)",
+        ylabel="ARA Z (px)",
+        aspect="equal",
+    )
+    ax.invert_xaxis()
+    ax.legend(fontsize=6, frameon=False)
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_supp5d_dotplot(df, sheet_name, source_name):
+    if "Mean_Expression" in df.columns and "Gene" in df.columns:
+        matrix = df.pivot(index="Cluster", columns="Gene", values="Mean_Expression")
+        return _plot_heatmap(
+            matrix, sheet_name, source_name, len(df), xlabel="Gene", ylabel="Cluster"
+        )
+    fig, ax = plt.subplots(figsize=_panel_figsize(1.0))
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+#: Layout of the Supp 6 mosaic, as the notebook builds it: pairs of (coronal, depth
+#: KDE) panels, four pairs per row, on a 17.4 x 12 cm figure.
+SUPP6_PAIRS_PER_ROW = 4
+
+#: Coronal window of every mosaic panel, both axes inverted as the figure draws them.
+SUPP6_XLIM = (1100, 500)
+SUPP6_YLIM = (420, 0)
+
+
+def _plot_supp6_mosaic(df, sheet_name, source_name, ycol, xcol, kind):
+    """One small panel per cluster, laid out as the published mosaic.
+
+    Both Supp 6 sheets are per-cluster: the coronal scatter and the depth density beside
+    it. Drawing them overlaid would hide exactly what the figure is about -- where each
+    cluster sits -- so the redraw keeps the mosaic.
+    """
+    clusters = list(pd.unique(df["Cluster"].dropna()))
+    ncols = min(SUPP6_PAIRS_PER_ROW, len(clusters))
+    nrows = int(np.ceil(len(clusters) / ncols))
+    palette = dict(zip(clusters, _categorical_palette(len(clusters))))
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(2.2 * ncols, 2.0 * nrows + 0.8))
+    axes = np.atleast_1d(np.asarray(axes)).ravel()
+    for ax, cluster in zip(axes, clusters):
+        sub = df[df["Cluster"] == cluster]
+        color = palette.get(cluster, "0.5")
+        if kind == "scatter":
+            ax.scatter(
+                sub[xcol],
+                sub[ycol],
+                s=0.4,
+                alpha=0.4,
+                linewidths=0,
+                color=color,
+                rasterized=True,
+            )
+            ax.set_xlim(*SUPP6_XLIM)
+            ax.set_ylim(*SUPP6_YLIM)
+            ax.set_aspect("equal")
+        else:
+            ax.plot(sub[xcol], sub[ycol], lw=1.0, color=color)
+            ax.set_ylim(1000, 0)  # cortical depth, pia at the top as drawn
+        ax.set_title(str(cluster), fontsize=6)
+        ax.tick_params(labelsize=5)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+    for ax in axes[len(clusters) :]:
+        ax.set_axis_off()
+    _finish(fig, sheet_name, source_name, len(df))
+    if nrows > 1:
+        fig.subplots_adjust(hspace=0.35)
+    return fig
+
+
+#: Colour of every Supp 8 series, by the label its sheet carries.
+SUPP8_COLORS = {
+    "Library barcodes": "black",
+    "All in situ barcodes": "#e78ac3",
+    "Barcodes in multiple starter cells": "#8da0cb",
+    "Multiple starter - Library": "#8da0cb",
+    "All in situ - Library": "#e78ac3",
+    "Different barcode": "#fc8d62",
+    "Same barcode": "#66c2a5",
+    "Same barcode, excluding adjacent sections": "#a6d854",
+}
+
+#: Height/width ratio of the three Supp 8 panels, all [0.22, 0.75] of a 16 x 5 cm figure.
+SUPP8_BOX_ASPECT = 1.07
+
+
+def _plot_supp8_curves(df, sheet_name, source_name, xcol, ycol, zero_line=False):
+    """One line per series, with the confidence band of whichever series carries one."""
+    fig, ax = plt.subplots(figsize=_panel_figsize(SUPP8_BOX_ASPECT))
+    if zero_line:
+        ax.axhline(0, color="grey", ls="--", lw=0.8, zorder=-1)
+    for series, sub in _groups(df, "Series"):
+        color = SUPP8_COLORS.get(series, "0.5")
+        style = "--" if series == "Library barcodes" else "-"
+        ax.plot(sub[xcol], sub[ycol], style, color=color, lw=1.2, label=str(series))
+        if "CI_Lower" in sub.columns and sub["CI_Lower"].notna().any():
+            ax.fill_between(
+                sub[xcol],
+                sub["CI_Lower"],
+                sub["CI_Upper"],
+                color=color,
+                alpha=0.2,
+                lw=0,
+                zorder=0,
+            )
+    _style_panel_axes(ax, xlabel=xcol, ylabel=ycol, box_aspect=SUPP8_BOX_ASPECT)
+    ax.legend(fontsize=6, frameon=False, handlelength=1)
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_supp8c_pairwise_distances(df, sheet_name, source_name):
+    fig, ax = plt.subplots(figsize=_panel_figsize(1.0))
+    for label, sub in _groups(df, "Comparison"):
+        ax.plot(
+            sub["Distance_Between_Starters_mm"],
+            sub["Density"],
+            lw=1.2,
+            label=str(label),
+        )
+    _style_panel_axes(
+        ax,
+        xlabel="Distance between starters (mm)",
+        ylabel="Density",
+        xlim=(0, 2),
+        ylim=(0, 1.5),
+        box_aspect=1.0,
+    )
+    ax.legend(fontsize=6, frameon=False)
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_supp8c_median_distances(df, sheet_name, source_name):
+    fig, ax = plt.subplots(figsize=_panel_figsize(1.0))
+    x = range(len(df))
+    ax.errorbar(
+        x,
+        df["Bootstrap_Median_mm"],
+        yerr=[
+            df["Bootstrap_Median_mm"] - df["CI_Lower_mm"],
+            df["CI_Upper_mm"] - df["Bootstrap_Median_mm"],
+        ],
+        fmt="o",
+        color="k",
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels(df["Comparison"], rotation=45, fontsize=6)
+    _style_panel_axes(ax, ylabel="Bootstrap median (mm)", box_aspect=1.0)
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_supp9a_injection_site(df, sheet_name, source_name):
+    fig, ax = plt.subplots(figsize=_panel_figsize(1.0))
+    hue = "is_barcoded" if "is_barcoded" in df.columns else None
+    for label, sub in _groups(df, hue):
+        ax.scatter(sub["ARA_Z"], sub["ARA_Y"], s=1, alpha=0.3, label=str(label))
+    _style_panel_axes(ax, xlabel="ARA Z", ylabel="ARA Y", aspect="equal")
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_supp9b_observed_vs_expected(df, sheet_name, source_name):
+    fig, ax = plt.subplots(figsize=_panel_figsize(1.0))
+    x = np.arange(len(df))
+    width = 0.35
+    ax.bar(
+        x - width / 2,
+        df["Observed_Cells"],
+        width,
+        label="Observed",
+        color="dodgerblue",
+    )
+    ax.bar(
+        x + width / 2,
+        df["Expected_Cells_Poisson"],
+        width,
+        label="Expected (Poisson)",
+        color="salmon",
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels(df["Barcodes_Per_Cell"])
+    _style_panel_axes(
+        ax,
+        xlabel="Barcodes per cell",
+        ylabel="Number of cells",
+        yscale="log",
+        box_aspect=1.0,
+    )
+    ax.legend(fontsize=6, frameon=False)
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Supplementary Figure 4 -- panels whose geometry cannot be inferred from the
+# sheet alone
+# ---------------------------------------------------------------------------
+
+#: Height/width ratio of each Supplementary Figure 4 panel's axes box. The figure is
+#: laid out at 14.0 x 4.5 cm as an equal 1 x 3 grid of subplots under
+#: ``fig.tight_layout()``, which leaves each axes 0.176 of the width and 0.610 of the
+#: height, so all three share a box aspect of ``0.610 * 4.5 / (0.176 * 14.0)``. The
+#: redrawn panels keep those proportions.
+SUPP4_BOX_ASPECT = 1.11
+
+#: Colour of each barcode-length library, by the label the sheet carries. Panels a and b
+#: draw the same two libraries in the same colours.
+SUPP4_LIBRARY_COLORS = {
+    "Viral library - 10 nucleotides": "midnightblue",
+    "Viral library - 20 nucleotides": "darkorange",
+}
+
+#: Barcode lengths panel c marks with a filled marker, in the colour panels a and b give
+#: that library. They are points of the curve the sheet already holds, so the colours
+#: are geometry rather than data.
+SUPP4C_HIGHLIGHTS = {10: "midnightblue", 20: "darkorange"}
+
+
+def _plot_supp4_unique_vs_length(df, sheet_name, source_name):
+    """Supp 4c -- infections for 95% unique labelling, with its highlighted lengths."""
+    fig, ax = plt.subplots(figsize=_panel_figsize(SUPP4_BOX_ASPECT))
+    lengths = df["Barcode_Length_Nucleotides"]
+    infections = df["Infections_For_95pc_Unique"]
+    ax.plot(lengths, infections, "o-", color="k", mfc="w", ms=4, mew=0.5, lw=1)
+    for length, color in SUPP4C_HIGHLIGHTS.items():
+        marked = infections[lengths == length]
+        if not marked.empty:
+            ax.plot(length, marked.iloc[0], "o", mfc=color, mec="none", ms=4)
+    _style_panel_axes(
+        ax,
+        xlabel="Number of nucleotides",
+        ylabel="Number of infection events\nfor 95% unique labelling rate",
+        xlim=(3.5, 20.5),
+        ylim=(0, 1400),
+        xticks=np.arange(4, 21, 2),
+        yticks=np.arange(0, 1410, 300),
+        box_aspect=SUPP4_BOX_ASPECT,
+    )
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Supplementary reviewer figure -- Figure 6 along antero-posterior and elevation
+# ---------------------------------------------------------------------------
+
+# The reviewer figure redraws Figure 6 along another axis: the same six panels, the same
+# `fig.add_axes` layout at 8.8 x 20.0 cm and therefore the same flatmap windows and
+# proportions, with the starter antero-posterior position on `turbo` over 8.5 to 8.9 mm
+# in place of the medio-lateral position, and receptive-field elevation in place of
+# azimuth in panel f. It needs no drawing code of its own: its `PANEL_SPECS` entries
+# below delegate to the long-range family above with ``style="reviewer"``, and the value
+# column of each sheet is resolved from the sheet itself. Its retinotopy inset, flatmap
+# outlines and the dashed data-coverage contour drawn on that inset are images,
+# listed in `supplementary.SUPP_REVIEWER_IMAGE_KEYS`, so no worksheet and no panel
+# redraws them.
+
+
+# ---------------------------------------------------------------------------
 # Per-panel drawing specifications
 # ---------------------------------------------------------------------------
 
@@ -2169,23 +2606,26 @@ def _plot_ml_kde(df, sheet_name, source_name):
 #: ``xscale``/``yscale``, ``aspect``, ``invert_x``/``invert_y`` and ``frameon``.
 PANEL_SPECS = [
     # Figure 1, whose panels are drawn on the axes of the published figure.
-    ("1d library abundance", {"kind": "line", "draw": _fig1_abundance_draw("1d")}),
-    ("1e unique fraction", {"kind": "line", "draw": _fig1_unique_draw("1e", 1e6)}),
+    (
+        "1d library abundance",
+        {"kind": "line", "draw": _fig1_abundance("1d")},
+    ),
+    ("1e unique fraction", {"kind": "line", "draw": _fig1_unique("1e", 1e6)}),
     (
         "1f rescue scaling abundance",
-        {"kind": "line", "draw": _fig1_abundance_draw("1f")},
+        {"kind": "line", "draw": _fig1_abundance("1f")},
     ),
     (
         "1g rescue scaling unique",
-        {"kind": "line", "draw": _fig1_unique_draw("1g", 1e4)},
+        {"kind": "line", "draw": _fig1_unique("1g", 1e4)},
     ),
     (
         "1h library comparison abund",
-        {"kind": "line", "draw": _fig1_abundance_draw("1h")},
+        {"kind": "line", "draw": _fig1_abundance("1h")},
     ),
     (
         "1i library compar unique",
-        {"kind": "line", "draw": _fig1_unique_draw("1i", 1e6)},
+        {"kind": "line", "draw": _fig1_unique("1i", 1e6)},
     ),
     ("1j starter spread", {"kind": "line", "draw": _plot_starter_spread_sim}),
     (
@@ -2313,23 +2753,108 @@ PANEL_SPECS = [
         "6b starter positions",
         {
             "kind": "scatter",
-            "draw": partial(_plot_fig6_flatmap_scatter, panel="6b", marker_size=8),
+            "draw": partial(
+                _plot_long_range_flatmap_scatter,
+                style="fig6",
+                panel="b",
+                marker_size=8,
+            ),
         },
     ),
     (
         "6c presynaptic positions",
         {
             "kind": "scatter",
-            "draw": partial(_plot_fig6_flatmap_scatter, panel="6c", marker_size=1),
+            "draw": partial(
+                _plot_long_range_flatmap_scatter,
+                style="fig6",
+                panel="c",
+                marker_size=1,
+            ),
         },
     ),
-    ("6d smoothed starter map", {"kind": "heatmap", "draw": _plot_fig6_smoothed_map}),
+    (
+        "6d smoothed starter map",
+        {
+            "kind": "heatmap",
+            "draw": partial(_plot_long_range_smoothed_map, style="fig6"),
+        },
+    ),
     (
         "6e starter vs presyn ml",
-        {"kind": "scatter", "draw": _plot_fig6_starter_vs_presyn},
+        {
+            "kind": "scatter",
+            "draw": partial(_plot_long_range_starter_vs_presyn, style="fig6"),
+        },
     ),
-    ("6e running average", {"kind": "line", "draw": _plot_fig6_running_average}),
-    ("6f azimuth running avg", {"kind": "line", "draw": _plot_fig6_azimuth_average}),
+    (
+        "6e running average",
+        {
+            "kind": "line",
+            "draw": partial(_plot_long_range_running_average, style="fig6"),
+        },
+    ),
+    (
+        "6f azimuth running avg",
+        {
+            "kind": "line",
+            "draw": partial(_plot_long_range_retinotopy_average, style="fig6"),
+        },
+    ),
+    # The supplementary reviewer figure, Figure 6 along the antero-posterior axis and
+    # elevation: the same panels, on the same windows, with the reviewer style.
+    (
+        "rev b starter positions",
+        {
+            "kind": "scatter",
+            "draw": partial(
+                _plot_long_range_flatmap_scatter,
+                style="reviewer",
+                panel="b",
+                marker_size=8,
+            ),
+        },
+    ),
+    (
+        "rev c presynaptic positions",
+        {
+            "kind": "scatter",
+            "draw": partial(
+                _plot_long_range_flatmap_scatter,
+                style="reviewer",
+                panel="c",
+                marker_size=1,
+            ),
+        },
+    ),
+    (
+        "rev d smoothed starter map",
+        {
+            "kind": "heatmap",
+            "draw": partial(_plot_long_range_smoothed_map, style="reviewer"),
+        },
+    ),
+    (
+        "rev e starter vs presyn",
+        {
+            "kind": "scatter",
+            "draw": partial(_plot_long_range_starter_vs_presyn, style="reviewer"),
+        },
+    ),
+    (
+        "rev e running average",
+        {
+            "kind": "line",
+            "draw": partial(_plot_long_range_running_average, style="reviewer"),
+        },
+    ),
+    (
+        "rev f elevation running avg",
+        {
+            "kind": "line",
+            "draw": partial(_plot_long_range_retinotopy_average, style="reviewer"),
+        },
+    ),
     # Figure 3, likewise drawn on the axes of the published figure.
     (
         "3a barcodes per cell",
@@ -2349,6 +2874,114 @@ PANEL_SPECS = [
     ("umap by cluster", {"kind": "scatter", "draw": _plot_umap_clusters}),
     ("umap barcoded cells", {"kind": "scatter", "draw": _plot_umap_barcoded}),
     ("gene expression map", {"kind": "mosaic", "draw": _plot_gene_expression_mosaic}),
+    # Supplementary Figures
+    (
+        "supp 1c presynaptic density",
+        {
+            "kind": "line",
+            "draw": partial(
+                _plot_panel_curves,
+                xcol="Sorted_Isocortex_Voxel_Distances_um",
+                ycol="Sorted_Labelled_Cell_Distances_um",
+                box_aspect=1.15,
+            ),
+        },
+    ),
+    (
+        "supp 1d starter dilution",
+        {"kind": "points", "draw": _plot_supp1d_starter_dilution},
+    ),
+    # Supplementary Figure 4, on the axes of Figure 1's library panels.
+    (
+        "supp 4a library abundance",
+        {
+            "kind": "line",
+            "draw": _abundance_draw(SUPP4_LIBRARY_COLORS, SUPP4_BOX_ASPECT),
+        },
+    ),
+    (
+        "supp 4b unique fraction",
+        {
+            "kind": "line",
+            "draw": _unique_draw(SUPP4_LIBRARY_COLORS, SUPP4_BOX_ASPECT, 1e6),
+        },
+    ),
+    (
+        "supp 4c unique vs length",
+        {"kind": "line", "draw": _plot_supp4_unique_vs_length},
+    ),
+    (
+        "supp 5a cells per section",
+        {"kind": "line", "draw": _plot_supp5a_cells_per_section},
+    ),
+    (
+        "supp 5b coronal positions",
+        {"kind": "scatter", "draw": _plot_supp5b_coronal_positions},
+    ),
+    (
+        "supp 5c dorsal positions",
+        {"kind": "scatter", "draw": _plot_supp5c_dorsal_positions},
+    ),
+    (
+        "supp 5d marker gene expression",
+        {"kind": "heatmap", "draw": _plot_supp5d_dotplot},
+    ),
+    (
+        "supp 6 cluster positions",
+        {
+            "kind": "mosaic",
+            "draw": partial(
+                _plot_supp6_mosaic, xcol="ARA_Z_px", ycol="ARA_Y_px", kind="scatter"
+            ),
+        },
+    ),
+    (
+        "supp 6 cluster depth kde",
+        {
+            "kind": "mosaic",
+            "draw": partial(
+                _plot_supp6_mosaic,
+                xcol="Normalised_Density",
+                ycol="Cortical_Depth_um",
+                kind="line",
+            ),
+        },
+    ),
+    (
+        "supp 8a library abundance kde",
+        {
+            "kind": "line",
+            "draw": partial(
+                _plot_supp8_curves, xcol="Log10_Library_Reads", ycol="Density"
+            ),
+        },
+    ),
+    (
+        "supp 8b density difference",
+        {
+            "kind": "line",
+            "draw": partial(
+                _plot_supp8_curves,
+                xcol="Log10_Library_Reads",
+                ycol="Density_Difference",
+                zero_line=True,
+            ),
+        },
+    ),
+    (
+        "supp 8c pairwise distances",
+        {"kind": "line", "draw": _plot_supp8c_pairwise_distances},
+    ),
+    # No "supp 8c median distances" entry: the bootstrap medians and their interval are
+    # not drawn by the panel, so that sheet no longer exists.
+    (
+        "supp 9a injection site cells",
+        {"kind": "scatter", "draw": _plot_supp9a_injection_site},
+    ),
+    (
+        "supp 9b observed vs expected",
+        {"kind": "bar", "draw": _plot_supp9b_observed_vs_expected},
+    ),
 ]
 
 #: The same, matched on the columns a sheet holds rather than on its name, for

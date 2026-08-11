@@ -9,6 +9,8 @@ The ``FIGn_PANELS`` lists are passed to :func:`~brisc.source_data.io.save_excel_
 so that a panel that fails to build is reported instead of silently skipped.
 """
 
+from functools import partial
+
 import numpy as np
 import pandas as pd
 
@@ -1688,118 +1690,6 @@ FIG6F_NOTE = (
 )
 
 
-def build_long_range_source_data(
-    prefix="Fig 6",
-    v1_starter_cells=None,
-    starter_panel_values=None,
-    presy_xy=None,
-    presyn_panel_values=None,
-    starter_value_label="Starter_ML_Position_mm",
-    presynaptic_axis_values=None,
-    ctx_img=None,
-    ctx_mask=None,
-    xlim=(150, 1050),
-    ylim=(810, 1330),
-    running_average_x=None,
-    running_average=None,
-    conf_int=None,
-    mean_position=None,
-    retinotopy=None,
-    retinotopy_label="Receptive_Field_Azimuth_deg",
-    retinotopy_name="Azimuth",
-    retinotopy_running_average=None,
-    panel_letters=("b", "c", "d", "e", "f"),
-):
-    """Builder of the supplementary reviewer long-range figure, from raw variables.
-
-    That figure repeats Figure 6 along elevation and the antero-posterior axis, with the
-    same five panels: starter and presynaptic flatmap positions, a smoothed map of
-    starter position, the starter-vs-presynaptic scatter with its running average and
-    shuffle band, and a retinotopy running average. Figure 6 itself no longer comes
-    through here: it is built from what its panels drew, see
-    :func:`build_fig6_source_data`.
-
-    Every value argument is expected in the units the panel draws; only the flatmap
-    coordinates are raw.
-    """
-    b, c, d, e, f = panel_letters
-    panels = {}
-
-    if v1_starter_cells is not None and starter_panel_values is not None:
-        v1_xy = v1_starter_cells[["flatmap_x", "flatmap_y"]].values.T
-        panels[f"{prefix} {b} Starter positions"] = pd.DataFrame(
-            {
-                "Starter_Cell_ID": v1_starter_cells.index.astype(str),
-                "Flatmap_X": v1_xy[0],
-                "Flatmap_Y": v1_xy[1],
-                starter_value_label: np.asarray(starter_panel_values),
-            }
-        )
-
-    if presy_xy is not None and presyn_panel_values is not None:
-        panels[f"{prefix} {c} Presynaptic positions"] = pd.DataFrame(
-            {
-                "Flatmap_X": presy_xy[0],
-                "Flatmap_Y": presy_xy[1],
-                starter_value_label: np.asarray(presyn_panel_values),
-            }
-        )
-
-    if ctx_img is not None:
-        image = np.asarray(ctx_img, dtype=float)
-        if ctx_mask is not None:
-            image = image * np.asarray(ctx_mask, dtype=float)
-        table = pd.DataFrame(image)
-        table.columns = np.linspace(xlim[0], xlim[1], image.shape[1]).round(1)
-        table.insert(
-            0, "Flatmap_Y", np.linspace(ylim[0], ylim[1], image.shape[0]).round(1)
-        )
-        panels[f"{prefix} {d} Smoothed starter map"] = table
-
-    if presynaptic_axis_values is not None and presyn_panel_values is not None:
-        panels[f"{prefix} {e} Starter vs presyn ML"] = pd.DataFrame(
-            {
-                "Presynaptic_ML_mm": np.asarray(presynaptic_axis_values),
-                starter_value_label: np.asarray(presyn_panel_values),
-            }
-        )
-
-    if running_average_x is not None and running_average is not None:
-        table = pd.DataFrame(
-            {
-                "Presynaptic_ML_mm": np.asarray(running_average_x),
-                f"Running_Average_{starter_value_label}": np.asarray(running_average),
-            }
-        )
-        if conf_int is not None:
-            conf_int = np.asarray(conf_int)
-            table["Shuffle_Lower"] = conf_int[0]
-            table["Shuffle_Upper"] = conf_int[1]
-        if mean_position is not None:
-            table[f"Mean_{starter_value_label}"] = mean_position
-        panels[f"{prefix} {e} Running average and CI"] = table
-
-    if retinotopy is not None and presynaptic_axis_values is not None:
-        panels[f"{prefix} {f} Presynaptic {retinotopy_name.lower()}"] = pd.DataFrame(
-            {
-                "Presynaptic_ML_mm": np.asarray(presynaptic_axis_values),
-                retinotopy_label: np.asarray(retinotopy),
-            }
-        )
-
-    if running_average_x is not None and retinotopy_running_average is not None:
-        panels[
-            f"{prefix} {f} {retinotopy_name.capitalize()} running avg"
-        ] = pd.DataFrame(
-            {
-                "Presynaptic_ML_mm": np.asarray(running_average_x),
-                retinotopy_label: np.asarray(retinotopy_running_average),
-            }
-        )
-
-    return panels
-
-
 def build_fig6_source_data(fig6_plotted_data=None):
     """Build the panel dictionary for Figure 6 from what the figure actually drew.
 
@@ -1830,32 +1720,45 @@ def build_fig6_source_data(fig6_plotted_data=None):
         (
             "starter_positions",
             "Fig 6b Starter positions",
-            _fig6_starter_positions_sheet,
+            partial(
+                _longrange_flatmap_sheet,
+                value="Starter_ML_Position_mm",
+                note=FIG6B_NOTE,
+            ),
         ),
         (
             "presynaptic_positions",
             "Fig 6c Presynaptic positions",
-            _fig6_presynaptic_positions_sheet,
+            partial(_longrange_flatmap_sheet, value="Starter_ML_Position_mm"),
         ),
         (
             "smoothed_starter_map",
             "Fig 6d Smoothed starter map",
-            _fig6_smoothed_map_sheet,
+            partial(_longrange_smoothed_map_sheet, note=FIG6D_NOTE),
         ),
         (
             "starter_vs_presyn_ml",
             "Fig 6e Starter vs presyn ML",
-            _fig6_starter_vs_presyn_sheet,
+            partial(_longrange_scatter_sheet, value="Starter_ML_Position_mm"),
         ),
         (
             "starter_vs_presyn_ml",
             "Fig 6e Running average and CI",
-            _fig6_running_average_sheet,
+            partial(
+                _longrange_running_average_sheet,
+                value="Running_Average_Starter_ML_mm",
+                mean_column="Mean_Starter_ML_Position_mm",
+                note=FIG6E_NOTE,
+            ),
         ),
         (
             "azimuth_running_average",
             "Fig 6f Azimuth running avg",
-            _fig6_azimuth_average_sheet,
+            partial(
+                _longrange_running_average_sheet,
+                value="Running_Average_Azimuth_deg",
+                note=FIG6F_NOTE,
+            ),
         ),
     )
     panels = {
@@ -1870,35 +1773,43 @@ def build_fig6_source_data(fig6_plotted_data=None):
     return panels
 
 
-def _fig6_flatmap_positions(drawn):
-    """Flatmap positions coloured by starter medio-lateral position, as drawn."""
-    return pd.concat(
+# The four sheet builders below serve both long-range figures: Figure 6, along the
+# medio-lateral axis and azimuth, and the supplementary reviewer figure, along the
+# antero-posterior axis and elevation (see
+# :func:`brisc.source_data.supplementary.build_suppfig_reviewer_source_data`). The two
+# figures draw the same panels of different quantities, so only the name of the value
+# column changes; the presynaptic position is the same medio-lateral flatmap axis in
+# both, hence the shared ``Presynaptic_ML_mm``.
+
+#: Name of the presynaptic-position column of the two graph panels, in both figures.
+LONGRANGE_AXIS_COLUMN = "Presynaptic_ML_mm"
+
+
+def _longrange_flatmap_sheet(drawn, value, note=None):
+    """Panels b and c — flatmap positions coloured by the starter value, as drawn.
+
+    Every series the panel scattered is stacked into one table. Panel b's grey cloud is
+    the presynaptic population of panel c, which the notebook leaves out of panel b's
+    plotted data rather than repeating it.
+    """
+    table = pd.concat(
         [
             pd.DataFrame(
                 {
                     "Flatmap_X": np.asarray(series["x"], dtype=float),
                     "Flatmap_Y": np.asarray(series["y"], dtype=float),
-                    "Starter_ML_Position_mm": np.asarray(series["c"], dtype=float),
+                    value: np.asarray(series["c"], dtype=float),
                 }
             )
             for series in drawn.values()
         ],
         ignore_index=True,
     )
+    return table if note is None else _note(table, note)
 
 
-def _fig6_starter_positions_sheet(drawn):
-    """Panel b — the V1 starter cells on the flatmap, coloured by their ML position."""
-    return _note(_fig6_flatmap_positions(drawn), FIG6B_NOTE)
-
-
-def _fig6_presynaptic_positions_sheet(drawn):
-    """Panel c — every presynaptic cell, coloured by the ML position of its starter."""
-    return _fig6_flatmap_positions(drawn)
-
-
-def _fig6_smoothed_map_sheet(drawn):
-    """Panel d — the smoothed starter-position map, as the image it is drawn as.
+def _longrange_smoothed_map_sheet(drawn, note=None):
+    """Panel d — the smoothed starter-value map, as the image it is drawn as.
 
     One row per image row and one column per image column, the flatmap coordinates of
     the panel's ``extent`` as the row and column labels. Pixels the panel draws fully
@@ -1914,52 +1825,45 @@ def _fig6_smoothed_map_sheet(drawn):
     table = pd.DataFrame(image)
     table.columns = np.linspace(x0, x1, image.shape[1]).round(1)
     table.insert(0, "Flatmap_Y", np.linspace(y0, y1, image.shape[0]).round(1))
-    return _note(table, FIG6D_NOTE)
+    return table if note is None else _note(table, note)
 
 
-def _fig6_starter_vs_presyn_sheet(drawn):
-    """Panel e — one point per presynaptic cell, its ML position against its starter's.
+def _longrange_scatter_sheet(drawn, value, note=None):
+    """Panel e — one point per presynaptic cell, its position against its starter's.
 
     The running average, its shuffle band and the mean-position line of the same panel
     are on their own worksheet: they are given on the evaluation grid of the average,
     not per cell.
     """
     cells = drawn["cells"]
-    return pd.DataFrame(
+    table = pd.DataFrame(
         {
-            "Presynaptic_ML_mm": np.asarray(cells["x"], dtype=float),
-            "Starter_ML_Position_mm": np.asarray(cells["y"], dtype=float),
+            LONGRANGE_AXIS_COLUMN: np.asarray(cells["x"], dtype=float),
+            value: np.asarray(cells["y"], dtype=float),
         }
     )
+    return table if note is None else _note(table, note)
 
 
-def _fig6_running_average_sheet(drawn):
-    """Panel e — the running average of starter position, its band and its mean line."""
+def _longrange_running_average_sheet(drawn, value, mean_column=None, note=None):
+    """Panels e and f — a running average, with the band and mean line if drawn.
+
+    ``value`` is the ``Running_Average_...`` column the panel plots and ``mean_column``
+    the constant column of the dashed mean line, which only panel e draws.
+    """
     curve = drawn["running_average"]
     table = pd.DataFrame(
         {
-            "Presynaptic_ML_mm": np.asarray(curve["x"], dtype=float),
-            "Running_Average_Starter_ML_mm": np.asarray(curve["y"], dtype=float),
+            LONGRANGE_AXIS_COLUMN: np.asarray(curve["x"], dtype=float),
+            value: np.asarray(curve["y"], dtype=float),
         }
     )
     if curve.get("shuffle_lower") is not None:
         table["Shuffle_Lower"] = np.asarray(curve["shuffle_lower"], dtype=float)
         table["Shuffle_Upper"] = np.asarray(curve["shuffle_upper"], dtype=float)
-    if curve.get("mean_starter_position") is not None:
-        table["Mean_Starter_ML_Position_mm"] = float(curve["mean_starter_position"])
-    return _note(table, FIG6E_NOTE)
-
-
-def _fig6_azimuth_average_sheet(drawn):
-    """Panel f — the running average of receptive-field azimuth, as drawn."""
-    curve = drawn["running_average"]
-    table = pd.DataFrame(
-        {
-            "Presynaptic_ML_mm": np.asarray(curve["x"], dtype=float),
-            "Running_Average_Azimuth_deg": np.asarray(curve["y"], dtype=float),
-        }
-    )
-    return _note(table, FIG6F_NOTE)
+    if mean_column is not None and curve.get("mean_starter_position") is not None:
+        table[mean_column] = float(curve["mean_starter_position"])
+    return table if note is None else _note(table, note)
 
 
 def export_fig6_source_data(output_path, **kwargs):

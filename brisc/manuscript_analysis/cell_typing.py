@@ -583,6 +583,14 @@ def plot_cluster_mosaic(
     clusters : list[str]
     axd : dict[str, tuple(matplotlib Axes, matplotlib Axes)]
         mapping label -> (ax_scatter, ax_kde)
+    plotted_element : dict
+        What the mosaic drew, for Source Data: ``"cluster_positions"`` holds the
+        coronal coordinates `x` and `y` of the cells scattered for each cluster, and
+        ``"cluster_depth_kde"`` the depth density curve of each cluster as it was
+        drawn (`x` the normalised density, `y` the cortical depth, in the order they
+        are handed to matplotlib). Both are keyed by cluster and carry the `color`
+        of that cluster and the axis labels. The atlas contour, drawn from the
+        reference volume rather than from data, is not included.
     """
     if qc is None:
         qc = dict(best_score=0.3, knn_agree_conf=0.3, raw_gene_counts=2)
@@ -667,6 +675,9 @@ def plot_cluster_mosaic(
             return None
         return y_sub.to_numpy()
 
+    # what the mosaic draws, for Source Data
+    plotted_element = {"cluster_positions": {}, "cluster_depth_kde": {}}
+
     # plot each cluster: scatter + KDE
     for i, category in enumerate(clusters):
         ax_scatter, ax_kde = axd[labels[i]]
@@ -701,14 +712,23 @@ def plot_cluster_mosaic(
             s = s_default
             a = alpha_default
 
+        scatter_x = ad_scatter.obs["ara_z"] * 1000 / atlas_size
+        scatter_y = ad_scatter.obs["ara_y"] * 1000 / atlas_size
         ax_scatter.scatter(
-            ad_scatter.obs["ara_z"] * 1000 / atlas_size,
-            ad_scatter.obs["ara_y"] * 1000 / atlas_size,
+            scatter_x,
+            scatter_y,
             s=s,
             alpha=a,
             c=cluster_color,
             rasterized=True,
             linewidths=0,
+        )
+        plotted_element["cluster_positions"][str(category)] = dict(
+            x=np.asarray(scatter_x, dtype=float),
+            y=np.asarray(scatter_y, dtype=float),
+            color=cluster_color,
+            xlabel="ARA Z (10 um voxels)",
+            ylabel="ARA Y (10 um voxels)",
         )
 
         ax_scatter.set_title(str(category), fontsize=fontsize_dict["title"], pad=1.5)
@@ -731,6 +751,13 @@ def plot_cluster_mosaic(
                 density = density / density.max()
 
             ax_kde.plot(density, y_range, color=cluster_color, lw=1.5)
+            plotted_element["cluster_depth_kde"][str(category)] = dict(
+                x=np.asarray(density, dtype=float),
+                y=np.asarray(y_range, dtype=float),
+                color=cluster_color,
+                xlabel="Norm. density",
+                ylabel="Cortical depth (um)",
+            )
 
         ax_kde.set_ylim(layer_tops["wm"], 0)
         ax_kde.set_xlim(0, 1.05)
@@ -744,4 +771,4 @@ def plot_cluster_mosaic(
         ax_kde.tick_params(axis="y", which="both", left=False, labelleft=False)
         ax_kde.grid(False)
 
-    return clusters, axd
+    return clusters, axd, plotted_element
