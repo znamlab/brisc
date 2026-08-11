@@ -388,6 +388,10 @@ def plot_umap_barcoded_cells(
         ax: matplotlib Axes to plot on
         size_non_barcoded: point size for non-barcoded (NaN)
         size_barcoded: point size for barcoded (True)
+
+    Returns:
+        dict: `plotted_element` with one entry per group (`non_barcoded` and
+            `barcoded`), each holding the plotted UMAP coordinates `x` and `y`.
     """
     adata.obs["black_const"] = "black"
     is_true = adata.obs["in_filtered_df"] == True
@@ -429,6 +433,22 @@ def plot_umap_barcoded_cells(
         frameon=False,
     )
 
+    umap = np.asarray(adata.obsm["X_umap"])
+    plotted_element = {}
+    for group, mask, color in (
+        ("non_barcoded", is_nan, "lightgrey"),
+        ("barcoded", is_true, "black"),
+    ):
+        mask = np.asarray(mask)
+        plotted_element[group] = dict(
+            x=umap[mask, 0],
+            y=umap[mask, 1],
+            color=color,
+            xlabel="UMAP 1",
+            ylabel="UMAP 2",
+        )
+    return plotted_element
+
 
 def plot_cell_clusters(adata_q, ax, spot_size=10, fontsize=6, font_outline=1):
     """
@@ -445,13 +465,20 @@ def plot_cell_clusters(adata_q, ax, spot_size=10, fontsize=6, font_outline=1):
             Font size for the legend.
         font_outline : int
             Font outline size for the legend.
+
+    Returns:
+        dict: `plotted_element` with the plotted UMAP coordinates `x` and `y`,
+            the `custom_leiden` cluster of each cell and the colour used for
+            each cluster.
     """
     warnings.simplefilter(action="ignore", category=DeprecationWarning)
     sc.set_figure_params(figsize=(9, 9))
 
     sc.pl.umap(
         adata_q,
-        use_raw=True,
+        # the colour comes from obs, so raw is irrelevant; asking for it raises on the
+        # slim UMAP-only object of Fig. 2, which carries no expression matrix
+        use_raw=adata_q.raw is not None,
         color="custom_leiden",
         ax=ax,
         frameon=False,
@@ -462,6 +489,22 @@ def plot_cell_clusters(adata_q, ax, spot_size=10, fontsize=6, font_outline=1):
         legend_fontsize=fontsize,
         legend_fontoutline=font_outline,
         show=False,
+    )
+
+    umap = np.asarray(adata_q.obsm["X_umap"])
+    clusters = adata_q.obs["custom_leiden"]
+    cluster_colors = adata_q.uns.get("custom_leiden_colors", None)
+    if cluster_colors is not None and hasattr(clusters, "cat"):
+        cluster_colors = dict(zip(clusters.cat.categories, list(cluster_colors)))
+    return dict(
+        clusters=dict(
+            x=umap[:, 0],
+            y=umap[:, 1],
+            cluster=clusters.to_numpy(),
+            colors=cluster_colors,
+            xlabel="UMAP 1",
+            ylabel="UMAP 2",
+        )
     )
 
 
@@ -491,7 +534,7 @@ def plot_cluster_mosaic(
     """
     Create a scatter-grid (mosaic) where EACH cluster has:
       [coronal scatter] [KDE depth distribution]
-    
+
     Args:
         adata : AnnData
             The dataset containing the cells to plot, with necessary obs columns.
@@ -548,12 +591,16 @@ def plot_cluster_mosaic(
         layer_tops = {"wm": 957.0592130899}
 
     adata_plot = adata.copy()
-    adata_plot = adata_plot[~adata_plot.obs[group_key].isin(list(clusters_not_used))].copy()
+    adata_plot = adata_plot[
+        ~adata_plot.obs[group_key].isin(list(clusters_not_used))
+    ].copy()
     adata_plot = adata_plot[adata_plot.obs["chamber"].isin(list(chambers))].copy()
 
     cluster_series = adata_plot.obs[group_key]
     if pd.api.types.is_categorical_dtype(cluster_series):
-        clusters = [c for c in cluster_series.cat.categories if c not in clusters_not_used]
+        clusters = [
+            c for c in cluster_series.cat.categories if c not in clusters_not_used
+        ]
     else:
         clusters = sorted(cluster_series.dropna().unique().tolist())
 
@@ -688,11 +735,11 @@ def plot_cluster_mosaic(
         ax_kde.set_ylim(layer_tops["wm"], 0)
         ax_kde.set_xlim(0, 1.05)
         ax_kde.set_aspect(0.003)  # stretch to match scatter height
-        
+
         r = i // ncols
         if r == nrows - 1:
             ax_kde.set_xlabel("Norm. density", fontsize=fontsize_dict["label"])
-            
+
         ax_kde.tick_params(axis="both", which="both", labelsize=fontsize_dict["tick"])
         ax_kde.tick_params(axis="y", which="both", left=False, labelleft=False)
         ax_kde.grid(False)
