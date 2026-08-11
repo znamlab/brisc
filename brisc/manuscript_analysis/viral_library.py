@@ -101,6 +101,19 @@ def cum_probability_array(probability_distribution, i):
 
 
 def load_library_data(data_path, library, edit_distance, collapse):
+    """Load barcode abundances of one library, ranked from most to least abundant.
+
+    Args:
+        data_path (Path): Folder containing one subfolder per library.
+        library (str): Library name.
+        edit_distance (int): Edit distance used to collapse the barcodes.
+        collapse (str): Method used to collapse the barcodes.
+
+    Returns:
+        np.ndarray: (n_barcodes, 2) array with the barcode rank in the first
+            column and the barcode abundance, sorted in decreasing order, in
+            the second.
+    """
     # Prepare file paths
     fname = data_path / library / f"{library}_{collapse}_ed{edit_distance}.txt"
     with open(fname, "r", encoding="utf-8-sig") as encoded_path:
@@ -110,6 +123,9 @@ def load_library_data(data_path, library, edit_distance, collapse):
             sequencing_counts = data.astype(int)
         else:  # Two columns
             sequencing_counts = data[:, 0].astype(int)
+
+    # most files are already ranked, but not all of them
+    sequencing_counts = np.sort(sequencing_counts)[::-1]
 
     array = np.zeros((len(sequencing_counts), 2))
     array[:, 0] = np.arange(1, len(sequencing_counts) + 1)
