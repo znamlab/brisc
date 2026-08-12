@@ -30,6 +30,8 @@ from brisc.source_data.io import save_excel_sheets
 # ---------------------------------------------------------------------------
 
 SUPP1_PANELS = [
+    "Supp 1a Library abundance",
+    "Supp 1b Unique fraction",
     "Supp 2c Presynaptic density",
     "Supp 2d Starter dilution",
 ]
@@ -53,6 +55,8 @@ def build_suppfig2_source_data(suppfig2_plotted_data=None):
     """
     plotted = suppfig2_plotted_data or {}
     builders = (
+        ("library_abundance", "Supp 1a Library abundance", _abundance_sheet),
+        ("library_unique_fraction", "Supp 1b Unique fraction", _unique_fraction_sheet),
         (
             "presynaptic_density",
             "Supp 2c Presynaptic density",

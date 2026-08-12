@@ -2278,8 +2278,13 @@ def _plot_ml_kde(df, sheet_name, source_name):
 
 def _plot_supp1d_starter_dilution(df, sheet_name, source_name):
     fig, ax = plt.subplots(figsize=_panel_figsize(1.0))
-    for label, sub in _groups(df, "dilution"):
-        ax.scatter(sub["dilution"], sub["density"], s=15, label=str(label))
+    dil_col = "Dilution" if "Dilution" in df.columns else "dilution"
+    dens_col = (
+        "Cell_Density_Per_mm3" if "Cell_Density_Per_mm3" in df.columns else "density"
+    )
+    group_col = "Series_Type" if "Series_Type" in df.columns else dil_col
+    for label, sub in _groups(df, group_col):
+        ax.scatter(sub[dil_col], sub[dens_col], s=15, label=str(label))
     _style_panel_axes(
         ax,
         xlabel="Dilution",
@@ -2342,10 +2347,36 @@ def _plot_supp5c_dorsal_positions(df, sheet_name, source_name):
 
 
 def _plot_supp5d_dotplot(df, sheet_name, source_name):
-    if "Mean_Expression" in df.columns and "Gene" in df.columns:
-        matrix = df.pivot(index="Cluster", columns="Gene", values="Mean_Expression")
+    group_col = "Cluster" if "Cluster" in df.columns else "Cell_Type"
+    expr_col = (
+        "Scaled_Mean_Expression"
+        if "Scaled_Mean_Expression" in df.columns
+        else "Mean_Expression"
+    )
+    if expr_col in df.columns and "Gene" in df.columns:
+        matrix = df.pivot(index=group_col, columns="Gene", values=expr_col)
         return _plot_heatmap(
-            matrix, sheet_name, source_name, len(df), xlabel="Gene", ylabel="Cluster"
+            matrix, sheet_name, source_name, len(df), xlabel="Gene", ylabel=group_col
+        )
+    fig, ax = plt.subplots(figsize=_panel_figsize(1.0))
+    _finish(fig, sheet_name, source_name, len(df))
+    return fig
+
+
+def _plot_fig5h_dotplot(df, sheet_name, source_name):
+    """Redraw the Fig 5h inhibitory marker dotplot from its source data."""
+    group_col = "Cell_Type" if "Cell_Type" in df.columns else "Cluster"
+    if "Scaled_Mean_Expression" in df.columns and "Gene" in df.columns:
+        matrix = df.pivot(
+            index=group_col, columns="Gene", values="Scaled_Mean_Expression"
+        )
+        return _plot_heatmap(
+            matrix,
+            sheet_name,
+            source_name,
+            len(df),
+            xlabel="Gene",
+            ylabel="Cell type",
         )
     fig, ax = plt.subplots(figsize=_panel_figsize(1.0))
     _finish(fig, sheet_name, source_name, len(df))
@@ -2726,6 +2757,10 @@ PANEL_SPECS = [
         {"kind": "bubble", "draw": partial(_plot_fig5_bubbles, show_legend=False)},
     ),
     (
+        "5h inhibitory marker dotplot",
+        {"kind": "heatmap", "draw": _plot_fig5h_dotplot},
+    ),
+    (
         "5i_1 interneuron counts",
         {
             "kind": "heatmap",
@@ -2876,13 +2911,27 @@ PANEL_SPECS = [
     ("gene expression map", {"kind": "mosaic", "draw": _plot_gene_expression_mosaic}),
     # Supplementary Figures
     (
+        "supp 1a library abundance",
+        {
+            "kind": "line",
+            "draw": _abundance_draw(SUPP4_LIBRARY_COLORS, SUPP4_BOX_ASPECT),
+        },
+    ),
+    (
+        "supp 1b unique fraction",
+        {
+            "kind": "line",
+            "draw": _unique_draw(SUPP4_LIBRARY_COLORS, SUPP4_BOX_ASPECT, 1e4),
+        },
+    ),
+    (
         "supp 2c presynaptic density",
         {
             "kind": "line",
             "draw": partial(
                 _plot_panel_curves,
-                xcol="Sorted_Isocortex_Voxel_Distances_um",
-                ycol="Sorted_Labelled_Cell_Distances_um",
+                xcol="Distance_To_Injection_mm",
+                ycol="Cell_Density_Per_mm3",
                 box_aspect=1.15,
             ),
         },

@@ -1347,6 +1347,7 @@ FIG5_PANELS = [
     "Fig 5e Input vs shuffle",
     "Fig 5f Mean output fraction",
     "Fig 5g Output vs shuffle",
+    "Fig 5h Inhibitory marker dotplot",
     "Fig 5i_1 Interneuron counts",
     "Fig 5i_2 Interneuron input fract",
     "Fig 5j Interneuron diagram CI",
@@ -1367,6 +1368,30 @@ def _sheet_index_name(label, default="Presynaptic_Group"):
     """An axis label of the figure as a column name (``"Presynaptic layer"`` -> ...)."""
     words = str(label or "").split()
     return "_".join(word.capitalize() for word in words) if words else default
+
+
+def _fig5h_dotplot_sheet(drawn):
+    """Panel h — inhibitory cell-type marker dotplot values, as scanpy computed them."""
+    colors = pd.DataFrame(drawn["dot_color_df"])
+    sizes = pd.DataFrame(drawn["dot_size_df"])
+    long_colors = (
+        colors.rename_axis("Cell_Type")
+        .reset_index()
+        .melt(id_vars="Cell_Type", var_name="Gene", value_name="Scaled_Mean_Expression")
+    )
+    long_sizes = (
+        sizes.rename_axis("Cell_Type")
+        .reset_index()
+        .melt(id_vars="Cell_Type", var_name="Gene", value_name="Fraction_Expressing")
+    )
+    table = long_colors.merge(long_sizes, on=["Cell_Type", "Gene"], how="left")
+    return _note(
+        table,
+        "Note: Scaled_Mean_Expression is the dot colour, the mean expression rescaled "
+        "to 0-1 within each gene (scanpy's standard_scale='var'), not the raw mean. "
+        "Fraction_Expressing is the dot size, i.e. the percentage of cells expressing "
+        "the gene in each cell type.",
+    )
 
 
 def build_fig5_source_data(fig5_plotted_data=None):
@@ -1417,6 +1442,11 @@ def build_fig5_source_data(fig5_plotted_data=None):
         ("input_vs_shuffle", "Fig 5e Input vs shuffle", _bubble_sheet),
         ("output_fraction", "Fig 5f Mean output fraction", _fig5_matrix_sheet),
         ("output_vs_shuffle", "Fig 5g Output vs shuffle", _bubble_sheet),
+        (
+            "inhibitory_dotplot",
+            "Fig 5h Inhibitory marker dotplot",
+            _fig5h_dotplot_sheet,
+        ),
         ("interneuron_counts", "Fig 5i_1 Interneuron counts", _fig5_matrix_sheet),
         (
             "interneuron_input_fraction",
