@@ -30,8 +30,8 @@ from brisc.source_data.io import save_excel_sheets
 # ---------------------------------------------------------------------------
 
 SUPP1_PANELS = [
-    "Supp 1c Presynaptic density",
-    "Supp 1d Starter dilution",
+    "Supp 2c Presynaptic density",
+    "Supp 2d Starter dilution",
 ]
 
 #: Keys of ``suppfig2_plotted_data`` belonging to an image panel: the coronal rabies
@@ -55,10 +55,10 @@ def build_suppfig2_source_data(suppfig2_plotted_data=None):
     builders = (
         (
             "presynaptic_density",
-            "Supp 1c Presynaptic density",
+            "Supp 2c Presynaptic density",
             _supp1_presynaptic_density_sheet,
         ),
-        ("starter_dilution", "Supp 1d Starter dilution", _supp1_starter_dilution_sheet),
+        ("starter_dilution", "Supp 2d Starter dilution", _supp1_starter_dilution_sheet),
     )
     panels = {
         sheet: build(plotted[key]) for key, sheet, build in builders if plotted.get(key)
@@ -235,7 +235,7 @@ SUPP5_PANELS = [
     "Supp 5a Cells per section",
     "Supp 5b Coronal positions",
     "Supp 5c Dorsal positions",
-    "Supp 5d Marker gene expression",
+    "Supp 5c Marker gene expression",
 ]
 
 #: Keys of ``suppfig5_plotted_data`` with no worksheet: the atlas outlines the two
@@ -291,7 +291,7 @@ def build_suppfig5_source_data(suppfig5_plotted_data=None):
                 note=SUPP5_DORSAL_NOTE,
             ),
         ),
-        ("dotplot", "Supp 5d Marker gene expression", _supp5_dotplot_sheet),
+        ("dotplot", "Supp 5c Marker gene expression", _supp5_dotplot_sheet),
     )
     panels = {
         sheet: build(plotted[key]) for key, sheet, build in builders if plotted.get(key)

@@ -2620,16 +2620,16 @@ PANEL_SPECS = [
         {"kind": "line", "draw": _fig1_unique("1g", 1e4)},
     ),
     (
-        "1h library comparison abund",
-        {"kind": "line", "draw": _fig1_abundance("1h")},
+        "1f library comparison abund",
+        {"kind": "line", "draw": _fig1_abundance("1f")},
     ),
     (
-        "1i library compar unique",
-        {"kind": "line", "draw": _fig1_unique("1i", 1e6)},
+        "1g library compar unique",
+        {"kind": "line", "draw": _fig1_unique("1g", 1e6)},
     ),
-    ("1j starter spread", {"kind": "line", "draw": _plot_starter_spread_sim}),
+    ("1h starter spread", {"kind": "line", "draw": _plot_starter_spread_sim}),
     (
-        "1m presynaptic density",
+        "1k presynaptic density",
         {
             "kind": "line",
             "draw": partial(
@@ -2644,10 +2644,10 @@ PANEL_SPECS = [
             ),
         },
     ),
-    ("1o starter positions", {"kind": "scatter", "draw": _plot_starter_positions}),
-    ("1p pairwise distances", {"kind": "line", "draw": _plot_pairwise_distances}),
+    ("1m starter positions", {"kind": "scatter", "draw": _plot_starter_positions}),
+    ("1n pairwise distances", {"kind": "line", "draw": _plot_pairwise_distances}),
     (
-        "4a coronal cell positions",
+        "4a_1 coronal cell positions",
         {
             "kind": "scatter",
             "draw": partial(
@@ -2660,7 +2660,7 @@ PANEL_SPECS = [
         },
     ),
     (
-        "4b flatmap cell positions",
+        "4a_2 flatmap cell positions",
         {
             "kind": "scatter",
             "draw": partial(
@@ -2673,25 +2673,25 @@ PANEL_SPECS = [
             ),
         },
     ),
-    ("4c cortical depth", {"kind": "strip", "draw": _plot_cortical_depth}),
+    ("4b cortical depth", {"kind": "strip", "draw": _plot_cortical_depth}),
     (
-        "4d starters per presynaptic",
+        "4c starters per presynaptic",
         {"kind": "bar", "draw": _plot_starters_per_presynaptic},
     ),
     (
-        "4e multibarcoded starters",
+        "4d multibarcoded starters",
         {"kind": "bar", "draw": _plot_multibarcoded_starters},
     ),
-    ("4f example barcodes", {"kind": "scatter", "draw": _plot_example_barcodes}),
+    ("4e example barcodes", {"kind": "scatter", "draw": _plot_example_barcodes}),
     (
-        "4g relative coords observed",
+        "4f_1 relative coords observed",
         {"kind": "scatter", "draw": _plot_relative_coors},
     ),
     (
-        "4h relative coords shuffled",
+        "4f_2 relative coords shuffled",
         {"kind": "scatter", "draw": _plot_relative_coors},
     ),
-    ("4i ml kde vs shuffle", {"kind": "band", "draw": _plot_ml_kde}),
+    ("4g ml kde vs shuffle", {"kind": "band", "draw": _plot_ml_kde}),
     # Figure 5, on the colour scales, layer order and proportions of the published one.
     (
         "5a presyn pos by layer",
@@ -2716,17 +2716,17 @@ PANEL_SPECS = [
         "5e connectivity diagram",
         {"kind": "diagram", "draw": partial(_plot_fig5_diagram, panel="5e")},
     ),
-    ("5f input vs shuffle", {"kind": "bubble", "draw": _plot_fig5_bubbles}),
+    ("5e input vs shuffle", {"kind": "bubble", "draw": _plot_fig5_bubbles}),
     (
-        "5g mean output fraction",
+        "5f mean output fraction",
         {"kind": "heatmap", "draw": partial(_plot_fig5_matrix, panel="5g")},
     ),
     (
-        "5h output vs shuffle",
+        "5g output vs shuffle",
         {"kind": "bubble", "draw": partial(_plot_fig5_bubbles, show_legend=False)},
     ),
     (
-        "5i interneuron counts",
+        "5i_1 interneuron counts",
         {
             "kind": "heatmap",
             "draw": partial(
@@ -2738,14 +2738,14 @@ PANEL_SPECS = [
         },
     ),
     (
-        "5j interneuron input fract",
+        "5i_2 interneuron input fract",
         {
             "kind": "heatmap",
             "draw": partial(_plot_fig5_matrix, panel="5j", xlabel="Starter cell type"),
         },
     ),
     (
-        "5k interneuron diagram",
+        "5j interneuron diagram",
         {"kind": "diagram", "draw": partial(_plot_fig5_diagram, panel="5k")},
     ),
     # Figure 6, on the flatmap windows and axes of the published figure.
@@ -2774,7 +2774,7 @@ PANEL_SPECS = [
         },
     ),
     (
-        "6d smoothed starter map",
+        "6c smoothed starter map",
         {
             "kind": "heatmap",
             "draw": partial(_plot_long_range_smoothed_map, style="fig6"),
@@ -2876,7 +2876,7 @@ PANEL_SPECS = [
     ("gene expression map", {"kind": "mosaic", "draw": _plot_gene_expression_mosaic}),
     # Supplementary Figures
     (
-        "supp 1c presynaptic density",
+        "supp 2c presynaptic density",
         {
             "kind": "line",
             "draw": partial(
@@ -2888,7 +2888,7 @@ PANEL_SPECS = [
         },
     ),
     (
-        "supp 1d starter dilution",
+        "supp 2d starter dilution",
         {"kind": "points", "draw": _plot_supp1d_starter_dilution},
     ),
     # Supplementary Figure 4, on the axes of Figure 1's library panels.
@@ -2923,7 +2923,7 @@ PANEL_SPECS = [
         {"kind": "scatter", "draw": _plot_supp5c_dorsal_positions},
     ),
     (
-        "supp 5d marker gene expression",
+        "supp 5c marker gene expression",
         {"kind": "heatmap", "draw": _plot_supp5d_dotplot},
     ),
     (

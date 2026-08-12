@@ -197,12 +197,12 @@ FIG1_PANELS = [
     "Fig 1e Unique fraction",
     "Fig 1f Rescue scaling abundance",
     "Fig 1g Rescue scaling unique",
-    "Fig 1h Library comparison abund",
-    "Fig 1i Library compar unique",
-    "Fig 1j Starter spread sim",
-    "Fig 1m Presynaptic density",
-    "Fig 1o Starter positions",
-    "Fig 1p Pairwise distances",
+    "Fig 1f Library comparison abund",
+    "Fig 1g Library compar unique",
+    "Fig 1h Starter spread sim",
+    "Fig 1k Presynaptic density",
+    "Fig 1m Starter positions",
+    "Fig 1n Pairwise distances",
 ]
 
 
@@ -304,26 +304,26 @@ def build_fig1_source_data(fig1_plotted_data=None):
         ),
         (
             "library_comparison_abundance",
-            "Fig 1h Library comparison abund",
+            "Fig 1f Library comparison abund",
             _abundance_sheet,
         ),
         (
             "library_comparison_unique_fraction",
-            "Fig 1i Library compar unique",
+            "Fig 1g Library compar unique",
             _unique_fraction_sheet,
         ),
         (
             "starter_spread_simulation",
-            "Fig 1j Starter spread sim",
+            "Fig 1h Starter spread sim",
             _starter_spread_sheet,
         ),
         (
             "presynaptic_density",
-            "Fig 1m Presynaptic density",
+            "Fig 1k Presynaptic density",
             _presynaptic_density_sheet,
         ),
-        ("starter_positions", "Fig 1o Starter positions", _starter_positions_sheet),
-        ("pairwise_distances", "Fig 1p Pairwise distances", _pairwise_distances_sheet),
+        ("starter_positions", "Fig 1m Starter positions", _starter_positions_sheet),
+        ("pairwise_distances", "Fig 1n Pairwise distances", _pairwise_distances_sheet),
     )
     # The panels that draw one curve per viral or plasmid library.
     library_keys = {key for key, _, build in builders if build in _LIBRARY_SHEETS}
@@ -978,15 +978,15 @@ def export_fig3_source_data(output_path, **kwargs):
 # ---------------------------------------------------------------------------
 
 FIG4_PANELS = [
-    "Fig 4a Coronal cell positions",
-    "Fig 4b Flatmap cell positions",
-    "Fig 4c Cortical depth VISp",
-    "Fig 4d Starters per presynaptic",
-    "Fig 4e Multibarcoded starters",
-    "Fig 4f Example barcodes",
-    "Fig 4g Relative coords observed",
-    "Fig 4h Relative coords shuffled",
-    "Fig 4i ML KDE vs shuffle",
+    "Fig 4a_1 Coronal cell positions",
+    "Fig 4a_2 Flatmap cell positions",
+    "Fig 4b Cortical depth VISp",
+    "Fig 4c Starters per presynaptic",
+    "Fig 4d Multibarcoded starters",
+    "Fig 4e Example barcodes",
+    "Fig 4f_1 Relative coords observed",
+    "Fig 4f_2 Relative coords shuffled",
+    "Fig 4g ML KDE vs shuffle",
 ]
 
 
@@ -1050,37 +1050,37 @@ def build_fig4_source_data(fig4_plotted_data=None):
     builders = (
         (
             "all_cells_coronal",
-            "Fig 4a Coronal cell positions",
+            "Fig 4a_1 Coronal cell positions",
             _coronal_positions_sheet,
         ),
         (
             "all_cells_flatmap",
-            "Fig 4b Flatmap cell positions",
+            "Fig 4a_2 Flatmap cell positions",
             _flatmap_positions_sheet,
         ),
-        ("cortical_depth", "Fig 4c Cortical depth VISp", _cortical_depth_sheet),
+        ("cortical_depth", "Fig 4b Cortical depth VISp", _cortical_depth_sheet),
         (
             "starters_per_presynaptic",
-            "Fig 4d Starters per presynaptic",
+            "Fig 4c Starters per presynaptic",
             _starters_per_presynaptic_sheet,
         ),
         (
             "multibarcoded_starters",
-            "Fig 4e Multibarcoded starters",
+            "Fig 4d Multibarcoded starters",
             _multibarcoded_sheet,
         ),
-        ("example_barcodes", "Fig 4f Example barcodes", _example_barcodes_sheet),
+        ("example_barcodes", "Fig 4e Example barcodes", _example_barcodes_sheet),
         (
             "relative_coors_observed",
-            "Fig 4g Relative coords observed",
+            "Fig 4f_1 Relative coords observed",
             _relative_coors_sheet,
         ),
         (
             "relative_coors_shuffled",
-            "Fig 4h Relative coords shuffled",
+            "Fig 4f_2 Relative coords shuffled",
             _relative_coors_sheet,
         ),
-        ("ml_kde", "Fig 4i ML KDE vs shuffle", _ml_kde_sheet),
+        ("ml_kde", "Fig 4g ML KDE vs shuffle", _ml_kde_sheet),
     )
     panels = {
         sheet: build(plotted[key]) for key, sheet, build in builders if plotted.get(key)
@@ -1344,12 +1344,12 @@ FIG5_PANELS = [
     "Fig 5c Mean input fraction",
     "Fig 5d Input fraction by layer",
     "Fig 5e Connectivity diagram CI",
-    "Fig 5f Input vs shuffle",
-    "Fig 5g Mean output fraction",
-    "Fig 5h Output vs shuffle",
-    "Fig 5i Interneuron counts",
-    "Fig 5j Interneuron input fract",
-    "Fig 5k Interneuron diagram CI",
+    "Fig 5e Input vs shuffle",
+    "Fig 5f Mean output fraction",
+    "Fig 5g Output vs shuffle",
+    "Fig 5i_1 Interneuron counts",
+    "Fig 5i_2 Interneuron input fract",
+    "Fig 5j Interneuron diagram CI",
 ]
 
 
@@ -1414,18 +1414,18 @@ def build_fig5_source_data(fig5_plotted_data=None):
             "Fig 5e Connectivity diagram CI",
             _diagram_edges_sheet,
         ),
-        ("input_vs_shuffle", "Fig 5f Input vs shuffle", _bubble_sheet),
-        ("output_fraction", "Fig 5g Mean output fraction", _fig5_matrix_sheet),
-        ("output_vs_shuffle", "Fig 5h Output vs shuffle", _bubble_sheet),
-        ("interneuron_counts", "Fig 5i Interneuron counts", _fig5_matrix_sheet),
+        ("input_vs_shuffle", "Fig 5e Input vs shuffle", _bubble_sheet),
+        ("output_fraction", "Fig 5f Mean output fraction", _fig5_matrix_sheet),
+        ("output_vs_shuffle", "Fig 5g Output vs shuffle", _bubble_sheet),
+        ("interneuron_counts", "Fig 5i_1 Interneuron counts", _fig5_matrix_sheet),
         (
             "interneuron_input_fraction",
-            "Fig 5j Interneuron input fract",
+            "Fig 5i_2 Interneuron input fract",
             _fig5_matrix_sheet,
         ),
         (
             "interneuron_diagram",
-            "Fig 5k Interneuron diagram CI",
+            "Fig 5j Interneuron diagram CI",
             _diagram_edges_sheet,
         ),
     )
@@ -1640,7 +1640,7 @@ def export_fig5_source_data(output_path, **kwargs):
 FIG6_PANELS = [
     "Fig 6b Starter positions",
     "Fig 6c Presynaptic positions",
-    "Fig 6d Smoothed starter map",
+    "Fig 6c Smoothed starter map",
     "Fig 6e Starter vs presyn ML",
     "Fig 6e Running average and CI",
     "Fig 6f Azimuth running avg",
@@ -1733,7 +1733,7 @@ def build_fig6_source_data(fig6_plotted_data=None):
         ),
         (
             "smoothed_starter_map",
-            "Fig 6d Smoothed starter map",
+            "Fig 6c Smoothed starter map",
             partial(_longrange_smoothed_map_sheet, note=FIG6D_NOTE),
         ),
         (
