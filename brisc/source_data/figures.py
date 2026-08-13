@@ -195,8 +195,6 @@ def _matrix_sheet(matrix, index_name="Presynaptic_Group"):
 FIG1_PANELS = [
     "Fig 1d Library abundance",
     "Fig 1e Unique fraction",
-    "Fig 1f Rescue scaling abundance",
-    "Fig 1g Rescue scaling unique",
     "Fig 1f Library comparison abund",
     "Fig 1g Library compar unique",
     "Fig 1h Starter spread sim",
@@ -292,16 +290,6 @@ def build_fig1_source_data(fig1_plotted_data=None):
     builders = (
         ("library_abundance", "Fig 1d Library abundance", _abundance_sheet),
         ("library_unique_fraction", "Fig 1e Unique fraction", _unique_fraction_sheet),
-        (
-            "rescue_scaling_abundance",
-            "Fig 1f Rescue scaling abundance",
-            _abundance_sheet,
-        ),
-        (
-            "rescue_scaling_unique_fraction",
-            "Fig 1g Rescue scaling unique",
-            _unique_fraction_sheet,
-        ),
         (
             "library_comparison_abundance",
             "Fig 1f Library comparison abund",
