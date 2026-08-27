@@ -71,6 +71,22 @@ The `manuscript_figures` folder contains the notebooks to regenerate all data fi
 In each notebook the `DATA_ROOT` will have to be updated to the path to the folder
 where the data is located.
 
+### Reproducibility note: a few counts depend on the CPU architecture
+
+Cell counts that come from a distance threshold in the cortical flatmap can
+differ depending on the CPU architecture. The published figures were generated on Linux
+(x86-64).
+
+This is a portability issue in `ccf_streamlines`, not in this repository (the way np.argsort handles ties seems to be platform architecture dependent). The only downstream effect is at the distance threshold selecting local inputs. In
+  `figure5_connectivity_matrices.ipynb`, the `max(distances) < 1mm` local
+  connectivity filter is crossed by 6 of 4,165 cells, which changes five entries of
+  the connectivity matrix by one.
+
+**To reproduce the published values exactly**, run on Linux/x86-64. The reference
+environment was using ccf_streamlines 1.1.4. Note that forcing a stable sort
+(`np.argsort(..., kind="stable")`) does make the projection platform-independent, but
+it selects yet another tie-break and so does not reproduce the published values
+either.
 
 ### Measured run time and peak RAM per notebook
 
